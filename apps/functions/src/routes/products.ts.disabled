@@ -1,0 +1,280 @@
+import { Router, Request, Response } from 'express';
+import { Timestamp } from 'firebase-admin/firestore';
+import {
+  verifyAuth,
+  verifyCreatorAccess,
+  requirePermissions,
+} from '../middleware/auth';
+import * as productsService from '../services/products';
+import { syncProductToCatalog, syncAllProductsForCreator } from '../services/catalogSync';
+
+const router = Router();
+
+/**
+ * Convert Firestore Timestamps to ISO strings for JSON serialization
+ */
+function serializeProduct(product: any): any {
+  return {
+    ...product,
+    createdAt: product.createdAt instanceof Timestamp
+      ? product.createdAt.toDate().toISOString()
+      : product.createdAt instanceof Date
+        ? product.createdAt.toISOString()
+        : product.createdAt,
+    updatedAt: product.updatedAt instanceof Timestamp
+      ? product.updatedAt.toDate().toISOString()
+      : product.updatedAt instanceof Date
+        ? product.updatedAt.toISOString()
+        : product.updatedAt,
+  };
+}
+
+// GET /products/limits - Get product limits for current user
+router.get(
+  '/limits',
+  verifyAuth,
+  async (req: Request, res: Response) => {
+    try {
+      const creatorId = req.user?.creatorId;
+      if (!creatorId) {
+        res.status(401).json({ error: 'Unauthorized' });
+        return;
+      }
+      const limits = await productsService.getProductLimits(creatorId);
+      res.json(limits);
+    } catch (error) {
+      console.error('Error fetching product limits:', error);
+      res.status(500).json({ error: 'Failed to fetch product limits' });
+    }
+  }
+);
+
+// GET /products/creator/:creatorId - Get all products for a creator
+router.get(
+  '/creator/:creatorId',
+  verifyAuth,
+  verifyCreatorAccess,
+  requirePermissions('canViewProducts'),
+  async (req: Request, res: Response) => {
+    try {
+      const { creatorId } = req.params;
+      const products = await productsService.getProducts(creatorId);
+
+      // Map response to include both active and isActive for compatibility
+      // Also serialize timestamps to ISO strings
+      const mappedProducts = products.map((product) => ({
+        ...serializeProduct(product),
+        active: product.isActive,
+      }));
+
+      res.json(mappedProducts);
+    } catch (error) {
+      console.error('Error fetching products:', error);
+      res.status(500).json({ error: 'Failed to fetch products' });
+    }
+  }
+);
+
+// GET /products/:creatorId/:productId - Get a single product
+router.get(
+  '/:creatorId/:productId',
+  verifyAuth,
+  verifyCreatorAccess,
+  requirePermissions('canViewProducts'),
+  async (req: Request, res: Response) => {
+    try {
+      const { creatorId, productId } = req.params;
+      const product = await productsService.getProduct(creatorId, productId);
+
+      if (!product) {
+        res.status(404).json({ error: 'Product not found' });
+        return;
+      }
+
+      res.json({
+        ...serializeProduct(product),
+        active: product.isActive,
+      });
+    } catch (error) {
+      console.error('Error fetching product:', error);
+      res.status(500).json({ error: 'Failed to fetch product' });
+    }
+  }
+);
+
+// POST /products - Create a new product
+router.post(
+  '/',
+  verifyAuth,
+  requirePermissions('canManageProducts'),
+  async (req: Request, res: Response) => {
+    try {
+      const creatorId = req.user!.creatorId;
+      const { active, isActive, creatorId: _ignoredCreatorId, ...payload } = req.body;
+      const resolvedActive = active ?? isActive;
+
+      console.log('Creating product with data:', {
+        creatorId,
+        payload,
+        resolvedActive,
+      });
+
+      // Validate required fields
+      if (!payload.title) {
+        res.status(400).json({ error: 'Title is required' });
+        return;
+      }
+      if (payload.price === undefined || payload.price === null) {
+        res.status(400).json({ error: 'Price is required' });
+        return;
+      }
+
+      const product = await productsService.createProduct({
+        ...payload,
+        creatorId: creatorId, // Always use authenticated user's creatorId for security
+        description: payload.description || '', // Ensure description has a default
+        ...(resolvedActive !== undefined ? { isActive: resolvedActive } : {}),
+      });
+
+      // Auto-sync to Meta Catalog (non-blocking)
+      syncProductToCatalog(creatorId, product.id).catch((err) => {
+        console.error('Failed to sync product to Meta Catalog:', err);
+      });
+
+      res.status(201).json({
+        ...serializeProduct(product),
+        active: product.isActive,
+      });
+    } catch (error) {
+      console.error('Error creating product:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      // Return 400 for limit errors
+      if (errorMessage.includes('Limite de')) {
+        res.status(400).json({ error: errorMessage, code: 'LIMIT_EXCEEDED' });
+        return;
+      }
+      res.status(500).json({ error: 'Failed to create product', details: errorMessage });
+    }
+  }
+);
+
+// PUT /products/:creatorId/:productId - Update a product
+router.put(
+  '/:creatorId/:productId',
+  verifyAuth,
+  verifyCreatorAccess,
+  requirePermissions('canManageProducts'),
+  async (req: Request, res: Response) => {
+    try {
+      const { creatorId, productId } = req.params;
+      const { active, isActive, ...rest } = req.body;
+      const resolvedActive = active ?? isActive;
+
+      const product = await productsService.updateProduct(creatorId, productId, {
+        ...rest,
+        ...(resolvedActive !== undefined ? { isActive: resolvedActive } : {}),
+      });
+
+      // Auto-sync to Meta Catalog (non-blocking)
+      syncProductToCatalog(creatorId, productId).catch((err) => {
+        console.error('Failed to sync product to Meta Catalog:', err);
+      });
+
+      res.json({
+        ...serializeProduct(product),
+        active: product.isActive,
+      });
+    } catch (error) {
+      console.error('Error updating product:', error);
+      const errorMessage = (error as Error).message;
+      if (errorMessage.includes('not found')) {
+        res.status(404).json({ error: 'Product not found' });
+        return;
+      }
+      // Return 400 for limit errors
+      if (errorMessage.includes('Limite de')) {
+        res.status(400).json({ error: errorMessage, code: 'LIMIT_EXCEEDED' });
+        return;
+      }
+      res.status(500).json({ error: 'Failed to update product' });
+    }
+  }
+);
+
+// DELETE /products/:creatorId/:productId - Delete a product
+router.delete(
+  '/:creatorId/:productId',
+  verifyAuth,
+  verifyCreatorAccess,
+  requirePermissions('canManageProducts'),
+  async (req: Request, res: Response) => {
+    try {
+      const { creatorId, productId } = req.params;
+      await productsService.deleteProduct(creatorId, productId);
+      res.status(204).send();
+    } catch (error) {
+      console.error('Error deleting product:', error);
+      if ((error as Error).message.includes('not found')) {
+        res.status(404).json({ error: 'Product not found' });
+        return;
+      }
+      res.status(500).json({ error: 'Failed to delete product' });
+    }
+  }
+);
+
+// POST /products/:creatorId/:productId/sync - Manually sync a product to Meta Catalog
+router.post(
+  '/:creatorId/:productId/sync',
+  verifyAuth,
+  verifyCreatorAccess,
+  async (req: Request, res: Response) => {
+    try {
+      const { creatorId, productId } = req.params;
+      console.log(`Manual sync triggered for product ${productId} by creator ${creatorId}`);
+
+      const result = await syncProductToCatalog(creatorId, productId);
+
+      if (result.success) {
+        res.json({
+          success: true,
+          message: 'Product synced to Meta Catalog',
+          metaProductId: result.metaProductId,
+        });
+      } else {
+        res.status(400).json({
+          success: false,
+          error: result.error,
+        });
+      }
+    } catch (error) {
+      console.error('Error syncing product:', error);
+      res.status(500).json({ error: 'Failed to sync product' });
+    }
+  }
+);
+
+// POST /products/:creatorId/sync-all - Manually sync all products for a creator
+router.post(
+  '/:creatorId/sync-all',
+  verifyAuth,
+  verifyCreatorAccess,
+  async (req: Request, res: Response) => {
+    try {
+      const { creatorId } = req.params;
+      console.log(`Manual sync-all triggered for creator ${creatorId}`);
+
+      const result = await syncAllProductsForCreator(creatorId);
+
+      res.json({
+        success: true,
+        ...result,
+      });
+    } catch (error) {
+      console.error('Error syncing all products:', error);
+      res.status(500).json({ error: 'Failed to sync products' });
+    }
+  }
+);
+
+export default router;

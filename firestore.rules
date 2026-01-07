@@ -1,0 +1,214 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // =========================================================================
+    // GENDEI - Clinic Appointment Scheduling Platform
+    // =========================================================================
+
+    // =========================================================================
+    // HELPER FUNCTIONS
+    // =========================================================================
+
+    // Check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Check if user is the clinic owner
+    function isClinicOwner(clinicId) {
+      return isAuthenticated() && request.auth.uid == clinicId;
+    }
+
+    // Check if user is a clinic admin
+    function isClinicAdmin(clinicId) {
+      return isAuthenticated() &&
+        exists(/databases/$(database)/documents/gendei_clinics/$(clinicId)) &&
+        (get(/databases/$(database)/documents/gendei_clinics/$(clinicId)).data.ownerId == request.auth.uid ||
+         request.auth.uid in get(/databases/$(database)/documents/gendei_clinics/$(clinicId)).data.adminIds);
+    }
+
+    // Check if user has access to clinic
+    function hasClinicAccess(clinicId) {
+      return isClinicOwner(clinicId) || isClinicAdmin(clinicId);
+    }
+
+    // =========================================================================
+    // CLINICS (Main Entity)
+    // =========================================================================
+    match /gendei_clinics/{clinicId} {
+      // Clinic admin can read their clinic
+      allow read: if hasClinicAccess(clinicId);
+
+      // Owner can update
+      allow update: if isClinicOwner(clinicId);
+
+      // Anyone authenticated can create (they become owner)
+      allow create: if isAuthenticated() &&
+                       request.resource.data.ownerId == request.auth.uid;
+
+      // Only owner can delete
+      allow delete: if isClinicOwner(clinicId);
+
+      // ---------------------------------------------------------
+      // PROFESSIONALS (gendei_clinics/{clinicId}/professionals/{professionalId})
+      // ---------------------------------------------------------
+      match /professionals/{professionalId} {
+        allow read: if hasClinicAccess(clinicId);
+        allow create, update, delete: if isClinicOwner(clinicId);
+      }
+
+      // ---------------------------------------------------------
+      // SERVICES (gendei_clinics/{clinicId}/services/{serviceId})
+      // ---------------------------------------------------------
+      match /services/{serviceId} {
+        allow read: if hasClinicAccess(clinicId);
+        allow create, update, delete: if isClinicOwner(clinicId);
+      }
+
+      // ---------------------------------------------------------
+      // AVAILABILITY (gendei_clinics/{clinicId}/availability/{availabilityId})
+      // ---------------------------------------------------------
+      match /availability/{availabilityId} {
+        allow read: if hasClinicAccess(clinicId);
+        allow create, update, delete: if hasClinicAccess(clinicId);
+      }
+
+      // ---------------------------------------------------------
+      // CONVERSATIONS (gendei_clinics/{clinicId}/conversations/{phone})
+      // ---------------------------------------------------------
+      match /conversations/{conversationId} {
+        allow read: if hasClinicAccess(clinicId);
+        allow create, update: if hasClinicAccess(clinicId);
+        allow delete: if isClinicOwner(clinicId);
+
+        // Messages subcollection
+        match /messages/{messageId} {
+          allow read: if hasClinicAccess(clinicId);
+          allow create: if hasClinicAccess(clinicId);
+          allow update, delete: if isClinicOwner(clinicId);
+        }
+      }
+
+      // ---------------------------------------------------------
+      // SETTINGS (gendei_clinics/{clinicId}/settings/{key})
+      // ---------------------------------------------------------
+      match /settings/{settingKey} {
+        allow read: if hasClinicAccess(clinicId);
+        allow create, update, delete: if isClinicOwner(clinicId);
+      }
+    }
+
+    // =========================================================================
+    // APPOINTMENTS (Top-level for cross-clinic queries)
+    // =========================================================================
+    match /gendei_appointments/{appointmentId} {
+      // Backend creates appointments
+      allow create: if true;
+
+      // Clinic admin can read/update their appointments
+      allow read, update: if isAuthenticated() &&
+                             resource.data.clinicId != null &&
+                             hasClinicAccess(resource.data.clinicId);
+
+      // Only clinic owner can delete
+      allow delete: if isAuthenticated() &&
+                       resource.data.clinicId != null &&
+                       isClinicOwner(resource.data.clinicId);
+    }
+
+    // =========================================================================
+    // PATIENTS
+    // =========================================================================
+    match /gendei_patients/{patientId} {
+      // Backend creates patients from WhatsApp
+      allow create: if true;
+
+      // Clinic can read their patients
+      allow read, update: if isAuthenticated();
+
+      allow delete: if false; // Never delete patient data
+    }
+
+    // =========================================================================
+    // WHATSAPP CONNECTIONS
+    // =========================================================================
+    match /gendei_whatsapp/{connectionId} {
+      // Backend creates via Embedded Signup
+      allow create: if true;
+
+      // Clinic can read their connection
+      allow read: if isAuthenticated() &&
+                     resource.data.clinicId != null &&
+                     hasClinicAccess(resource.data.clinicId);
+
+      allow update: if isAuthenticated() &&
+                       resource.data.clinicId != null &&
+                       isClinicOwner(resource.data.clinicId);
+
+      allow delete: if false; // Never delete connection
+    }
+
+    // =========================================================================
+    // ORDERS (Appointment Payments)
+    // =========================================================================
+    match /gendei_orders/{orderId} {
+      // Backend creates orders
+      allow create: if true;
+
+      // Clinic can read their orders
+      allow read: if isAuthenticated();
+
+      // Only backend updates (payment status)
+      allow update: if true;
+
+      allow delete: if false;
+    }
+
+    // =========================================================================
+    // PAYMENTS
+    // =========================================================================
+    match /gendei_payments/{paymentId} {
+      // Backend creates payments
+      allow create: if true;
+
+      allow read: if isAuthenticated();
+
+      // Only backend updates
+      allow update: if true;
+
+      allow delete: if false;
+    }
+
+    // =========================================================================
+    // MESSAGE TEMPLATES
+    // =========================================================================
+    match /gendei_templates/{templateId} {
+      allow read: if isAuthenticated();
+      allow create, update: if true; // Backend creates during Embedded Signup
+      allow delete: if false;
+    }
+
+    // =========================================================================
+    // SERVER-ONLY COLLECTIONS
+    // =========================================================================
+
+    // Access tokens - CRITICAL SECURITY
+    match /gendei_tokens/{docId} {
+      allow read, write: if false;  // Server-side ONLY
+    }
+
+    // OAuth sessions
+    match /gendei_oauth/{docId} {
+      allow read, write: if false;  // Server-side ONLY
+    }
+
+    // =========================================================================
+    // DEFAULT: Deny all other access
+    // =========================================================================
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

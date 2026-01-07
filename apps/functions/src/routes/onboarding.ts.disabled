@@ -1,0 +1,146 @@
+import { Router, Request, Response } from 'express';
+import { verifyAuth, verifyCreatorAccess } from '../middleware/auth';
+import * as onboardingService from '../services/onboarding';
+
+const router = Router();
+
+// GET /onboarding/:creatorId/status - Get onboarding status
+router.get(
+  '/:creatorId/status',
+  verifyAuth,
+  verifyCreatorAccess,
+  async (req: Request, res: Response) => {
+    try {
+      const { creatorId } = req.params;
+      const status = await onboardingService.getOnboardingStatus(creatorId);
+      res.json(status);
+    } catch (error) {
+      console.error('Error fetching onboarding status:', error);
+      res.status(500).json({ error: 'Failed to fetch onboarding status' });
+    }
+  }
+);
+
+// GET /onboarding/:creatorId - Get onboarding profile
+router.get(
+  '/:creatorId',
+  verifyAuth,
+  verifyCreatorAccess,
+  async (req: Request, res: Response) => {
+    try {
+      const { creatorId } = req.params;
+      const profile = await onboardingService.getProfile(creatorId);
+
+      if (!profile) {
+        res.status(404).json({ error: 'Profile not found' });
+        return;
+      }
+
+      res.json(profile);
+    } catch (error) {
+      console.error('Error fetching onboarding profile:', error);
+      res.status(500).json({ error: 'Failed to fetch onboarding profile' });
+    }
+  }
+);
+
+// POST /onboarding/:creatorId/profile - Update creator profile (Step 1)
+router.post(
+  '/:creatorId/profile',
+  verifyAuth,
+  verifyCreatorAccess,
+  async (req: Request, res: Response) => {
+    try {
+      const { creatorId } = req.params;
+      const { displayName, profileImageUrl, bio } = req.body;
+      const userEmail = req.user!.email;
+
+      if (!displayName) {
+        res.status(400).json({ error: 'displayName is required' });
+        return;
+      }
+
+      const profile = await onboardingService.updateProfile(
+        creatorId,
+        { displayName, profileImageUrl, bio },
+        userEmail
+      );
+
+      res.json(profile);
+    } catch (error) {
+      console.error('Error updating profile:', error);
+      res.status(500).json({ error: 'Failed to update profile' });
+    }
+  }
+);
+
+// POST /onboarding/:creatorId/persona - Update AI persona (Step 2)
+router.post(
+  '/:creatorId/persona',
+  verifyAuth,
+  verifyCreatorAccess,
+  async (req: Request, res: Response) => {
+    try {
+      const { creatorId } = req.params;
+      const { voiceStyle, speakingPerspective, sampleResponses } = req.body;
+
+      if (!voiceStyle || !speakingPerspective) {
+        res
+          .status(400)
+          .json({ error: 'voiceStyle and speakingPerspective are required' });
+        return;
+      }
+
+      const profile = await onboardingService.updatePersona(creatorId, {
+        voiceStyle,
+        speakingPerspective,
+        sampleResponses,
+      });
+
+      res.json(profile);
+    } catch (error) {
+      console.error('Error updating persona:', error);
+      if ((error as Error).message.includes('not found')) {
+        res.status(404).json({ error: 'Profile not found' });
+        return;
+      }
+      res.status(500).json({ error: 'Failed to update persona' });
+    }
+  }
+);
+
+// POST /onboarding/:creatorId/business - Update business info (Step 3)
+router.post(
+  '/:creatorId/business',
+  verifyAuth,
+  verifyCreatorAccess,
+  async (req: Request, res: Response) => {
+    try {
+      const { creatorId } = req.params;
+      const { country, primaryLanguage, paymentMethod, pixKey } = req.body;
+
+      if (!primaryLanguage) {
+        res.status(400).json({ error: 'primaryLanguage is required' });
+        return;
+      }
+
+      const profile = await onboardingService.updateBusiness(creatorId, {
+        country,
+        primaryLanguage,
+        paymentMethod,
+        pixKey,
+      });
+
+      res.json(profile);
+    } catch (error) {
+      console.error('Error updating business info:', error);
+      if ((error as Error).message.includes('not found')) {
+        res.status(404).json({ error: 'Profile not found' });
+        return;
+      }
+      res.status(500).json({ error: 'Failed to update business info' });
+    }
+  }
+);
+
+export default router;

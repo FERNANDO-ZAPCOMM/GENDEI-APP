@@ -1,0 +1,1213 @@
+{
+  "auth": {
+    "signin": "Entrar",
+    "signup": "Criar conta",
+    "signout": "Sair",
+    "email": "E-mail",
+    "password": "Senha",
+    "confirmPassword": "Confirmar senha",
+    "forgotPassword": "Esqueci minha senha",
+    "alreadyHaveAccount": "Já tem uma conta?",
+    "dontHaveAccount": "Não tem uma conta?",
+    "welcomeBack": "Bem-vindo de volta",
+    "createAccount": "Criar sua conta",
+    "invalidCredentials": "E-mail ou senha inválidos. Tente novamente.",
+    "orContinueWith": "Ou continue com"
+  },
+  "whatsapp": {
+    "connect": "Conectar WhatsApp",
+    "phone": "Número de telefone",
+    "phoneHelp": "Digite no formato internacional (ex: +5511999999999)",
+    "verifyCode": "Código de verificação",
+    "verifyCodeHelp": "Digite o código de 6 dígitos",
+    "connected": "Conectado",
+    "notConnected": "Não conectado",
+    "sendCode": "Enviar código",
+    "verify": "Verificar",
+    "success": "WhatsApp conectado com sucesso!",
+    "continueToDA": "Continuar para o painel",
+    "templates": {
+      "title": "Templates de Mensagem",
+      "description": "Templates para enviar produtos via WhatsApp",
+      "status": {
+        "approved": "Aprovado",
+        "pending": "Pendente",
+        "rejected": "Rejeitado",
+        "unknown": "Desconhecido"
+      },
+      "notCreated": "Não criado",
+      "notFound": "Templates não encontrados",
+      "tryAgain": "Tentar novamente",
+      "updating": "Atualizando...",
+      "update": "Atualizar",
+      "note": "Nota: Templates precisam ser aprovados pela Meta antes de poderem ser usados. O processo de aprovação pode levar de alguns minutos a 24 horas.",
+      "allApproved": "Todos os templates estão aprovados e prontos para uso!",
+      "singleProduct": "Produto único (SPM)",
+      "productCarousel": "Carrossel de produtos",
+      "configured": "Configurado"
+    },
+    "qrCodes": {
+      "title": "QR Codes e Links Curtos",
+      "description": "Crie QR codes com mensagens pré-preenchidas para seus clientes escanearem",
+      "prefilledMessage": "Mensagem Pré-preenchida",
+      "messagePlaceholder": "Olá! Quero saber mais sobre...",
+      "messageHelp": "Esta mensagem será pré-preenchida quando os clientes escanearem o QR code",
+      "create": "Criar",
+      "yourCodes": "Seus QR Codes",
+      "noQrCodes": "Nenhum QR code ainda",
+      "noQrCodesDescription": "Crie seu primeiro QR code para começar",
+      "createSuccess": "QR Code Criado",
+      "createSuccessDescription": "Seu QR code foi criado com sucesso.",
+      "createError": "Falha ao criar QR code",
+      "deleteSuccess": "QR Code Excluído",
+      "deleteSuccessDescription": "Seu QR code foi excluído.",
+      "deleteError": "Falha ao excluir QR code"
+    },
+    "businessProfile": {
+      "title": "Perfil do Negócio",
+      "description": "Personalize como seu negócio aparece para os clientes no WhatsApp",
+      "loadError": "Falha ao carregar perfil do negócio",
+      "saveSuccess": "Perfil atualizado",
+      "saveSuccessDescription": "Seu perfil do negócio foi atualizado com sucesso.",
+      "saveError": "Falha ao atualizar",
+      "saving": "Salvando...",
+      "save": "Salvar",
+      "profilePicture": "Foto do Perfil",
+      "profilePictureDescription": "Envie uma imagem quadrada (JPEG ou PNG, máximo 5MB)",
+      "uploadButton": "Enviar",
+      "invalidImageType": "Tipo de imagem inválido",
+      "invalidImageTypeDescription": "Por favor, selecione uma imagem JPEG ou PNG.",
+      "imageTooLarge": "Imagem muito grande",
+      "imageTooLargeDescription": "Por favor, selecione uma imagem menor que 5MB.",
+      "pictureUploadSuccess": "Foto enviada",
+      "pictureUploadSuccessDescription": "Sua foto de perfil foi atualizada.",
+      "pictureUploadError": "Falha no envio",
+      "about": "Status",
+      "aboutPlaceholder": "Transforme suas fotos em vídeos animados com IA!",
+      "aboutDescription": "Uma breve descrição mostrada no seu perfil (máx 139)",
+      "businessDescription": "Descrição",
+      "descriptionPlaceholder": "Animação de fotos via WhatsApp! IA transforma foto em vídeo animado. Envie sua foto e receba seu vídeo em minutos!",
+      "descriptionHelp": "Conte aos clientes sobre seu negócio (máx 512)",
+      "address": "Endereço",
+      "addressPlaceholder": "Endereço do seu negócio",
+      "email": "E-mail",
+      "emailPlaceholder": "contato@exemplo.com",
+      "emailDescription": "E-mail de contato do seu negócio",
+      "category": "Categoria",
+      "categoryDescription": "Selecione a categoria do seu negócio",
+      "websites": "Sites",
+      "websiteDescription": "URL do seu site",
+      "addWebsite": "Adicionar site",
+      "vertical": {
+        "UNDEFINED": "Não definido",
+        "OTHER": "Outro",
+        "AUTO": "Automotivo",
+        "BEAUTY": "Beleza",
+        "APPAREL": "Vestuário",
+        "EDU": "Educação",
+        "ENTERTAIN": "Entretenimento",
+        "EVENT_PLAN": "Eventos",
+        "FINANCE": "Financeiro",
+        "GROCERY": "Supermercado",
+        "GOVT": "Governo",
+        "HOTEL": "Hotelaria",
+        "HEALTH": "Saúde",
+        "NONPROFIT": "Sem fins lucrativos",
+        "PROF_SERVICES": "Serviços Profissionais",
+        "RETAIL": "Varejo",
+        "TRAVEL": "Viagem",
+        "RESTAURANT": "Restaurante",
+        "NOT_A_BIZ": "Não é um negócio"
+      },
+      "completed": "completo"
+    }
+  },
+  "onboarding": {
+    "profile": {
+      "title": "Informações do Perfil",
+      "subtitle": "Passo 1 - Configure seu perfil criador",
+      "displayName": "Nome de exibição",
+      "displayNamePlaceholder": "Seu nome ou marca",
+      "bio": "Biografia",
+      "bioPlaceholder": "Conte sobre você e seu conteúdo...",
+      "profileImage": "Foto de perfil (Opcional)",
+      "continue": "Continuar",
+      "nextPersona": "Próximo: Persona",
+      "saving": "Salvando...",
+      "back": "Voltar",
+      "steps": {
+        "profile": "Perfil",
+        "persona": "Persona",
+        "business": "Negócio"
+      },
+      "notifications": {
+        "success": "Perfil salvo com sucesso!",
+        "error": "Não foi possível salvar o perfil."
+      },
+      "errors": {
+        "displayNameMin": "O nome de exibição deve ter pelo menos 2 caracteres.",
+        "bioMax": "A biografia deve ter menos de 500 caracteres."
+      }
+    },
+    "persona": {
+      "title": "Personalidade da IA",
+      "subtitle": "Passo 2 - Como sua IA deve conversar com os clientes",
+      "voiceStyle": "Estilo de voz",
+      "voiceStyles": {
+        "friendly_coach": "Amigável",
+        "professional_expert": "Profissional",
+        "casual_influencer": "Influencer Casual",
+        "motivational_mentor": "Mentor Motivacional",
+        "educational_teacher": "Professor Educacional"
+      },
+      "speakingPerspective": "Perspectiva de fala",
+      "perspectives": {
+        "first_person": "Primeira pessoa (eu/nós)",
+        "second_person": "Segunda pessoa (você)",
+        "third_person": "Terceira pessoa (ele/ela)"
+      },
+      "sampleResponses": "Respostas de exemplo (Opcional)",
+      "sampleResponsesPlaceholder": "Exemplos de como você gostaria que a IA respondesse...",
+      "continue": "Continuar",
+      "back": "Voltar",
+      "voiceStylePlaceholder": "Selecione um estilo de voz",
+      "speakingPerspectivePlaceholder": "Selecione uma perspectiva de fala",
+      "sampleResponsesHelp": "Isso ajuda a IA a aprender seu estilo de comunicação.",
+      "saving": "Salvando...",
+      "nextBusiness": "Próximo: Configuração do negócio",
+      "notifications": {
+        "success": "Persona da IA configurada com sucesso!",
+        "error": "Não foi possível salvar a persona."
+      },
+      "errors": {
+        "voiceStyle": "Selecione um estilo de voz.",
+        "speakingPerspective": "Selecione uma perspectiva de fala."
+      }
+    },
+    "business": {
+      "title": "Informações do Negócio",
+      "subtitle": "Passo final - configure pagamentos e detalhes do negócio",
+      "country": "País",
+      "primaryLanguage": "Idioma principal",
+      "paymentMethod": "Método de pagamento",
+      "pixKey": "Chave PIX / Detalhes da conta",
+      "pixKeyPlaceholder": "Sua chave PIX ou detalhes bancários",
+      "complete": "Concluir configuração",
+      "completing": "Concluindo...",
+      "back": "Voltar",
+      "countries": {
+        "Brazil": "Brasil",
+        "Portugal": "Portugal",
+        "United States": "Estados Unidos"
+      },
+      "languages": {
+        "pt-BR": "Português",
+        "en": "Inglês",
+        "es": "Espanhol"
+      },
+      "paymentMethods": {
+        "PIX (Brazil)": "PIX (Brasil)",
+        "Stripe": "Stripe",
+        "Mercado Pago": "Mercado Pago"
+      },
+      "countryPlaceholder": "Selecione seu país",
+      "primaryLanguagePlaceholder": "Selecione seu idioma",
+      "paymentMethodPlaceholder": "Selecione um método de pagamento",
+      "notifications": {
+        "success": "Onboarding concluído! 🎉",
+        "error": "Não foi possível salvar as informações do negócio."
+      },
+      "errors": {
+        "country": "Selecione seu país.",
+        "primaryLanguage": "Selecione seu idioma principal.",
+        "paymentMethod": "Selecione um método de pagamento.",
+        "pixKey": "A chave PIX é obrigatória."
+      }
+    }
+  },
+  "products": {
+    "title": "Produtos",
+    "product": "Produto",
+    "newProduct": "Novo Produto",
+    "name": "Nome",
+    "title_field": "Título",
+    "description": "Descrição",
+    "price": "Preço (R$)",
+    "sku": "SKU",
+    "status": "Status",
+    "active": "Ativo",
+    "inactive": "Inativo",
+    "catalogSync": "Catálogo Meta",
+    "synced": "Sincronizado",
+    "notSynced": "Não Sincronizado",
+    "syncedDescription": "Produto pronto para envio via WhatsApp",
+    "notSyncedDescription": "Produto precisa ser sincronizado com o catálogo Meta",
+    "totalProducts": "Total de Produtos",
+    "activeProducts": "Ativos",
+    "freeProducts": "Gratuitos",
+    "paidProducts": "Pagos",
+    "free": "Gratuito",
+    "paid": "Pago",
+    "noMatchingProducts": "Nenhum produto corresponde aos filtros",
+    "allStatuses": "Todos os status",
+    "allPrices": "Todos os preços",
+    "allTypes": "Todos os tipos",
+    "type": "Tipo",
+    "types": {
+      "ebook": "E-book / PDF",
+      "community": "Comunidade",
+      "mentorship": "Mentoria"
+    },
+    "file": "Arquivo PDF",
+    "create": "Criar produto",
+    "created": "Produto criado com sucesso!",
+    "update": "Atualizar produto",
+    "updated": "Produto atualizado com sucesso!",
+    "edit": "Editar",
+    "delete": "Excluir",
+    "deleted": "Produto excluído com sucesso!",
+    "noProducts": "Nenhum produto cadastrado",
+    "noProductsFound": "0 produtos encontrados",
+    "createFirst": "Crie seu primeiro produto",
+    "manageYourProducts": "Gerencie seus produtos",
+    "readOnlyMessage": "Você pode visualizar os produtos, mas precisa de permissões adicionais para fazer alterações.",
+    "addNewProduct": "Adicione um novo produto ao seu catálogo",
+    "editProductInfo": "Edite as informações do seu produto",
+    "allProductsList": "Lista de todos os seus produtos",
+    "deleteConfirm": "Tem certeza que deseja excluir este produto?",
+    "actions": "Ações",
+    "productVisibleForSales": "Produto visível para vendas",
+    "pdfFileLabel": "Arquivo do Produto",
+    "currentFileUploaded": "Arquivo atual carregado",
+    "view": "Ver",
+    "dragDropPdf": "Arraste e solte o arquivo do seu produto aqui, ou",
+    "browseFiles": "Selecionar Arquivo",
+    "pdfOnlyMax": "Suportados: PDF/DOC/DOCX/XLS/XLSX até 100MB, MP4 até 16MB, JPEG/PNG até 5MB",
+    "uploading": "Enviando...",
+    "uploadingProgress": "Enviando... {progress}%",
+    "fileUploadedSuccess": "Arquivo enviado com sucesso!",
+    "uploadAnother": "Enviar Outro",
+    "uploadFile": "Enviar Arquivo",
+    "retryUpload": "Tentar Novamente",
+    "uploadError": "Tipo de arquivo não suportado. Permitidos: PDF, DOC, DOCX, XLS, XLSX, MP4, JPEG, PNG.",
+    "fileTooLarge": "Arquivos {type} devem ter no máximo {size}MB",
+    "willUploadOnSave": "Será enviado ao salvar",
+    "readyToUpload": "Pronto para enviar",
+    "imageTooLargeForPreview": "Imagem muito grande para pré-visualização (será enviada ao salvar)",
+    "upload": {
+      "title": "envie Seu Produto",
+      "subtitle": "Adicione seu produto digital e comece a vender no WhatsApp",
+      "productTitle": "Título do Produto",
+      "productTitlePlaceholder": "ex: Desafio Fitness de 30 Dias",
+      "descriptionLabel": "Descrição",
+      "descriptionPlaceholder": "O que está incluído neste produto?",
+      "priceLabel": "Preço",
+      "productFile": "Arquivo do Produto",
+      "saveProduct": "Salvar Produto",
+      "saving": "Salvando...",
+      "goToDashboard": "Ir para o Painel",
+      "preview": "Prévia",
+      "previewText": "Seu produto aparecerá aqui",
+      "whatsappLink": "Link do WhatsApp:"
+    },
+    "generateWithAI": "Gerar com IA",
+    "descriptionGeneratedSuccess": "Descrição gerada com sucesso!",
+    "descriptionGeneratedError": "Não foi possível gerar a descrição automaticamente. Tente novamente ou edite manualmente.",
+    "uploadFileBeforeGenerating": "Envie o arquivo do produto antes de gerar a descrição.",
+    "aiHighlightsLabel": "Destaques sugeridos",
+    "createdAt": "Criado em",
+    "productCount": "{count} produto encontrado",
+    "productCountPlural": "{count} produtos encontrados",
+    "filtered": "(filtrado)",
+    "coverImage": "Imagem de Capa",
+    "mainBenefit": "Principal Benefício",
+    "mainBenefitHelp": "O principal resultado que o cliente terá ao comprar seu produto",
+    "targetAudience": "Público-Alvo",
+    "productFile": "Arquivo do produto",
+    "viewFile": "Ver",
+    "selectPlaceholder": "Selecione...",
+    "generate": "Gerar",
+    "generating": "Gerando...",
+    "thumbnailUpdated": "Imagem de capa atualizada!",
+    "thumbnailGenerated": "Capa gerada com sucesso!",
+    "enterTitleFirst": "Digite um título antes de gerar a capa",
+    "selectImage": "Por favor, selecione uma imagem (JPEG ou PNG)",
+    "yourProducts": "Seus Produtos",
+    "yourProductsDescription": "Produtos digitais disponíveis para venda",
+    "whatsappLinkText": "Link WhatsApp",
+    "new": {
+      "selectType": "Escolha o tipo de produto para configurar seu agente de vendas",
+      "back": "Voltar",
+      "uploadPrompt": "Faça upload do PDF do seu produto para começar.",
+      "uploading": "Enviando...",
+      "uploadingProgress": "Enviando... {progress}%",
+      "selectPdf": "Selecionar PDF",
+      "analyzing": "Analisando - lendo o conteúdo para entender melhor",
+      "comingSoon": "Em breve",
+      "progress": "Progresso",
+      "cancel": "Cancelar",
+      "creating": "Criando...",
+      "createProduct": "Criar Produto",
+      "types": {
+        "ebook": {
+          "title": "E-book / PDF",
+          "description": "Venda e-books, guias, templates e materiais digitais em PDF"
+        },
+        "community": {
+          "title": "Comunidade",
+          "description": "Crie comunidades pagas com acesso via link de convite"
+        },
+        "consulting": {
+          "title": "Mentoria",
+          "description": "Venda sessões de mentoria com agendamento automático"
+        }
+      },
+      "toast": {
+        "pdfOnly": "Por favor, envie apenas arquivos PDF",
+        "analyzed": "Documento analisado com sucesso!",
+        "analysisFailed": "Não foi possível analisar o documento. Continuando sem sugestões.",
+        "fileUploaded": "Arquivo enviado com sucesso!",
+        "uploadError": "Erro ao enviar arquivo",
+        "created": "Produto criado!",
+        "createError": "Erro ao criar produto"
+      }
+    }
+  },
+  "workflows": {
+    "title": "Workflows",
+    "subtitle": "Automatize suas conversas de vendas com workflows inteligentes",
+    "myWorkflows": "Meus Workflows",
+    "templates": "Templates",
+    "templatesDescription": "Escolha um template para criar rapidamente um novo workflow",
+    "workflowsCount": "{count} workflow(s)",
+    "noWorkflowsYet": "Nenhum workflow criado ainda",
+    "noWorkflowsFound": "Você ainda não criou nenhum workflow",
+    "selectTemplateBelow": "Selecione um template abaixo para começar",
+    "selectTemplateToStart": "Selecione um template para começar",
+    "selectTemplateAbove": "Selecione um template acima para criar seu primeiro workflow",
+    "flowPreview": "Visualização do Fluxo",
+    "nodes": "nós",
+    "name": "Nome",
+    "description": "Descrição",
+    "preview": "Prévia",
+    "status": "Status",
+    "createdAt": "Criado em",
+    "actions": "Ações",
+    "active": "Ativo",
+    "inactive": "Inativo",
+    "useTemplate": "Usar Template",
+    "created": "Workflow criado com sucesso!",
+    "activated": "Workflow ativado!",
+    "deactivated": "Workflow desativado",
+    "duplicated": "Workflow duplicado!",
+    "deleted": "Workflow excluído",
+    "deleteConfirm": "Tem certeza que deseja excluir este workflow?",
+    "activate": "Ativar",
+    "deactivate": "Desativar",
+    "duplicate": "Duplicar",
+    "edit": "Editar",
+    "delete": "Excluir",
+    "readOnlyMessage": "Você pode visualizar workflows, mas precisa de permissões adicionais para fazer alterações.",
+    "templatesLoadError": "Falha ao carregar templates. Verifique sua conexão.",
+    "noTemplatesAvailable": "Nenhum template disponível no momento.",
+    "recommended": "Recomendado",
+    "presets": {
+      "freeLeadMagnet": {
+        "name": "Captura de Lead + Brinde Grátis",
+        "description": "Oferece produto grátis primeiro, coleta email, depois faz upsell para produto pago"
+      },
+      "intentRouter": {
+        "name": "Roteamento por Intenção",
+        "description": "Detecta a intenção do usuário e direciona para a resposta apropriada"
+      },
+      "mentorshipFirst": {
+        "name": "Prioridade Mentoria",
+        "description": "Prioriza ofertas de mentoria/consultoria sobre outros produtos"
+      },
+      "objectionHandler": {
+        "name": "Tratamento de Objeções",
+        "description": "Identifica e responde automaticamente objeções comuns de vendas"
+      },
+      "simpleSales": {
+        "name": "Funil de Vendas Simples",
+        "description": "Apresentação direta do produto levando à compra"
+      },
+      "welcomeQualify": {
+        "name": "Boas-vindas e Qualificação",
+        "description": "Qualifica leads antes de oferecer produtos"
+      }
+    },
+    "relevance": {
+      "noFreeProducts": "Adicione um produto gratuito para usar este template",
+      "noPaidProducts": "Adicione um produto pago para usar este template",
+      "noMentorshipProducts": "Adicione um produto de mentoria ou consultoria",
+      "noHighTicketProducts": "Adicione um produto de alto valor (R$500+)"
+    },
+    "categories": {
+      "lead_capture": "Captura de Leads",
+      "sales": "Vendas",
+      "high_ticket": "Alto Valor",
+      "support": "Suporte"
+    },
+    "saved": "Workflow salvo!",
+    "notFound": "Workflow não encontrado",
+    "editor": {
+      "editWorkflow": "Edite os passos e configurações do workflow",
+      "workflowInfo": "Informações do Workflow",
+      "descriptionPlaceholder": "Descreva o que este workflow faz...",
+      "steps": "Passos do Workflow",
+      "stepsDescription": "Configure cada passo do seu workflow",
+      "visualView": "Visual",
+      "listView": "Lista",
+      "selectNode": "Selecione um Nó",
+      "editNodeProperties": "Editar propriedades do nó",
+      "clickToSelect": "Clique em um nó no fluxo para editar",
+      "allNodes": "Todos os Nós",
+      "messageContent": "Conteúdo da Mensagem",
+      "enterMessage": "Digite a mensagem a ser enviada...",
+      "variablesHint": "Use {{user_name}}, {{product_name}}, {{product_price}} para conteúdo dinâmico",
+      "offerType": "Tipo de Oferta",
+      "freeProduct": "Produto Grátis",
+      "paidProduct": "Produto Pago",
+      "upsell": "Upsell",
+      "downsell": "Downsell",
+      "product": "Produto",
+      "selectProduct": "Selecione um produto",
+      "autoSelect": "Auto-selecionar com base no tipo",
+      "customMessage": "Mensagem Personalizada (opcional)",
+      "optionalCustomMessage": "Sobrescrever a mensagem de oferta padrão...",
+      "fieldName": "Nome do Campo",
+      "prompt": "Pergunta",
+      "promptPlaceholder": "Qual pergunta devemos fazer?",
+      "conditionType": "Tipo de Condição",
+      "userSaidYes": "Usuário Disse Sim",
+      "userSaidNo": "Usuário Disse Não",
+      "messageContains": "Mensagem Contém",
+      "variableCheck": "Verificação de Variável",
+      "aiCondition": "Condição por IA",
+      "condition": "Condição",
+      "conditionPlaceholder": "Digite a condição...",
+      "timeout": "Tempo Limite (segundos)",
+      "timeoutHint": "Quanto tempo esperar por uma resposta (60-3600 segundos)",
+      "tags": "Tags",
+      "action": "Ação",
+      "addTags": "Adicionar Tags",
+      "removeTags": "Remover Tags",
+      "handoffType": "Tipo de Handoff",
+      "humanAgent": "Atendente Humano",
+      "salesAgent": "Agente de Vendas",
+      "paymentAgent": "Agente de Pagamento",
+      "reason": "Motivo",
+      "handoffReason": "Por que este handoff está acontecendo?",
+      "handoffMessage": "Mensagem de Handoff",
+      "optionalHandoffMessage": "Mensagem opcional antes do handoff...",
+      "endMessage": "Mensagem Final (opcional)",
+      "optionalEndMessage": "Mensagem final opcional...",
+      "deleteNode": "Excluir Passo"
+    }
+  },
+  "settings": {
+    "title": "Configurações",
+    "description": "Gerencie suas configurações",
+    "tabs": {
+      "account": "Conta",
+      "team": "Equipe",
+      "general": "Geral"
+    },
+    "general": {
+      "title": "Configurações Gerais",
+      "description": "Configure as configurações gerais da aplicação",
+      "comingSoon": "Configurações gerais em breve..."
+    },
+    "whatsapp": {
+      "status": {
+        "connected": "Conectado",
+        "disconnected": "Desconectado",
+        "needs_verification": "Precisa de Verificação",
+        "pending": "Pendente",
+        "ready": "Pronto"
+      },
+      "errors": {
+        "popupBlocked": "Pop-up bloqueado. Por favor, habilite pop-ups e tente novamente.",
+        "invalidCode": "Código de verificação inválido. Tente novamente."
+      },
+      "verification": {
+        "codeSent": "Código de verificação enviado via {method} para {phone}",
+        "sendCode": "Enviar Código de Verificação"
+      },
+      "title": "WhatsApp",
+      "description": "Configure sua conexão com o WhatsApp Business",
+      "connected": "Conectado",
+      "disconnected": "Desconectado",
+      "connectedStatus": "WhatsApp Conectado",
+      "disconnectedStatus": "WhatsApp Não Conectado",
+      "disconnectedMessage": "Conecte seu WhatsApp Business para começar a vender",
+      "phoneNumber": "Número de Telefone",
+      "phoneNumberPlaceholder": "+5511999999999",
+      "phoneNumberHelp": "Digite o número no formato internacional (ex: +5511999999999)",
+      "connectCard": {
+        "title": "Conectar Conta do WhatsApp Business",
+        "description": "Conecte seu Meta Business Manager para começar a usar o WhatsApp para seu negócio"
+      },
+      "connect": {
+        "title": "Conectar Conta do WhatsApp Business",
+        "description": "Conecte seu Meta Business Manager para começar a usar o WhatsApp para seu negócio"
+      },
+      "connecting": "Conectando...",
+      "connectButton": "Conectar",
+      "connectButtonText": "Conectar WhatsApp Business",
+      "connectingStatus": "Conectando...",
+      "disconnect": {
+        "button": "Desconectar WhatsApp",
+        "disconnecting": "Desconectando...",
+        "title": "Desconectar Conta do WhatsApp Business?",
+        "description": "Isso irá desconectar sua conta do WhatsApp Business desta aplicação.",
+        "warningTitle": "O que acontece quando você desconecta:",
+        "warning1": "Você não receberá mais mensagens de clientes",
+        "warning2": "Você não poderá enviar mensagens",
+        "warning3": "A verificação do seu número de telefone será removida",
+        "warning4": "Você pode reconectar a qualquer momento, mas precisará verificar novamente",
+        "confirmation": "Tem certeza de que deseja continuar?",
+        "confirm": "Sim, Desconectar",
+        "success": "Conta do WhatsApp Business desconectada com sucesso",
+        "error": "Falha ao desconectar a conta do WhatsApp Business",
+        "sectionTitle": "Desconectar",
+        "sectionDescription": "Desconecte sua conta do WhatsApp Business se necessário"
+      },
+      "disconnectButton": "Desconectar",
+      "reconnect": "Reconectar",
+      "manageConnection": "Gerenciar Conexão",
+      "number": "Número",
+      "businessName": "Nome",
+      "connectSuccess": "Conexão com WhatsApp iniciada",
+      "connectError": "Falha ao conectar WhatsApp",
+      "disconnectSuccess": "WhatsApp desconectado",
+      "disconnectError": "Falha ao desconectar WhatsApp",
+      "disconnectConfirm": "Tem certeza que deseja desconectar o WhatsApp?",
+      "enterPhoneNumber": "Por favor, digite um número de telefone",
+      "connection": {
+        "title": "Estado da Conexão",
+        "subtitle": "Detalhes da conexão da sua conta do WhatsApp Business",
+        "businessManager": "Meta Business Manager",
+        "waba": "Conta do WhatsApp Business",
+        "phone": "Número de Telefone",
+        "quality": "Qualidade",
+        "connectedAt": "Conectado",
+        "displayName": "Nome de Exibição",
+        "displayNameHint": "O nome exibido nas conversas do WhatsApp",
+        "displayNameNotSet": "Não configurado",
+        "editDisplayName": "Editar"
+      },
+      "shareLink": {
+        "title": "Seu Link do WhatsApp",
+        "description": "Compartilhe este link com seus clientes para iniciar uma conversa no WhatsApp",
+        "tip": "Dica: Adicione este link ao seu site, redes sociais ou assinatura de e-mail"
+      },
+      "testMessage": {
+        "title": "Enviar Mensagem de Teste",
+        "subtitle": "Envie uma mensagem de teste para verificar se sua configuração está funcionando",
+        "to": "Número de Telefone do Destinatário",
+        "toPlaceholder": "+1 234 567 8900",
+        "send": "Enviar Mensagem de Teste",
+        "success": "Mensagem de Teste Enviada!",
+        "messageId": "ID da Mensagem: {id}",
+        "invalidPhone": "Por favor, insira um número de telefone válido no formato E.164 (ex: +1234567890)"
+      },
+      "danger": {
+        "title": "Zona de Perigo",
+        "description": "Desconectar permanentemente sua conta do WhatsApp Business"
+      }
+    },
+    "account": {
+      "title": "Informações da Conta",
+      "description": "Detalhes do seu creator",
+      "creatorName": "Nome do Creator",
+      "creatorId": "Creator ID",
+      "status": "Status"
+    },
+    "user": {
+      "title": "Informações do Usuário",
+      "description": "Seus dados de acesso",
+      "profile": "Perfil",
+      "profileDescription": "Informações do seu perfil",
+      "name": "Nome",
+      "company": "Empresa",
+      "email": "E-mail",
+      "currentEmail": "Email atual",
+      "newEmail": "Novo email",
+      "passwordToConfirm": "Senha (para confirmar alteração de email)",
+      "emailPasswordHelp": "Necessário apenas se alterar o email",
+      "changePassword": "Alterar senha",
+      "currentPassword": "Senha atual",
+      "newPassword": "Nova senha",
+      "confirmPassword": "Confirmar nova senha",
+      "showPasswords": "Mostrar senhas",
+      "hidePasswords": "Ocultar senhas",
+      "saved": "Salvo com sucesso!",
+      "googleAccount": "Conectado via Google",
+      "security": "Segurança",
+      "securityDescription": "Altere seu email ou senha",
+      "userId": "User ID"
+    },
+    "notAvailable": "N/A",
+    "team": {
+      "title": "Gerenciamento de Equipe",
+      "description": "Gerencie os membros da sua equipe e suas funções",
+      "yourRole": "Sua Função",
+      "noRole": "Nenhuma função atribuída",
+      "members": {
+        "title": "Membros da Equipe",
+        "description": "Gerencie os membros da sua equipe e suas funções",
+        "empty": "Ainda não há membros da equipe",
+        "email": "E-mail",
+        "role": "Função",
+        "status": "Status",
+        "joined": "Entrou em",
+        "pending": "Pendente",
+        "actions": "Ações"
+      },
+      "invitations": {
+        "title": "Convites Pendentes",
+        "description": "Convites aguardando aceitação",
+        "email": "E-mail",
+        "role": "Função",
+        "expires": "Expira",
+        "actions": "Ações"
+      },
+      "invite": {
+        "button": "Convidar Membro",
+        "title": "Convidar Membro da Equipe",
+        "description": "Envie um convite para adicionar um novo membro à sua equipe",
+        "emailLabel": "Endereço de E-mail",
+        "emailPlaceholder": "colega@exemplo.com",
+        "roleLabel": "Função",
+        "cancel": "Cancelar",
+        "send": "Enviar Convite",
+        "sending": "Enviando...",
+        "success": "Convite enviado para {email}",
+        "error": "Falha ao enviar convite"
+      },
+      "roles": {
+        "owner": "Proprietário",
+        "admin": "Administrador",
+        "support": "Suporte",
+        "marketing": "Marketing"
+      },
+      "remove": {
+        "confirm": "Tem certeza que deseja remover {email}?",
+        "success": "{email} removido da equipe",
+        "error": "Falha ao remover membro"
+      },
+      "revoke": {
+        "confirm": "Tem certeza que deseja revogar o convite para {email}?",
+        "success": "Convite revogado para {email}",
+        "error": "Falha ao revogar convite"
+      },
+      "loading": "Carregando dados da equipe...",
+      "loadError": "Falha ao carregar dados da equipe",
+      "invitation": {
+        "title": "Convite da Equipe",
+        "subtitle": "Você foi convidado para participar de uma equipe",
+        "loading": "Carregando convite...",
+        "organization": "Organização",
+        "roleAssigned": "Função Atribuída",
+        "invitedBy": "Convidado por",
+        "expiresAt": "Expira em",
+        "signedInAs": "Conectado como",
+        "mustSignInMessage": "Por favor, entre com o endereço de e-mail convidado para aceitar",
+        "accept": "Aceitar Convite",
+        "accepting": "Aceitando...",
+        "decline": "Recusar",
+        "success": "Convite aceito! Redirecionando...",
+        "goToDashboard": "Ir para o Painel",
+        "errors": {
+          "title": "Convite Inválido",
+          "noToken": "Nenhum token de convite fornecido",
+          "loadFailed": "Falha ao carregar detalhes do convite",
+          "acceptFailed": "Falha ao aceitar convite",
+          "mustSignIn": "Você deve fazer login para aceitar este convite",
+          "emailMismatch": "Este convite é para um endereço de e-mail diferente"
+        }
+      }
+    }
+  },
+  "payments": {
+    "title": "Pagamentos",
+    "pixKey": "Chave PIX",
+    "pixKeyHelp": "Digite sua chave PIX para receber pagamentos",
+    "save": "Salvar",
+    "saved": "Configurações salvas com sucesso!"
+  },
+  "connections": {
+    "title": "Conexões",
+    "description": "Gerencie suas conexões e integrações com serviços externos",
+    "error": "Falha ao carregar conexões. Por favor, tente novamente.",
+    "whatsapp": {
+      "sectionTitle": "WhatsApp Business",
+      "sectionDescription": "Conecte sua conta do WhatsApp Business para enviar e receber mensagens",
+      "connectCard": {
+        "title": "Conectar Conta do WhatsApp Business",
+        "description": "Conecte seu Meta Business Manager para começar a usar o WhatsApp para seu negócio"
+      },
+      "ready": {
+        "title": "Configuração do WhatsApp Completa!",
+        "description": "Sua conta do WhatsApp Business está totalmente configurada e pronta para uso."
+      },
+      "addProductAlert": "WhatsApp conectado! Agora adicione seu primeiro produto para começar a vender.",
+      "addProductButton": "Adicionar Produto",
+      "danger": {
+        "title": "Zona de Perigo",
+        "description": "Desconectar permanentemente sua conta do WhatsApp Business"
+      }
+    },
+    "more": {
+      "title": "Mais Conexões",
+      "description": "Integrações adicionais estarão disponíveis aqui",
+      "comingSoon": "Mais integrações em breve..."
+    }
+  },
+  "dashboard": {
+    "welcome": "Bem-vindo",
+    "overview": "Visão Geral",
+    "agenda": "Agenda",
+    "appointments": "Consultas",
+    "professionals": "Profissionais",
+    "services": "Serviços",
+    "patients": "Pacientes",
+    "patientList": "Lista de Pacientes",
+    "conversations": "Conversas",
+    "configuration": "Configuração",
+    "clinic": "Clínica",
+    "whatsapp": "WhatsApp",
+    "account": "Conta",
+    "whatsappStatus": "Status do WhatsApp",
+    "recentActivity": "Consultas do Dia",
+    "recentActivityDescription": "Próximas consultas agendadas",
+    "noRecentActivity": "Nenhuma consulta hoje",
+    "noRecentActivityDescription": "Consultas agendadas aparecerão aqui",
+    "viewAll": "Ver todas",
+    "quickActions": "Ações Rápidas",
+    "quickActionsDescription": "Gerencie sua clínica",
+    "todayAppointments": "Consultas Hoje",
+    "weekAppointments": "Esta Semana",
+    "totalPatients": "Total de Pacientes",
+    "newPatients": "Novos este Mês",
+    "alerts": {
+      "disconnected": {
+        "title": "WhatsApp Desconectado",
+        "description": "Conecte sua conta do WhatsApp Business para receber agendamentos automaticamente.",
+        "action": "Conectar WhatsApp"
+      },
+      "needsVerification": {
+        "title": "Verificação Necessária",
+        "description": "Sua conta do WhatsApp Business precisa de verificação para enviar mensagens.",
+        "action": "Verificar Agora"
+      }
+    }
+  },
+  "sales": {
+    "title": "Vendas",
+    "description": "Gerencie e analise todas as suas vendas",
+    "noOrdersFound": "0 pedidos encontrados",
+    "totalRevenue": "Receita Total",
+    "totalOrders": "Total de Pedidos",
+    "completed": "concluídos",
+    "viewDetails": "Ver detalhes",
+    "viewOrder": "Ver pedido",
+    "orderDetails": "Detalhes do Pedido",
+    "allOrders": "Todos os Pedidos",
+    "ordersFound": "{count} pedidos encontrados",
+    "noOrders": "Nenhum pedido encontrado",
+    "filters": "Filtros",
+    "searchPlaceholder": "Buscar por cliente ou telefone...",
+    "export": "Exportar",
+    "orderId": "ID do Pedido",
+    "customer": "Cliente",
+    "items": "Itens",
+    "amount": "Valor",
+    "paymentStatus": "Status do Pagamento",
+    "orderStatus": "Status do Pedido",
+    "date": "Data",
+    "unknownCustomer": "Cliente desconhecido",
+    "allStatuses": "Todos os status",
+    "status": {
+      "pending": "Pendente",
+      "processing": "Processando",
+      "completed": "Concluído",
+      "paid": "Pago",
+      "failed": "Falhou",
+      "refunded": "Reembolsado"
+    },
+    "orderState": {
+      "pending": "Pendente",
+      "created": "Criado",
+      "confirmed": "Confirmado",
+      "processing": "Processando",
+      "shipped": "Enviado",
+      "delivered": "Entregue",
+      "completed": "Concluído",
+      "cancelled": "Cancelado"
+    },
+    "period": {
+      "all": "Todos os períodos",
+      "last7days": "Últimos 7 dias",
+      "last30days": "Últimos 30 dias",
+      "last90days": "Últimos 90 dias"
+    }
+  },
+  "conversations": {
+    "title": "Conversas",
+    "description": "Gerencie conversas entre sua IA e clientes",
+    "loading": "Carregando conversas...",
+    "stats": {
+      "total": "Total de Conversas",
+      "active": "Ativas",
+      "humanTakeover": "Sob Controle Humano",
+      "closed": "Fechadas",
+      "new7days": "Novas (7 dias)"
+    },
+    "filters": {
+      "title": "Filtros",
+      "searchPlaceholder": "Buscar por cliente, telefone...",
+      "state": "Estado",
+      "handler": "Gerenciado por",
+      "allStates": "Todos os estados",
+      "allHandlers": "Todos"
+    },
+    "state": {
+      "novo": "Novo",
+      "qualificado": "Qualificado",
+      "negociando": "Negociando",
+      "fechado": "Fechado",
+      "checkout": "Checkout",
+      "greeting": "Saudação",
+      "engaged": "Engajado"
+    },
+    "handler": {
+      "ai": "IA",
+      "human": "Humano"
+    },
+    "list": {
+      "title": "Lista de Conversas",
+      "description": "{count} conversas encontradas",
+      "empty": "Nenhuma conversa encontrada"
+    },
+    "noConversationsFound": "0 conversas encontradas",
+    "control": {
+      "humanMode": "Modo Humano",
+      "aiMode": "Modo IA",
+      "humanDescription": "Você está no controle desta conversa",
+      "aiDescription": "A IA está gerenciando esta conversa",
+      "takeControl": "Assumir Controle",
+      "releaseToAI": "Devolver para IA",
+      "takenOverAt": "Assumido em {time}"
+    },
+    "takeover": {
+      "success": "Você assumiu o controle da conversa",
+      "error": "Falha ao assumir controle"
+    },
+    "release": {
+      "success": "Conversa devolvida para a IA",
+      "error": "Falha ao devolver conversa"
+    },
+    "messages": {
+      "title": "Mensagens",
+      "loading": "Carregando mensagens...",
+      "empty": "Nenhuma mensagem ainda",
+      "placeholder": "Digite sua mensagem...",
+      "hint": "Pressione Enter para enviar, Shift+Enter para nova linha",
+      "sent": "Mensagem enviada",
+      "error": "Falha ao enviar mensagem",
+      "you": "Você",
+      "ai": "IA",
+      "customer": "Cliente",
+      "takeoverRequired": "Assuma o controle da conversa para enviar mensagens",
+      "conversationClosed": "Esta conversa está fechada",
+      "status": {
+        "sent": "Enviado",
+        "delivered": "Entregue",
+        "read": "Lido",
+        "failed": "Falhou"
+      }
+    }
+  },
+  "setup": {
+    "title": "Configure sua conta",
+    "subtitle": "{completed} de {total} passos concluídos",
+    "allComplete": "Configuração completa!",
+    "readyToSell": "Sua conta está pronta para vender",
+    "completed": "Concluído",
+    "continueSetup": "Continuar configuração",
+    "steps": {
+      "profile": {
+        "title": "Perfil",
+        "description": "Configure seu perfil, estilo de comunicação e chave PIX"
+      },
+      "whatsapp": {
+        "title": "Conectar WhatsApp",
+        "description": "Vincule seu WhatsApp Business para atender clientes"
+      },
+      "product": {
+        "title": "Criar Primeiro Produto",
+        "description": "Cadastre seu primeiro produto para começar a vender"
+      }
+    }
+  },
+  "contacts": {
+    "title": "Contatos",
+    "description": "Gerencie seus leads e contatos salvos",
+    "noContactsFound": "0 contatos encontrados",
+    "totalContacts": "Total de Contatos",
+    "qualifiedLeads": "Leads Qualificados",
+    "new7days": "Novos (7 dias)",
+    "filters": "Filtros",
+    "searchPlaceholder": "Buscar por nome ou telefone...",
+    "allStages": "Todas as Etapas",
+    "allSources": "Todas as Fontes",
+    "listTitle": "Lista de Contatos",
+    "contactsCount": "{count} contatos encontrados",
+    "contactCount": "{count} contato encontrado",
+    "stages": {
+      "novo": "Novo",
+      "qualificado": "Qualificado",
+      "negociando": "Negociando",
+      "fechado": "Fechado"
+    },
+    "sources": {
+      "whatsapp": "WhatsApp",
+      "manual": "Manual"
+    }
+  },
+  "funnel": {
+    "title": "Funil de Vendas",
+    "description": "Visualize seus leads em cada etapa do processo de vendas",
+    "visualization": "Visualização do Funil",
+    "visualizationDescription": "Clique em uma etapa para ver mais detalhes",
+    "leadInStage": "1 lead nesta etapa",
+    "leadsInStage": "{count} leads nesta etapa",
+    "noLeads": "0 leads encontrados",
+    "noLeadsDescription": "Inicie conversas para ver seu funil se preencher",
+    "totalLeads": "Total de Leads",
+    "conversionRate": "Taxa de Conversão"
+  },
+  "clone": {
+    "title": "Perfil",
+    "description": "Configure seu perfil e como sua IA vai se comunicar com seus leads",
+    "common": {
+      "optional": "Opcional"
+    },
+    "status": {
+      "configured": "Configurado",
+      "pending": "Pendente"
+    },
+    "whatsappAlert": {
+      "disconnected": "⚠️ Seu WhatsApp ainda não está conectado. Conecte para ativar o clone.",
+      "needsVerification": "⚠️ Seu WhatsApp precisa ser verificado para ativar o clone.",
+      "configureButton": "Configurar WhatsApp"
+    },
+    "identity": {
+      "title": "Identidade",
+      "description": "Como seu clone vai se apresentar",
+      "name": "Seu nome",
+      "namePlaceholder": "Nome completo",
+      "niche": "Nicho",
+      "nichePlaceholder": "Escolha seu nicho",
+      "nicheOther": "Outro…",
+      "nicheCustomPlaceholder": "Ex: estética, imobiliário…"
+    },
+    "voiceStyle": {
+      "title": "Estilo de Voz",
+      "description": "Como seu clone vai conversar com os leads"
+    },
+    "payment": {
+      "title": "Pagamento",
+      "description": "Configure como você vai receber pagamentos",
+      "pixKey": "Chave PIX",
+      "pixKeyPlaceholder": "CPF, CNPJ, e-mail, telefone ou chave aleatória",
+      "pixKeyHelp": "Esta chave será usada para receber pagamentos dos seus clientes",
+      "confirmPixKey": "Confirme a Chave PIX",
+      "confirmPixKeyPlaceholder": "Digite novamente sua chave PIX",
+      "edit": "Editar",
+      "cancelEdit": "Cancelar alteração",
+      "pixKeyConfigured": "Chave PIX configurada"
+    },
+    "context": {
+      "title": "Mensagem",
+      "description": "Configure a mensagem de boas-vindas do seu clone",
+      "welcomeMessage": "Mensagem de Boas-vindas",
+      "welcomeMessagePlaceholder": "A primeira mensagem que seu clone envia quando o lead chega",
+      "generateWithAI": "Gerar com IA",
+      "generating": "Gerando…"
+    },
+    "preview": {
+      "title": "Prévia do WhatsApp",
+      "description": "Como seu clone aparece para os leads",
+      "fillFieldsHint": "Preencha nome, nicho e estilo de voz para ver a prévia",
+      "messageInput": "Mensagem",
+      "previewWithContent": "Preview de como seu bot vai responder (sem produtos)",
+      "completeSetup": "Complete o cadastro para ver a preview",
+      "messages": {
+        "defaultCustomer": "Oi!",
+        "defaultBot": "Olá! Continue o cadastro para ver como vou responder seus leads!",
+        "customerCold": "Oi, vi um anúncio seu",
+        "customerHot": "Oi! Quero comprar!",
+        "customerWarm": "Oi! Vi seu perfil e queria saber mais!",
+        "friendlyCold": "Oi! 👋 Que bom que chegou até aqui! Sou {name}!",
+        "friendlyColdWithNiche": "Oi! 👋 Que bom que chegou até aqui! Sou {name} e trabalho com {niche}!",
+        "friendlyHot": "Opa! 🔥 Que demais! Sou {name} e vou te ajudar agora!",
+        "friendlyWarm": "Ei! 😊 Que legal você ter me encontrado! Sou {name}!",
+        "friendlyWarmWithNiche": "Ei! 😊 Que legal você ter me encontrado! Sou {name} e sou apaixonado(a) por {niche}!",
+        "professional": "Olá! Sou {name}.",
+        "professionalWithNiche": "Olá! Sou {name}, especialista em {niche}.",
+        "formal": "Prezado(a), seja bem-vindo(a). Sou {name}.",
+        "formalWithNiche": "Prezado(a), seja bem-vindo(a). Sou {name}, consultor(a) na área de {niche}.",
+        "educationalFriendly": "Antes de mais nada, posso te explicar um pouco sobre como funciona? 📚",
+        "educationalProfessional": "Posso explicar como funciona nosso método?",
+        "directFriendly": "Deixa eu te mostrar o que tenho pra você! 🚀",
+        "directProfessional": "Vou apresentar nossa solução diretamente.",
+        "consultativeFriendly": "Me conta, qual seu maior desafio hoje? 🤔",
+        "consultativeProfessional": "Qual seu principal objetivo no momento?",
+        "customerResponseConsultative": "Quero melhorar meus resultados",
+        "customerResponseDefault": "Sim, por favor!",
+        "finalHotFriendly": "Perfeito! Tenho algo especial pra você! Deixa eu mostrar... 🎁",
+        "finalHotProfessional": "Certo. Vou apresentar a solução mais adequada para seu caso.",
+        "finalWarmFriendly": "Show! Deixa eu te mostrar como posso te ajudar! ✨",
+        "finalWarmProfessional": "Ótimo. Vou apresentar as opções que melhor se adequam ao seu perfil.",
+        "finalColdFriendly": "Vou te mandar conteúdos que vão te ajudar muito! Fica de olho! 🚀",
+        "finalColdProfessional": "Vou compartilhar conteúdos relevantes para seu desenvolvimento.",
+        "greetingProducts": "Tenho {products} disponíveis. Quer saber mais?"
+      }
+    },
+    "whatsappReady": "WhatsApp conectado! Seu perfil está pronto.",
+    "save": "Salvar Perfil",
+    "saving": "Salvando...",
+    "saveSuccess": "Perfil configurado com sucesso!",
+    "saveError": "Erro ao salvar perfil",
+    "nicheError": "Não foi possível salvar o nicho. Tente novamente.",
+    "generateError": "Erro ao gerar mensagem",
+    "generateSuccess": "Mensagem gerada! Ajuste se quiser.",
+    "authError": "Você precisa estar autenticado",
+    "fillFieldsError": "Preencha nome, nicho e estilo de voz para gerar a mensagem",
+    "validation": {
+      "nameRequired": "Informe seu nome",
+      "nicheRequired": "Selecione ou informe seu nicho",
+      "voiceStyleRequired": "Selecione um estilo de voz",
+      "pixKeyRequired": "Informe sua chave PIX",
+      "confirmPixKeyRequired": "Confirme sua chave PIX",
+      "pixKeyMismatch": "As chaves PIX não coincidem",
+      "productTypesRequired": "Selecione pelo menos um tipo de produto",
+      "leadTemperatureRequired": "Selecione a temperatura dos seus leads"
+    },
+    "productTypes": {
+      "title": "Tipo de Produto",
+      "description": "Selecione os tipos de produto que você vende (pode selecionar mais de um)",
+      "ebook": {
+        "title": "E-book / Templates",
+        "description": "PDFs, guias, planilhas e materiais digitais"
+      },
+      "mentoring": {
+        "title": "Mentoria",
+        "description": "Acompanhamento individual ou em grupo"
+      },
+      "community": {
+        "title": "Comunidade / Acesso",
+        "description": "Grupos, cursos ou áreas de membros"
+      }
+    },
+    "greetingProducts": {
+      "title": "Produtos na saudação",
+      "description": "Mostre 1–2 produtos já no primeiro contato para aumentar interesse",
+      "label": "Mostrar produtos disponíveis na saudação"
+    },
+    "voiceStyles": {
+      "friendlyCoach": {
+        "title": "Amigável",
+        "description": "Energético, motivacional e inspirador"
+      },
+      "professionalExpert": {
+        "title": "Profissional",
+        "description": "Direto, técnico e objetivo"
+      },
+      "formalConsultant": {
+        "title": "Formal",
+        "description": "Sério, tradicional e corporativo"
+      }
+    },
+    "leadTemperature": {
+      "title": "Temperatura do Lead",
+      "description": "Como seus leads chegam até você?",
+      "cold": "Frio - Não me conhece",
+      "warm": "Morno - Já ouviu falar",
+      "hot": "Quente - Pronto para comprar",
+      "clickToSet": "Clique na barra para definir"
+    },
+    "advanced": {
+      "title": "Configurações Avançadas",
+      "description": "Personalize como seu clone vai vender (opcional)",
+      "salesStrategy": "Estratégia de Vendas",
+      "leadTemperature": "Temperatura do Lead",
+      "salesApproach": "Abordagem",
+      "leadTemp": {
+        "cold": "Frio - Não me conhece",
+        "warm": "Morno - Já ouviu falar",
+        "hot": "Quente - Pronto para comprar"
+      },
+      "approach": {
+        "educational": "Educativo",
+        "consultative": "Consultivo",
+        "direct": "Direto"
+      },
+      "productType": "Tipo de Produto",
+      "productCategory": "Categoria",
+      "ticketLevel": "Faixa de Preço",
+      "category": {
+        "infoproduct": "Infoproduto",
+        "service": "Serviço",
+        "community": "Comunidade",
+        "software": "Software"
+      },
+      "ticket": {
+        "low": "Baixo (até R$100)",
+        "medium": "Médio (R$100-500)",
+        "high": "Alto (R$500+)"
+      },
+      "leadQualification": "Qualificação de Leads",
+      "qualificationLevel": "Nível",
+      "qualification": {
+        "none": "Nenhuma",
+        "basic": "Básica",
+        "complete": "Completa"
+      },
+      "customQuestions": "Perguntas Personalizadas",
+      "customQuestionsPlaceholder": "Ex: Qual seu maior desafio hoje?",
+      "primaryGoal": "Objetivo Principal",
+      "goal": {
+        "sell": "Vender Produto",
+        "schedule": "Agendar Reunião",
+        "capture": "Capturar Lead",
+        "nurture": "Educar e Nutrir"
+      }
+    }
+  },
+  "common": {
+    "loading": "Carregando...",
+    "saving": "Salvando...",
+    "save": "Salvar",
+    "error": "Erro",
+    "success": "Sucesso",
+    "cancel": "Cancelar",
+    "submit": "Enviar",
+    "back": "Voltar",
+    "next": "Próximo",
+    "search": "Buscar",
+    "filter": "Filtrar",
+    "filters": "Filtros",
+    "actions": "Ações",
+    "yes": "Sim",
+    "no": "Não",
+    "retry": "Tentar novamente",
+    "refresh": "Atualizar",
+    "all": "Todos",
+    "clearFilters": "Limpar filtros"
+  }
+}

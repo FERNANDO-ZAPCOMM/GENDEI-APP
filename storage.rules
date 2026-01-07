@@ -1,0 +1,53 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // =========================================================================
+    // GENDEI STORAGE RULES
+    // =========================================================================
+
+    // Helper function to check authentication
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // =========================================================================
+    // CLINIC FILES
+    // =========================================================================
+    match /clinics/{clinicId}/{allPaths=**} {
+      // Clinic owner can read/write
+      allow read, write: if isAuthenticated() && request.auth.uid == clinicId;
+    }
+
+    // =========================================================================
+    // PROFESSIONAL PHOTOS
+    // =========================================================================
+    match /professionals/{clinicId}/{professionalId}/{fileName} {
+      // Clinic owner can upload professional photos
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && request.auth.uid == clinicId;
+    }
+
+    // =========================================================================
+    // PATIENT DOCUMENTS (if needed)
+    // =========================================================================
+    match /patients/{clinicId}/{patientId}/{fileName} {
+      allow read, write: if isAuthenticated() && request.auth.uid == clinicId;
+    }
+
+    // =========================================================================
+    // TEMPORARY UPLOADS
+    // =========================================================================
+    match /temp/{userId}/{allPaths=**} {
+      allow read, write: if isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // =========================================================================
+    // DEFAULT: Deny all
+    // =========================================================================
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

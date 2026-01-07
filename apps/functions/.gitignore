@@ -1,0 +1,28 @@
+# Compiled JavaScript
+lib/
+
+# Node modules
+node_modules/
+
+# Environment files
+.env
+.env.local
+
+# Firebase
+.firebase/
+firebase-debug.log
+firebase-debug.*.log
+ui-debug.log
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+*.tsbuildinfo

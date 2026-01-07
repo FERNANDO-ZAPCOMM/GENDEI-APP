@@ -1,0 +1,130 @@
+import { Router, Request, Response } from 'express';
+import {
+  verifyAuth,
+  verifyCreatorAccess,
+  requirePermissions,
+} from '../middleware/auth';
+import * as ordersService from '../services/orders';
+import { PaymentStatus, OrderStatus } from '../types';
+
+const router = Router();
+
+// GET /orders/creator/:creatorId - Get all orders for a creator
+router.get(
+  '/creator/:creatorId',
+  verifyAuth,
+  verifyCreatorAccess,
+  requirePermissions('canViewOrders'),
+  async (req: Request, res: Response) => {
+    try {
+      const { creatorId } = req.params;
+      const {
+        startDate,
+        endDate,
+        paymentStatus,
+        status,
+        search,
+        limit,
+        cursor,
+      } = req.query;
+
+      const filters: ordersService.OrderFilters = {
+        creatorId,
+        startDate: startDate ? new Date(startDate as string) : undefined,
+        endDate: endDate ? new Date(endDate as string) : undefined,
+        paymentStatus: paymentStatus as PaymentStatus | undefined,
+        status: status as OrderStatus | undefined,
+        searchTerm: search as string | undefined,
+      };
+
+      const pagination = {
+        limit: limit ? parseInt(limit as string, 10) : undefined,
+        cursor: cursor as string | undefined,
+      };
+
+      const result = await ordersService.getOrders(filters, pagination);
+      res.json(result);
+    } catch (error) {
+      console.error('Error fetching orders:', error);
+      res.status(500).json({ error: 'Failed to fetch orders' });
+    }
+  }
+);
+
+// GET /orders/creator/:creatorId/stats - Get order statistics
+router.get(
+  '/creator/:creatorId/stats',
+  verifyAuth,
+  verifyCreatorAccess,
+  requirePermissions('canViewOrders'),
+  async (req: Request, res: Response) => {
+    try {
+      const { creatorId } = req.params;
+      const { startDate, endDate } = req.query;
+
+      const filters: ordersService.OrderFilters = {
+        creatorId,
+        startDate: startDate ? new Date(startDate as string) : undefined,
+        endDate: endDate ? new Date(endDate as string) : undefined,
+      };
+
+      const stats = await ordersService.getOrderStats(filters);
+      res.json(stats);
+    } catch (error) {
+      console.error('Error fetching order stats:', error);
+      res.status(500).json({ error: 'Failed to fetch order statistics' });
+    }
+  }
+);
+
+// GET /orders/:creatorId/:orderId - Get a single order
+router.get(
+  '/:creatorId/:orderId',
+  verifyAuth,
+  verifyCreatorAccess,
+  requirePermissions('canViewOrders'),
+  async (req: Request, res: Response) => {
+    try {
+      const { creatorId, orderId } = req.params;
+      const order = await ordersService.getOrder(creatorId, orderId);
+
+      if (!order) {
+        res.status(404).json({ error: 'Order not found' });
+        return;
+      }
+
+      res.json(order);
+    } catch (error) {
+      console.error('Error fetching order:', error);
+      res.status(500).json({ error: 'Failed to fetch order' });
+    }
+  }
+);
+
+// PUT /orders/:creatorId/:orderId - Update an order
+router.put(
+  '/:creatorId/:orderId',
+  verifyAuth,
+  verifyCreatorAccess,
+  requirePermissions('canManageOrders'),
+  async (req: Request, res: Response) => {
+    try {
+      const { creatorId, orderId } = req.params;
+      const order = await ordersService.updateOrder(creatorId, orderId, req.body);
+      res.json(order);
+    } catch (error) {
+      console.error('Error updating order:', error);
+      if ((error as Error).message.includes('not found')) {
+        res.status(404).json({ error: 'Order not found' });
+        return;
+      }
+      if ((error as Error).message.includes('Unauthorized')) {
+        res.status(403).json({ error: 'Unauthorized' });
+        return;
+      }
+      res.status(500).json({ error: 'Failed to update order' });
+    }
+  }
+);
+
+export default router;

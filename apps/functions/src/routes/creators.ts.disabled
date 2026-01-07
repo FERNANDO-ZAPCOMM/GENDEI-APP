@@ -1,0 +1,159 @@
+import { Router, Request, Response } from 'express';
+import { verifyAuth, verifyCreatorAccess } from '../middleware/auth';
+import * as metaService from '../services/meta';
+import * as onboardingService from '../services/onboarding';
+
+const router = Router();
+
+// GET /creators/me - Get current creator info
+router.get('/me', verifyAuth, async (req: Request, res: Response) => {
+  try {
+    const creatorId = req.user!.creatorId;
+
+    // Get creator document
+    const creator = await metaService.getCreator(creatorId);
+
+    if (!creator) {
+      // If creator doesn't exist, return basic info from onboarding profile
+      const profile = await onboardingService.getProfile(creatorId);
+
+      if (!profile) {
+        res.status(404).json({ error: 'Creator not found' });
+        return;
+      }
+
+      res.json({
+        id: creatorId,
+        name: profile.displayName,
+        ...profile,
+      });
+      return;
+    }
+
+    res.json({
+      id: creatorId,
+      ...creator,
+    });
+  } catch (error) {
+    console.error('Error fetching creator:', error);
+    res.status(500).json({ error: 'Failed to fetch creator' });
+  }
+});
+
+// PATCH /creators/me - Update current creator info
+router.patch('/me', verifyAuth, async (req: Request, res: Response) => {
+  try {
+    const creatorId = req.user!.creatorId;
+    const { name, profile, country, currency, currencyLocale, phoneNumber } = req.body;
+
+    // Build update object with only provided fields
+    const updateData: Record<string, unknown> = {};
+
+    if (name && typeof name === 'string' && name.trim().length > 0) {
+      updateData.name = name.trim();
+    }
+
+    if (profile && typeof profile === 'object') {
+      updateData.profile = profile;
+    }
+
+    if (country) {
+      updateData.country = country;
+    }
+
+    if (currency) {
+      updateData.currency = currency;
+    }
+
+    if (currencyLocale) {
+      updateData.currencyLocale = currencyLocale;
+    }
+
+    if (phoneNumber) {
+      updateData.phoneNumber = phoneNumber;
+    }
+
+    // Require at least one field to update
+    if (Object.keys(updateData).length === 0) {
+      res.status(400).json({ error: 'At least one field is required to update' });
+      return;
+    }
+
+    const updatedCreator = await metaService.updateCreator(creatorId, updateData);
+
+    res.json(updatedCreator);
+  } catch (error) {
+    console.error('Error updating creator:', error);
+    res.status(500).json({ error: 'Failed to update creator' });
+  }
+});
+
+// GET /creators/:creatorId/payments - Get payment settings
+router.get(
+  '/:creatorId/payments',
+  verifyAuth,
+  verifyCreatorAccess,
+  async (req: Request, res: Response) => {
+    try {
+      const { creatorId } = req.params;
+      const settings = await metaService.getPaymentSettings(creatorId);
+
+      if (!settings) {
+        res.json({ pixKey: null });
+        return;
+      }
+
+      res.json(settings);
+    } catch (error) {
+      console.error('Error fetching payment settings:', error);
+      res.status(500).json({ error: 'Failed to fetch payment settings' });
+    }
+  }
+);
+
+// PUT /creators/:creatorId/payments - Update payment settings
+router.put(
+  '/:creatorId/payments',
+  verifyAuth,
+  verifyCreatorAccess,
+  async (req: Request, res: Response) => {
+    try {
+      const { creatorId } = req.params;
+      const { pixKey } = req.body;
+
+      await metaService.updatePaymentSettings(creatorId, { pixKey });
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Error updating payment settings:', error);
+      res.status(500).json({ error: 'Failed to update payment settings' });
+    }
+  }
+);
+
+// GET /creators/:creatorId/channel/whatsapp - Get WhatsApp channel info
+router.get(
+  '/:creatorId/channel/whatsapp',
+  verifyAuth,
+  verifyCreatorAccess,
+  async (req: Request, res: Response) => {
+    try {
+      const { creatorId } = req.params;
+      const channel = await metaService.getWhatsAppChannel(creatorId);
+
+      if (!channel) {
+        res.json({ connected: false });
+        return;
+      }
+
+      res.json({
+        connected: true,
+        ...channel,
+      });
+    } catch (error) {
+      console.error('Error fetching WhatsApp channel:', error);
+      res.status(500).json({ error: 'Failed to fetch WhatsApp channel' });
+    }
+  }
+);
+
+export default router;

@@ -1,0 +1,287 @@
+import { Router, Request, Response } from 'express';
+import { Timestamp } from 'firebase-admin/firestore';
+import {
+  verifyAuth,
+  verifyCreatorAccess,
+  requirePermissions,
+} from '../middleware/auth';
+import * as workflowsService from '../services/workflows';
+import { WorkflowValidationError } from '../services/workflowCompiler';
+import { autoHealWorkflows } from '../services/workflowAutoHeal';
+
+const router = Router();
+
+function requireAdminToken(req: Request, res: Response): boolean {
+  const token = req.header('x-admin-token') || req.header('X-Admin-Token') || '';
+  const expected = process.env.WORKFLOW_MIGRATION_TOKEN || '';
+  if (!expected || token !== expected) {
+    res.status(403).json({ error: 'Forbidden' });
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Convert Firestore Timestamps to ISO strings for JSON serialization
+ */
+function serializeWorkflow(workflow: any): any {
+  return {
+    ...workflow,
+    createdAt: workflow.createdAt instanceof Timestamp
+      ? workflow.createdAt.toDate().toISOString()
+      : workflow.createdAt instanceof Date
+        ? workflow.createdAt.toISOString()
+        : workflow.createdAt,
+    updatedAt: workflow.updatedAt instanceof Timestamp
+      ? workflow.updatedAt.toDate().toISOString()
+      : workflow.updatedAt instanceof Date
+        ? workflow.updatedAt.toISOString()
+        : workflow.updatedAt,
+  };
+}
+
+// GET /workflows/presets - Get all workflow presets (templates)
+router.get(
+  '/presets',
+  verifyAuth,
+  async (req: Request, res: Response) => {
+    try {
+      const presets = workflowsService.getWorkflowPresets();
+      res.json(presets);
+    } catch (error) {
+      console.error('Error fetching workflow presets:', error);
+      res.status(500).json({ error: 'Failed to fetch workflow presets' });
+    }
+  }
+);
+
+// GET /workflows/creator/:creatorId - Get all workflows for a creator
+router.get(
+  '/creator/:creatorId',
+  verifyAuth,
+  verifyCreatorAccess,
+  requirePermissions('canViewProducts'),
+  async (req: Request, res: Response) => {
+    try {
+      const { creatorId } = req.params;
+      const workflows = await workflowsService.getWorkflows(creatorId);
+      res.json(workflows.map(serializeWorkflow));
+    } catch (error) {
+      console.error('Error fetching workflows:', error);
+      res.status(500).json({ error: 'Failed to fetch workflows' });
+    }
+  }
+);
+
+// GET /workflows/creator/:creatorId/active - Get the active workflow for a creator
+router.get(
+  '/creator/:creatorId/active',
+  verifyAuth,
+  verifyCreatorAccess,
+  requirePermissions('canViewProducts'),
+  async (req: Request, res: Response) => {
+    try {
+      const { creatorId } = req.params;
+      const workflow = await workflowsService.getActiveWorkflow(creatorId);
+
+      if (!workflow) {
+        res.json(null);
+        return;
+      }
+
+      res.json(serializeWorkflow(workflow));
+    } catch (error) {
+      console.error('Error fetching active workflow:', error);
+      res.status(500).json({ error: 'Failed to fetch active workflow' });
+    }
+  }
+);
+
+// GET /workflows/:creatorId/:workflowId - Get a single workflow
+router.get(
+  '/:creatorId/:workflowId',
+  verifyAuth,
+  verifyCreatorAccess,
+  requirePermissions('canViewProducts'),
+  async (req: Request, res: Response) => {
+    try {
+      const { creatorId, workflowId } = req.params;
+      const workflow = await workflowsService.getWorkflow(creatorId, workflowId);
+
+      if (!workflow) {
+        res.status(404).json({ error: 'Workflow not found' });
+        return;
+      }
+
+      res.json(serializeWorkflow(workflow));
+    } catch (error) {
+      console.error('Error fetching workflow:', error);
+      res.status(500).json({ error: 'Failed to fetch workflow' });
+    }
+  }
+);
+
+// POST /workflows - Create a new workflow (from preset or custom)
+router.post(
+  '/',
+  verifyAuth,
+  requirePermissions('canManageProducts'),
+  async (req: Request, res: Response) => {
+    try {
+      const creatorId = req.user!.creatorId;
+      const { presetId, workflow: workflowData } = req.body;
+
+      console.log('Creating workflow:', { creatorId, presetId, hasWorkflowData: !!workflowData });
+
+      const workflow = await workflowsService.createWorkflow(creatorId, {
+        presetId,
+        workflow: workflowData,
+      });
+
+      res.status(201).json(serializeWorkflow(workflow));
+    } catch (error) {
+      console.error('Error creating workflow:', error);
+      if (error instanceof WorkflowValidationError) {
+        res.status(400).json({ error: 'Invalid workflow', details: error.details });
+        return;
+      }
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      res.status(500).json({ error: 'Failed to create workflow', details: errorMessage });
+    }
+  }
+);
+
+// PUT /workflows/:creatorId/:workflowId - Update a workflow
+router.put(
+  '/:creatorId/:workflowId',
+  verifyAuth,
+  verifyCreatorAccess,
+  requirePermissions('canManageProducts'),
+  async (req: Request, res: Response) => {
+    try {
+      const { creatorId, workflowId } = req.params;
+      const updates = req.body;
+
+      const workflow = await workflowsService.updateWorkflow(creatorId, workflowId, updates);
+
+      res.json(serializeWorkflow(workflow));
+    } catch (error) {
+      console.error('Error updating workflow:', error);
+      if (error instanceof WorkflowValidationError) {
+        res.status(400).json({ error: 'Invalid workflow', details: error.details });
+        return;
+      }
+      const errorMessage = (error as Error).message;
+      if (errorMessage.includes('not found')) {
+        res.status(404).json({ error: 'Workflow not found' });
+        return;
+      }
+      res.status(500).json({ error: 'Failed to update workflow' });
+    }
+  }
+);
+
+// POST /workflows/:creatorId/:workflowId/activate - Activate a workflow
+router.post(
+  '/:creatorId/:workflowId/activate',
+  verifyAuth,
+  verifyCreatorAccess,
+  requirePermissions('canManageProducts'),
+  async (req: Request, res: Response) => {
+    try {
+      const { creatorId, workflowId } = req.params;
+      await workflowsService.activateWorkflow(creatorId, workflowId);
+      res.json({ success: true, message: 'Workflow activated' });
+    } catch (error) {
+      console.error('Error activating workflow:', error);
+      res.status(500).json({ error: 'Failed to activate workflow' });
+    }
+  }
+);
+
+// POST /workflows/:creatorId/:workflowId/deactivate - Deactivate a workflow
+router.post(
+  '/:creatorId/:workflowId/deactivate',
+  verifyAuth,
+  verifyCreatorAccess,
+  requirePermissions('canManageProducts'),
+  async (req: Request, res: Response) => {
+    try {
+      const { creatorId, workflowId } = req.params;
+      await workflowsService.deactivateWorkflow(creatorId, workflowId);
+      res.json({ success: true, message: 'Workflow deactivated' });
+    } catch (error) {
+      console.error('Error deactivating workflow:', error);
+      res.status(500).json({ error: 'Failed to deactivate workflow' });
+    }
+  }
+);
+
+// POST /workflows/:creatorId/:workflowId/duplicate - Duplicate a workflow
+router.post(
+  '/:creatorId/:workflowId/duplicate',
+  verifyAuth,
+  verifyCreatorAccess,
+  requirePermissions('canManageProducts'),
+  async (req: Request, res: Response) => {
+    try {
+      const { creatorId, workflowId } = req.params;
+      const { name } = req.body;
+
+      const workflow = await workflowsService.duplicateWorkflow(creatorId, workflowId, name);
+      res.status(201).json(serializeWorkflow(workflow));
+    } catch (error) {
+      console.error('Error duplicating workflow:', error);
+      const errorMessage = (error as Error).message;
+      if (errorMessage.includes('not found')) {
+        res.status(404).json({ error: 'Workflow not found' });
+        return;
+      }
+      res.status(500).json({ error: 'Failed to duplicate workflow' });
+    }
+  }
+);
+
+// DELETE /workflows/:creatorId/:workflowId - Delete a workflow
+router.delete(
+  '/:creatorId/:workflowId',
+  verifyAuth,
+  verifyCreatorAccess,
+  requirePermissions('canManageProducts'),
+  async (req: Request, res: Response) => {
+    try {
+      const { creatorId, workflowId } = req.params;
+      await workflowsService.deleteWorkflow(creatorId, workflowId);
+      res.status(204).send();
+    } catch (error) {
+      console.error('Error deleting workflow:', error);
+      if ((error as Error).message.includes('not found')) {
+        res.status(404).json({ error: 'Workflow not found' });
+        return;
+      }
+      res.status(500).json({ error: 'Failed to delete workflow' });
+    }
+  }
+);
+
+// POST /workflows/admin/auto-heal - Recompile workflows in batch (ops only)
+// Requires `WORKFLOW_MIGRATION_TOKEN` and `x-admin-token` header.
+router.post('/admin/auto-heal', async (req: Request, res: Response) => {
+  if (!requireAdminToken(req, res)) return;
+
+  const dryRun = Boolean(req.body?.dryRun);
+  const onlyActive = Boolean(req.body?.onlyActive);
+  const creatorId = req.body?.creatorId ? String(req.body.creatorId) : undefined;
+  const maxCreators = req.body?.maxCreators != null ? Number(req.body.maxCreators) : undefined;
+  const maxWorkflows = req.body?.maxWorkflows != null ? Number(req.body.maxWorkflows) : undefined;
+
+  try {
+    const result = await autoHealWorkflows({ dryRun, onlyActive, creatorId, maxCreators, maxWorkflows });
+    res.json({ success: true, result });
+  } catch (error) {
+    console.error('Error running workflow auto-heal:', error);
+    res.status(500).json({ error: 'Failed to auto-heal workflows' });
+  }
+});
+
+export default router;

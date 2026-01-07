@@ -1,0 +1,328 @@
+// Gendei Appointments Route
+// CRUD operations for appointments
+
+import { Router, Request, Response } from 'express';
+import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import { verifyAuth } from '../middleware/auth';
+
+const router = Router();
+const db = getFirestore();
+
+const APPOINTMENTS = 'gendei_appointments';
+
+// GET /appointments?clinicId=xxx - Get appointments for a clinic
+router.get('/', verifyAuth, async (req: Request, res: Response) => {
+  try {
+    const user = (req as any).user;
+    const clinicId = req.query.clinicId as string || user?.uid;
+    const startDate = req.query.startDate as string;
+    const endDate = req.query.endDate as string;
+    const professionalId = req.query.professionalId as string;
+    const status = req.query.status as string;
+
+    if (!clinicId) {
+      return res.status(400).json({ message: 'Clinic ID is required' });
+    }
+
+    if (user?.uid !== clinicId) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    let query = db.collection(APPOINTMENTS)
+      .where('clinicId', '==', clinicId);
+
+    if (startDate) {
+      query = query.where('date', '>=', startDate);
+    }
+    if (endDate) {
+      query = query.where('date', '<=', endDate);
+    }
+    if (professionalId) {
+      query = query.where('professionalId', '==', professionalId);
+    }
+    if (status) {
+      query = query.where('status', '==', status);
+    }
+
+    const snapshot = await query.orderBy('date').orderBy('time').get();
+
+    const appointments = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+
+    return res.json(appointments);
+  } catch (error: any) {
+    console.error('Error getting appointments:', error);
+    return res.status(500).json({ message: error.message });
+  }
+});
+
+// GET /appointments/today?clinicId=xxx - Get today's appointments
+router.get('/today', verifyAuth, async (req: Request, res: Response) => {
+  try {
+    const user = (req as any).user;
+    const clinicId = req.query.clinicId as string || user?.uid;
+
+    if (!clinicId) {
+      return res.status(400).json({ message: 'Clinic ID is required' });
+    }
+
+    if (user?.uid !== clinicId) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    const today = new Date().toISOString().split('T')[0];
+
+    const snapshot = await db.collection(APPOINTMENTS)
+      .where('clinicId', '==', clinicId)
+      .where('date', '==', today)
+      .orderBy('time')
+      .get();
+
+    const appointments = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+
+    return res.json(appointments);
+  } catch (error: any) {
+    console.error('Error getting today appointments:', error);
+    return res.status(500).json({ message: error.message });
+  }
+});
+
+// GET /appointments/:appointmentId - Get specific appointment
+router.get('/:appointmentId', verifyAuth, async (req: Request, res: Response) => {
+  try {
+    const { appointmentId } = req.params;
+    const user = (req as any).user;
+
+    const doc = await db.collection(APPOINTMENTS).doc(appointmentId).get();
+
+    if (!doc.exists) {
+      return res.status(404).json({ message: 'Appointment not found' });
+    }
+
+    const appointment = doc.data();
+
+    // Verify access
+    if (user?.uid !== appointment?.clinicId) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    return res.json({
+      id: doc.id,
+      ...appointment
+    });
+  } catch (error: any) {
+    console.error('Error getting appointment:', error);
+    return res.status(500).json({ message: error.message });
+  }
+});
+
+// PUT /appointments/:appointmentId - Update appointment
+router.put('/:appointmentId', verifyAuth, async (req: Request, res: Response) => {
+  try {
+    const { appointmentId } = req.params;
+    const user = (req as any).user;
+
+    const docRef = db.collection(APPOINTMENTS).doc(appointmentId);
+    const doc = await docRef.get();
+
+    if (!doc.exists) {
+      return res.status(404).json({ message: 'Appointment not found' });
+    }
+
+    const appointment = doc.data();
+
+    if (user?.uid !== appointment?.clinicId) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    const allowedFields = [
+      'status', 'notes', 'date', 'time', 'professionalId',
+      'cancellationReason'
+    ];
+
+    const updateData: any = {
+      updatedAt: FieldValue.serverTimestamp()
+    };
+
+    for (const field of allowedFields) {
+      if (req.body[field] !== undefined) {
+        updateData[field] = req.body[field];
+      }
+    }
+
+    // Handle status-specific updates
+    if (req.body.status === 'confirmed') {
+      updateData.confirmedAt = FieldValue.serverTimestamp();
+    } else if (req.body.status === 'cancelled') {
+      updateData.cancelledAt = FieldValue.serverTimestamp();
+    } else if (req.body.status === 'completed') {
+      updateData.completedAt = FieldValue.serverTimestamp();
+    }
+
+    await docRef.update(updateData);
+
+    const updatedDoc = await docRef.get();
+
+    return res.json({
+      id: appointmentId,
+      ...updatedDoc.data()
+    });
+  } catch (error: any) {
+    console.error('Error updating appointment:', error);
+    return res.status(500).json({ message: error.message });
+  }
+});
+
+// PUT /appointments/:appointmentId/status - Update appointment status
+router.put('/:appointmentId/status', verifyAuth, async (req: Request, res: Response) => {
+  try {
+    const { appointmentId } = req.params;
+    const { status, reason } = req.body;
+    const user = (req as any).user;
+
+    if (!status) {
+      return res.status(400).json({ message: 'Status is required' });
+    }
+
+    const validStatuses = [
+      'pending', 'confirmed', 'awaiting_confirmation',
+      'confirmed_presence', 'completed', 'cancelled', 'no_show'
+    ];
+
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({ message: 'Invalid status' });
+    }
+
+    const docRef = db.collection(APPOINTMENTS).doc(appointmentId);
+    const doc = await docRef.get();
+
+    if (!doc.exists) {
+      return res.status(404).json({ message: 'Appointment not found' });
+    }
+
+    const appointment = doc.data();
+
+    if (user?.uid !== appointment?.clinicId) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    const updateData: any = {
+      status,
+      updatedAt: FieldValue.serverTimestamp()
+    };
+
+    if (status === 'confirmed') {
+      updateData.confirmedAt = FieldValue.serverTimestamp();
+    } else if (status === 'cancelled') {
+      updateData.cancelledAt = FieldValue.serverTimestamp();
+      if (reason) {
+        updateData.cancellationReason = reason;
+      }
+    } else if (status === 'completed') {
+      updateData.completedAt = FieldValue.serverTimestamp();
+    }
+
+    await docRef.update(updateData);
+
+    return res.json({
+      message: 'Status updated successfully',
+      appointmentId,
+      status
+    });
+  } catch (error: any) {
+    console.error('Error updating appointment status:', error);
+    return res.status(500).json({ message: error.message });
+  }
+});
+
+// PUT /appointments/:appointmentId/reschedule - Reschedule appointment
+router.put('/:appointmentId/reschedule', verifyAuth, async (req: Request, res: Response) => {
+  try {
+    const { appointmentId } = req.params;
+    const { date, time, professionalId } = req.body;
+    const user = (req as any).user;
+
+    if (!date || !time) {
+      return res.status(400).json({ message: 'Date and time are required' });
+    }
+
+    const docRef = db.collection(APPOINTMENTS).doc(appointmentId);
+    const doc = await docRef.get();
+
+    if (!doc.exists) {
+      return res.status(404).json({ message: 'Appointment not found' });
+    }
+
+    const appointment = doc.data();
+
+    if (user?.uid !== appointment?.clinicId) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    const updateData: any = {
+      date,
+      time,
+      status: 'pending',
+      reminder24hSent: false,
+      reminder2hSent: false,
+      updatedAt: FieldValue.serverTimestamp()
+    };
+
+    if (professionalId) {
+      updateData.professionalId = professionalId;
+    }
+
+    await docRef.update(updateData);
+
+    const updatedDoc = await docRef.get();
+
+    return res.json({
+      id: appointmentId,
+      ...updatedDoc.data()
+    });
+  } catch (error: any) {
+    console.error('Error rescheduling appointment:', error);
+    return res.status(500).json({ message: error.message });
+  }
+});
+
+// DELETE /appointments/:appointmentId - Cancel appointment
+router.delete('/:appointmentId', verifyAuth, async (req: Request, res: Response) => {
+  try {
+    const { appointmentId } = req.params;
+    const user = (req as any).user;
+    const reason = req.query.reason as string || 'Cancelado pela clínica';
+
+    const docRef = db.collection(APPOINTMENTS).doc(appointmentId);
+    const doc = await docRef.get();
+
+    if (!doc.exists) {
+      return res.status(404).json({ message: 'Appointment not found' });
+    }
+
+    const appointment = doc.data();
+
+    if (user?.uid !== appointment?.clinicId) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    await docRef.update({
+      status: 'cancelled',
+      cancellationReason: reason,
+      cancelledAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp()
+    });
+
+    return res.json({ message: 'Appointment cancelled successfully' });
+  } catch (error: any) {
+    console.error('Error cancelling appointment:', error);
+    return res.status(500).json({ message: error.message });
+  }
+});
+
+export default router;

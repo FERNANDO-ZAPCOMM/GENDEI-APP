@@ -1,0 +1,49 @@
+{
+  "WorkflowNodeType": [
+    "start",
+    "message",
+    "offer_product",
+    "collect_info",
+    "condition",
+    "intent_router",
+    "wait_response",
+    "assign_tag",
+    "handoff",
+    "end"
+  ],
+  "WorkflowTriggerType": [
+    "greeting",
+    "intent",
+    "keyword",
+    "product_mention",
+    "always"
+  ],
+  "ConditionType": [
+    "llm",
+    "expression",
+    "user_response"
+  ],
+  "ProductOfferType": [
+    "free_first",
+    "paid",
+    "upsell"
+  ],
+  "ProductSelectionType": [
+    "specific",
+    "by_price",
+    "by_type"
+  ],
+  "CollectInfoField": [
+    "name",
+    "email",
+    "phone",
+    "custom"
+  ],
+  "WorkflowPresetCategory": [
+    "lead_capture",
+    "sales",
+    "high_ticket",
+    "support"
+  ]
+}
+
