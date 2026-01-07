@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/lib/api';
+import { useAuth } from './use-auth';
+import { apiClient } from '@/lib/api';
 
 export interface TimeBlock {
   id: string;
@@ -29,31 +30,48 @@ interface UseTimeBlocksOptions {
   professionalId?: string;
 }
 
+interface TimeBlocksResponse {
+  timeBlocks: TimeBlock[];
+}
+
 export function useTimeBlocks(clinicId: string, options: UseTimeBlocksOptions = {}) {
+  const { getIdToken } = useAuth();
   const queryClient = useQueryClient();
 
   const queryKey = ['timeBlocks', clinicId, options];
 
   const { data = [], isLoading, error } = useQuery({
     queryKey,
-    queryFn: async () => {
+    queryFn: async (): Promise<TimeBlock[]> => {
       if (!clinicId) return [];
+
+      const token = await getIdToken();
+      if (!token) throw new Error('Not authenticated');
 
       const params = new URLSearchParams();
       if (options.startDate) params.append('startDate', options.startDate);
       if (options.endDate) params.append('endDate', options.endDate);
       if (options.professionalId) params.append('professionalId', options.professionalId);
 
-      const response = await api.get(`/clinics/${clinicId}/time-blocks?${params.toString()}`);
-      return response.data.timeBlocks || [];
+      const queryString = params.toString();
+      const url = `/clinics/${clinicId}/time-blocks${queryString ? `?${queryString}` : ''}`;
+
+      const response = await apiClient<TimeBlocksResponse>(url, { token });
+      return response.timeBlocks || [];
     },
     enabled: !!clinicId,
   });
 
   const createBlock = useMutation({
     mutationFn: async (input: CreateTimeBlockInput) => {
-      const response = await api.post(`/clinics/${clinicId}/time-blocks`, input);
-      return response.data;
+      const token = await getIdToken();
+      if (!token) throw new Error('Not authenticated');
+
+      return apiClient<TimeBlock>(`/clinics/${clinicId}/time-blocks`, {
+        method: 'POST',
+        token,
+        body: JSON.stringify(input),
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['timeBlocks', clinicId] });
@@ -62,7 +80,13 @@ export function useTimeBlocks(clinicId: string, options: UseTimeBlocksOptions = 
 
   const deleteBlock = useMutation({
     mutationFn: async (blockId: string) => {
-      await api.delete(`/clinics/${clinicId}/time-blocks/${blockId}`);
+      const token = await getIdToken();
+      if (!token) throw new Error('Not authenticated');
+
+      await apiClient(`/clinics/${clinicId}/time-blocks/${blockId}`, {
+        method: 'DELETE',
+        token,
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['timeBlocks', clinicId] });
