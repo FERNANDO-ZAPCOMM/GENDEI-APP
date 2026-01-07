@@ -272,4 +272,124 @@ router.get('/:clinicId/stats', verifyAuth, async (req: Request, res: Response) =
   }
 });
 
+// ============================================
+// TIME BLOCKS
+// ============================================
+
+const TIME_BLOCKS = 'gendei_time_blocks';
+
+// GET /clinics/:clinicId/time-blocks - Get time blocks for a date range
+router.get('/:clinicId/time-blocks', verifyAuth, async (req: Request, res: Response) => {
+  try {
+    const { clinicId } = req.params;
+    const user = (req as any).user;
+    const { startDate, endDate, professionalId } = req.query;
+
+    if (user?.uid !== clinicId) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    let query: any = db.collection(TIME_BLOCKS)
+      .where('clinicId', '==', clinicId);
+
+    if (startDate) {
+      query = query.where('date', '>=', startDate);
+    }
+    if (endDate) {
+      query = query.where('date', '<=', endDate);
+    }
+
+    const snapshot = await query.get();
+
+    let timeBlocks = snapshot.docs.map((doc: any) => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+
+    // Filter by professional if specified
+    if (professionalId) {
+      timeBlocks = timeBlocks.filter((block: any) =>
+        !block.professionalId || block.professionalId === professionalId
+      );
+    }
+
+    return res.json({ timeBlocks });
+  } catch (error: any) {
+    console.error('Error getting time blocks:', error);
+    return res.status(500).json({ message: error.message });
+  }
+});
+
+// POST /clinics/:clinicId/time-blocks - Create a time block
+router.post('/:clinicId/time-blocks', verifyAuth, async (req: Request, res: Response) => {
+  try {
+    const { clinicId } = req.params;
+    const user = (req as any).user;
+
+    if (user?.uid !== clinicId) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    const { date, startTime, endTime, reason, professionalId, professionalName } = req.body;
+
+    if (!date || !startTime || !endTime) {
+      return res.status(400).json({ message: 'Date, start time, and end time are required' });
+    }
+
+    const blockData = {
+      clinicId,
+      date,
+      startTime,
+      endTime,
+      reason: reason || 'Bloqueado',
+      professionalId: professionalId || null,
+      professionalName: professionalName || null,
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp()
+    };
+
+    const docRef = await db.collection(TIME_BLOCKS).add(blockData);
+
+    return res.status(201).json({
+      id: docRef.id,
+      ...blockData,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+  } catch (error: any) {
+    console.error('Error creating time block:', error);
+    return res.status(500).json({ message: error.message });
+  }
+});
+
+// DELETE /clinics/:clinicId/time-blocks/:blockId - Delete a time block
+router.delete('/:clinicId/time-blocks/:blockId', verifyAuth, async (req: Request, res: Response) => {
+  try {
+    const { clinicId, blockId } = req.params;
+    const user = (req as any).user;
+
+    if (user?.uid !== clinicId) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    const blockDoc = await db.collection(TIME_BLOCKS).doc(blockId).get();
+
+    if (!blockDoc.exists) {
+      return res.status(404).json({ message: 'Time block not found' });
+    }
+
+    const blockData = blockDoc.data();
+    if (blockData?.clinicId !== clinicId) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    await db.collection(TIME_BLOCKS).doc(blockId).delete();
+
+    return res.json({ message: 'Time block deleted' });
+  } catch (error: any) {
+    console.error('Error deleting time block:', error);
+    return res.status(500).json({ message: error.message });
+  }
+});
+
 export default router;
