@@ -71,7 +71,7 @@ export default function SignInPage() {
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1">
           <div className="text-center mb-2">
-            <span className="text-4xl text-emerald-600 logo-font">Gendei</span>
+            <span className="text-4xl text-black logo-font">Gendei</span>
           </div>
           <CardDescription className="text-center">
             {t('auth.signin')}

@@ -6,7 +6,7 @@ import { QueryProvider } from '@/lib/query-provider';
 import { AuthGuard } from '@/components/AuthGuard';
 import { FacebookSDK } from '@/components/FacebookSDK';
 import { Toaster } from 'sonner';
-import { Urbanist, Roboto_Slab, Manrope } from 'next/font/google';
+import { Urbanist, Roboto_Slab, Manrope, Borel } from 'next/font/google';
 import '../globals.css';
 
 type LocaleLayoutProps = {
@@ -35,6 +35,13 @@ const manrope = Manrope({
   variable: '--font-manrope',
 });
 
+const borel = Borel({
+  subsets: ['latin'],
+  display: 'swap',
+  weight: ['400'],
+  variable: '--font-borel',
+});
+
 export default async function LocaleLayout({ children, params }: LocaleLayoutProps) {
   const { locale } = await params;
   const messages = await getMessages();
@@ -42,7 +49,7 @@ export default async function LocaleLayout({ children, params }: LocaleLayoutPro
   return (
     <html lang={locale} suppressHydrationWarning>
       <body
-        className={`${urbanist.variable} ${urbanist.className} ${robotoSlab.variable} ${manrope.variable} antialiased`}
+        className={`${urbanist.variable} ${urbanist.className} ${robotoSlab.variable} ${manrope.variable} ${borel.variable} antialiased`}
         suppressHydrationWarning
       >
         <NextIntlClientProvider messages={messages}>

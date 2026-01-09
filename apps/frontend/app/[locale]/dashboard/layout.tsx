@@ -247,7 +247,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             >
               {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
             </button>
-            <span className="text-xl text-emerald-600 logo-font">Gendei</span>
+            <span className="text-xl text-black logo-font">Gendei</span>
           </div>
         </div>
       </div>
@@ -272,7 +272,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div className="flex flex-col h-full">
           {/* Logo/Brand - Always visible on desktop, hidden on mobile (shown in header instead) */}
           <div className="p-6 hidden lg:block">
-            <span className="text-2xl text-emerald-600 logo-font">Gendei</span>
+            <span className="text-2xl text-black logo-font">Gendei</span>
             {clinic && <p className="text-sm text-muted-foreground mt-1">{clinic.name}</p>}
           </div>
 

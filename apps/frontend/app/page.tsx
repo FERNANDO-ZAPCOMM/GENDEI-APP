@@ -5,7 +5,7 @@ export default function Home() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-emerald-50 to-teal-100">
       <div className="text-center space-y-6 p-8">
         <h1 className="text-6xl font-bold text-gray-900">
-          Welcome to <span className="text-emerald-600 logo-font">Gendei</span>
+          Welcome to <span className="text-black logo-font">Gendei</span>
         </h1>
         <p className="text-xl text-gray-600 max-w-2xl mx-auto">
           WhatsApp-native Clinic Appointment Scheduling Platform

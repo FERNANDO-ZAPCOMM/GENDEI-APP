@@ -86,9 +86,9 @@
   }
 
   .logo-font {
-    font-family: 'SpriteGraffiti', var(--font-urbanist), sans-serif;
+    font-family: var(--font-borel), cursive;
     font-style: normal;
-    font-weight: normal;
+    font-weight: 400;
   }
 
   /* Touch-friendly tap targets - minimum 44x44px for mobile */
