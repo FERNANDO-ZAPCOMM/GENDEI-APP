@@ -75,12 +75,12 @@ const nextConfig = {
 
     const cspDirectives = [
       "default-src 'self'",
-      "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://www.googletagmanager.com https://www.google-analytics.com https://connect.facebook.net https://apis.google.com https://accounts.google.com https://*.firebaseapp.com",
+      "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://www.googletagmanager.com https://www.google-analytics.com https://connect.facebook.net https://apis.google.com https://accounts.google.com https://*.firebaseapp.com https://maps.googleapis.com",
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "img-src 'self' data: https: blob:",
       "font-src 'self' https://fonts.gstatic.com",
       "worker-src 'self' blob:",
-      "connect-src 'self' https://firebaseauth.googleapis.com https://firebasestorage.googleapis.com https://firestore.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://*.cloudfunctions.net https://api.gendei.com https://graph.facebook.com https://*.facebook.com https://*.facebook.net http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:*",
+      "connect-src 'self' https://firebaseauth.googleapis.com https://firebasestorage.googleapis.com https://firestore.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://*.cloudfunctions.net https://api.gendei.com https://graph.facebook.com https://*.facebook.com https://*.facebook.net https://maps.googleapis.com http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:*",
       "frame-src 'self' https://www.facebook.com https://*.facebook.com https://accounts.google.com https://*.firebaseapp.com",
       "frame-ancestors 'none'",
       "base-uri 'self'",

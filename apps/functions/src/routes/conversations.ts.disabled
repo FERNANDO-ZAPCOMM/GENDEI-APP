@@ -209,4 +209,82 @@ router.post(
   }
 );
 
+// POST /conversations/:creatorId/:conversationId/archive - Archive a conversation
+router.post(
+  '/:creatorId/:conversationId/archive',
+  verifyAuth,
+  verifyCreatorAccess,
+  requirePermissions('canManageConversations'),
+  async (req: Request, res: Response) => {
+    try {
+      const { creatorId, conversationId } = req.params;
+
+      const conversation = await conversationsService.archiveConversation(
+        creatorId,
+        conversationId
+      );
+
+      res.json({ data: conversation });
+    } catch (error) {
+      console.error('Error archiving conversation:', error);
+      if ((error as Error).message.includes('not found')) {
+        res.status(404).json({ error: 'Conversation not found' });
+        return;
+      }
+      res.status(500).json({ error: 'Failed to archive conversation' });
+    }
+  }
+);
+
+// POST /conversations/:creatorId/:conversationId/unarchive - Unarchive a conversation
+router.post(
+  '/:creatorId/:conversationId/unarchive',
+  verifyAuth,
+  verifyCreatorAccess,
+  requirePermissions('canManageConversations'),
+  async (req: Request, res: Response) => {
+    try {
+      const { creatorId, conversationId } = req.params;
+
+      const conversation = await conversationsService.unarchiveConversation(
+        creatorId,
+        conversationId
+      );
+
+      res.json({ data: conversation });
+    } catch (error) {
+      console.error('Error unarchiving conversation:', error);
+      if ((error as Error).message.includes('not found')) {
+        res.status(404).json({ error: 'Conversation not found' });
+        return;
+      }
+      res.status(500).json({ error: 'Failed to unarchive conversation' });
+    }
+  }
+);
+
+// DELETE /conversations/:creatorId/:conversationId - Delete a conversation permanently
+router.delete(
+  '/:creatorId/:conversationId',
+  verifyAuth,
+  verifyCreatorAccess,
+  requirePermissions('canManageConversations'),
+  async (req: Request, res: Response) => {
+    try {
+      const { creatorId, conversationId } = req.params;
+
+      await conversationsService.deleteConversation(creatorId, conversationId);
+
+      res.status(204).send();
+    } catch (error) {
+      console.error('Error deleting conversation:', error);
+      if ((error as Error).message.includes('not found')) {
+        res.status(404).json({ error: 'Conversation not found' });
+        return;
+      }
+      res.status(500).json({ error: 'Failed to delete conversation' });
+    }
+  }
+);
+
 export default router;

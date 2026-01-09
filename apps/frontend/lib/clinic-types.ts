@@ -1,13 +1,29 @@
 // Gendei Clinic Types
 
+// Structured address data for Google Maps integration and WhatsApp location messages
+export interface ClinicAddress {
+  formatted: string;        // Full formatted address string
+  street?: string;          // Street name and number
+  neighborhood?: string;    // Bairro
+  city?: string;            // City
+  state?: string;           // State abbreviation (SP, RJ, etc)
+  postalCode?: string;      // CEP
+  country?: string;         // Country
+  latitude?: number;        // For WhatsApp location messages
+  longitude?: number;       // For WhatsApp location messages
+  placeId?: string;         // Google Place ID for reference
+}
+
 export interface Clinic {
   id: string;
   name: string;
   ownerId: string;
   adminIds?: string[];
-  address?: string;
+  address?: string;                 // Legacy: simple address string
+  addressData?: ClinicAddress;      // New: structured address with coordinates
   phone?: string;
   email?: string;
+  openingHours?: string;
   timezone?: string;
   whatsappConnected?: boolean;
   whatsappPhoneNumberId?: string;

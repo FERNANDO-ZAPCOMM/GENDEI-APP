@@ -188,6 +188,32 @@ class FirestoreAdapter:
             logger.error(f"Error listing channels: {e}")
             return []
 
+    def get_first_active_channel(self) -> Optional[Dict[str, Any]]:
+        """
+        get the first active WhatsApp channel for this creator
+        useful when processing payments where we don't have a specific phone_number_id
+        returns:
+            channel data with accessToken, wabaId, phoneNumberId, etc. or None
+        """
+        try:
+            channels_ref = self.get_creator_ref().collection('channels')
+            query = channels_ref.where(
+                filter=FieldFilter('isActive', '==', True)
+            ).limit(1)
+
+            for doc in query.stream():
+                channel = doc.to_dict()
+                channel['id'] = doc.id
+                logger.info(f"✅ Found first active channel: {channel.get('phoneNumberId', 'unknown')}")
+                return channel
+
+            logger.warning("⚠️ No active channels found for creator")
+            return None
+
+        except Exception as e:
+            logger.error(f"Error getting first active channel: {e}")
+            return None
+
 
     # ===== PRODUCTS =====
     def list_active_products(self) -> List[Dict[str, Any]]:
@@ -552,6 +578,8 @@ class FirestoreAdapter:
     def is_human_takeover_enabled(self, wa_user_id: str) -> bool:
         """
         check if human takeover is enabled for this conversation
+        Checks both 'isHumanTakeover' (dashboard) and 'humanTakeover' (agent) fields
+        Also checks 'aiPaused' for additional safety
         """
         try:
             conv_ref = self.get_creator_ref().collection('conversations').document(wa_user_id)
@@ -559,7 +587,10 @@ class FirestoreAdapter:
 
             if doc.exists:
                 data = doc.to_dict()
-                return data.get('humanTakeover', False)
+                # Check all possible takeover flags (dashboard uses isHumanTakeover, agent uses humanTakeover)
+                is_takeover = data.get('isHumanTakeover', False) or data.get('humanTakeover', False)
+                ai_paused = data.get('aiPaused', False)
+                return is_takeover or ai_paused
 
             return False
 
@@ -972,6 +1003,7 @@ class FirestoreAdapter:
 
             updates = {
                 'humanTakeover': enabled,
+                'isHumanTakeover': enabled,  # Dashboard uses this field
                 'handledBy': 'human' if enabled else 'ai',
                 'aiPaused': enabled,
                 'updatedAt': datetime.utcnow()
@@ -979,6 +1011,7 @@ class FirestoreAdapter:
 
             if enabled:
                 updates['humanTakeoverAt'] = datetime.utcnow()
+                updates['takenOverAt'] = datetime.utcnow()  # Dashboard uses this field
                 if reason:
                     updates['humanTakeoverReason'] = reason
 

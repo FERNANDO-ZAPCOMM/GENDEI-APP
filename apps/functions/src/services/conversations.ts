@@ -230,43 +230,71 @@ export async function getMessages(
     const data = chatHistoryDoc.data();
     const messagesMap = data?.messages || {};
 
-    // Convert map to array and sort by timestamp
-    const messages = Object.entries(messagesMap)
-      .map(([timestamp, msg]) => {
-        const messageData = msg as Record<string, unknown>;
-        const isFromHuman = messageData.source === 'human';
-        const isFromAgent = messageData.source === 'agent';
-        const createdAt = new Date(messageData.timestamp as string || timestamp);
+    // Helper function to process a message entry
+    const processMessage = (timestamp: string, messageData: Record<string, unknown>): MessageDocument => {
+      const isFromHuman = messageData.source === 'human';
+      const isFromAgent = messageData.source === 'agent';
+      const createdAt = new Date(messageData.timestamp as string || timestamp);
 
-        return {
-          id: timestamp,
-          conversationId,
-          creatorId,
-          direction: isFromHuman ? MessageDirection.INBOUND : MessageDirection.OUTBOUND,
-          waMessageId: null,
-          waUserId: messageData.waUserId as string || '',
-          phoneNumberId: null,
-          payloadHash: '',
-          payload: {},
-          status: MessageStatus.DELIVERED,
-          error: null,
-          idempotencyKey: null,
-          createdAt,
-          // Frontend-compatible fields
-          body: messageData.content as string || '',
-          messageType: messageData.type as string || 'text',
-          timestamp: createdAt,
-          isAiGenerated: isFromAgent,
-          isHumanSent: isFromHuman,
-          deliveryStatus: 'delivered',
-          from: isFromHuman ? (messageData.waUserId as string || 'customer') : 'agent',
-          to: isFromHuman ? 'agent' : (messageData.waUserId as string || 'customer'),
-        } as MessageDocument;
-      })
-      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
-      .slice(-limit);
+      // Extract body from various possible field names
+      const messageBody = (messageData.content as string) ||
+                         (messageData.body as string) ||
+                         (messageData.text as string) || '';
 
-    return messages;
+      return {
+        id: timestamp,
+        conversationId,
+        creatorId,
+        direction: isFromHuman ? MessageDirection.INBOUND : MessageDirection.OUTBOUND,
+        waMessageId: null,
+        waUserId: messageData.waUserId as string || '',
+        phoneNumberId: null,
+        payloadHash: '',
+        payload: {},
+        status: MessageStatus.DELIVERED,
+        error: null,
+        idempotencyKey: null,
+        createdAt,
+        // Frontend-compatible fields
+        body: messageBody,
+        messageType: messageData.type as string || 'text',
+        timestamp: createdAt,
+        isAiGenerated: isFromAgent,
+        isHumanSent: !isFromHuman && (messageData.isHumanSent as boolean || false),
+        deliveryStatus: 'delivered',
+        from: isFromHuman ? (messageData.waUserId as string || 'customer') : 'agent',
+        to: isFromHuman ? 'agent' : (messageData.waUserId as string || 'customer'),
+      } as MessageDocument;
+    };
+
+    // Convert map to array, handling both flat and nested structures
+    // (nested happens when timestamp contains periods like 2026-01-08T23:27:07.054Z)
+    const messages: MessageDocument[] = [];
+
+    for (const [key, value] of Object.entries(messagesMap)) {
+      const msgValue = value as Record<string, unknown>;
+
+      // Check if this is a proper message (has 'source' or 'content' field)
+      if (msgValue.source || msgValue.content) {
+        // Direct message format
+        messages.push(processMessage(key, msgValue));
+      } else {
+        // This might be a nested structure due to period in timestamp
+        // e.g., key='2026-01-08T23:27:07' with nested '054Z' containing the actual message
+        for (const [nestedKey, nestedValue] of Object.entries(msgValue)) {
+          const nestedMsg = nestedValue as Record<string, unknown>;
+          if (nestedMsg && typeof nestedMsg === 'object' && (nestedMsg.source || nestedMsg.content)) {
+            // Reconstruct full timestamp: key + '.' + nestedKey
+            const fullTimestamp = `${key}.${nestedKey}`;
+            messages.push(processMessage(fullTimestamp, nestedMsg));
+          }
+        }
+      }
+    }
+
+    // Sort by timestamp and apply limit
+    messages.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    return messages.slice(-limit);
   }
 
   // Fallback: legacy format with individual documents
@@ -278,7 +306,7 @@ export async function getMessages(
   const messages = snapshot.docs.map((doc) => {
     const data = doc.data();
 
-    // Extract message text from payload
+    // Extract message text from payload or root-level body field
     let body = '';
     let messageType = 'text';
 
@@ -286,10 +314,15 @@ export async function getMessages(
       body = data.payload.text.body;
     } else if (data.payload?.message?.text?.body) {
       body = data.payload.message.text.body;
+    } else if (data.body) {
+      // Fallback: check root-level body field (used by human-sent messages)
+      body = data.body;
     }
 
     if (data.payload?.type) {
       messageType = data.payload.type;
+    } else if (data.messageType) {
+      messageType = data.messageType;
     }
 
     const isOutbound = data.direction === MessageDirection.OUTBOUND;
@@ -398,6 +431,7 @@ export async function releaseConversation(
 
 /**
  * Send a message in a conversation
+ * Only writes to chat_history document (no individual message documents)
  */
 export async function sendMessage(
   creatorId: string,
@@ -411,14 +445,16 @@ export async function sendMessage(
     throw new Error('Conversation not found');
   }
 
-  // Create message log entry
   const messagesRef = getMessagesCollection(creatorId, conversationId);
-  const newMessageRef = messagesRef.doc();
   const now = new Date();
   const waUserId = conversation.waUserId || conversation.contactPhone || '';
+  const timestamp = now.toISOString();
+  // Sanitize timestamp key by replacing periods with underscores to avoid Firestore nested path issues
+  const timestampKey = timestamp.replace(/\./g, '_');
 
+  // Build message document for return value
   const message: MessageDocument = {
-    id: newMessageRef.id,
+    id: timestampKey,
     conversationId,
     creatorId,
     direction: MessageDirection.OUTBOUND,
@@ -426,16 +462,11 @@ export async function sendMessage(
     waUserId,
     phoneNumberId: null,
     payloadHash: '',
-    payload: {
-      text: { body: messageText },
-      type: 'text',
-      from: 'merchant',
-    },
+    payload: {},
     status: MessageStatus.QUEUED,
     error: null,
     idempotencyKey: null,
     createdAt: now,
-    // Frontend-compatible fields
     body: messageText,
     messageType: 'text',
     timestamp: now,
@@ -446,7 +477,34 @@ export async function sendMessage(
     to: waUserId,
   };
 
-  await newMessageRef.set(message);
+  // Write to chat_history document only (optimized - no individual message documents)
+  const chatHistoryRef = messagesRef.doc('chat_history');
+  const chatHistoryDoc = await chatHistoryRef.get();
+  const chatMessage = {
+    source: 'agent',
+    content: messageText,
+    timestamp,
+    type: 'text',
+    waUserId,
+    isHumanSent: true,
+    status: 'queued',
+  };
+
+  if (chatHistoryDoc.exists) {
+    await chatHistoryRef.update({
+      [`messages.${timestampKey}`]: chatMessage,
+      lastUpdated: timestamp,
+      messageCount: FieldValue.increment(1),
+    });
+  } else {
+    await chatHistoryRef.set({
+      messages: { [timestampKey]: chatMessage },
+      lastUpdated: timestamp,
+      messageCount: 1,
+      creatorId,
+      waUserId,
+    });
+  }
 
   // Update conversation last message time
   const conversationRef = getConversationsCollection(creatorId).doc(
@@ -498,4 +556,94 @@ export async function getConversationStats(
     humanTakeoverConversations,
     aiHandledConversations,
   };
+}
+
+/**
+ * Archive a conversation (soft delete)
+ */
+export async function archiveConversation(
+  creatorId: string,
+  conversationId: string
+): Promise<Conversation> {
+  const conversationRef = getConversationsCollection(creatorId).doc(conversationId);
+  const doc = await conversationRef.get();
+
+  if (!doc.exists) {
+    throw new Error('Conversation not found');
+  }
+
+  const now = new Date();
+  await conversationRef.update({
+    isArchived: true,
+    archivedAt: now,
+    updatedAt: now,
+  });
+
+  const updated = await conversationRef.get();
+  return serializeConversation({
+    id: updated.id,
+    ...updated.data(),
+  } as Conversation);
+}
+
+/**
+ * Unarchive a conversation
+ */
+export async function unarchiveConversation(
+  creatorId: string,
+  conversationId: string
+): Promise<Conversation> {
+  const conversationRef = getConversationsCollection(creatorId).doc(conversationId);
+  const doc = await conversationRef.get();
+
+  if (!doc.exists) {
+    throw new Error('Conversation not found');
+  }
+
+  const now = new Date();
+  await conversationRef.update({
+    isArchived: false,
+    archivedAt: FieldValue.delete(),
+    updatedAt: now,
+  });
+
+  const updated = await conversationRef.get();
+  return serializeConversation({
+    id: updated.id,
+    ...updated.data(),
+  } as Conversation);
+}
+
+/**
+ * Delete a conversation permanently
+ * This deletes the conversation document and all its messages
+ */
+export async function deleteConversation(
+  creatorId: string,
+  conversationId: string
+): Promise<void> {
+  const conversationRef = getConversationsCollection(creatorId).doc(conversationId);
+  const doc = await conversationRef.get();
+
+  if (!doc.exists) {
+    throw new Error('Conversation not found');
+  }
+
+  // Delete all messages in the conversation (including chat_history)
+  const messagesRef = getMessagesCollection(creatorId, conversationId);
+  const messagesSnapshot = await messagesRef.get();
+
+  const batch = db.batch();
+
+  // Delete all message documents
+  messagesSnapshot.docs.forEach((messageDoc) => {
+    batch.delete(messageDoc.ref);
+  });
+
+  // Delete the conversation document
+  batch.delete(conversationRef);
+
+  await batch.commit();
+
+  console.log(`Deleted conversation ${conversationId} and ${messagesSnapshot.size} messages`);
 }

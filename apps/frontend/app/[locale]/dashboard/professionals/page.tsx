@@ -14,6 +14,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import { specialties, specialtyCategories, getSpecialtyName, type SpecialtyCategory } from '@/lib/specialties';
 import {
   Dialog,
   DialogContent,
@@ -36,6 +37,15 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 interface ProfessionalFormData {
   name: string;
@@ -217,7 +227,7 @@ export default function ProfessionalsPage() {
                       <div>
                         <h3 className="font-medium text-sm">{professional.name}</h3>
                         {professional.specialty && (
-                          <p className="text-xs text-muted-foreground">{professional.specialty}</p>
+                          <p className="text-xs text-muted-foreground">{getSpecialtyName(professional.specialty)}</p>
                         )}
                         <div className="flex items-center gap-2 mt-2">
                           <Badge className={professional.active
@@ -274,7 +284,7 @@ export default function ProfessionalsPage() {
                       <TableRow key={professional.id}>
                         <TableCell className="font-medium">{professional.name}</TableCell>
                         <TableCell className="text-muted-foreground">
-                          {professional.specialty || '-'}
+                          {professional.specialty ? getSpecialtyName(professional.specialty) : '-'}
                         </TableCell>
                         <TableCell>
                           <span className="flex items-center gap-1 text-sm">
@@ -349,12 +359,39 @@ export default function ProfessionalsPage() {
 
             <div className="space-y-2">
               <Label htmlFor="specialty">Especialidade</Label>
-              <Input
-                id="specialty"
+              <Select
                 value={formData.specialty}
-                onChange={(e) => setFormData({ ...formData, specialty: e.target.value })}
-                placeholder="Ex: Clínico Geral, Dermatologista"
-              />
+                onValueChange={(value) => setFormData({ ...formData, specialty: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione a especialidade" />
+                </SelectTrigger>
+                <SelectContent className="max-h-[300px]">
+                  {(Object.keys(specialtyCategories) as SpecialtyCategory[]).map((category) => {
+                    const categorySpecialties = specialties.filter((s) => s.category === category);
+                    if (categorySpecialties.length === 0) return null;
+                    return (
+                      <SelectGroup key={category}>
+                        <SelectLabel className="font-semibold text-xs uppercase text-gray-500 px-2 py-1.5">
+                          {specialtyCategories[category]}
+                        </SelectLabel>
+                        {categorySpecialties.map((specialty) => (
+                          <SelectItem key={specialty.id} value={specialty.id}>
+                            <div className="flex flex-col">
+                              <span>{specialty.name}</span>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
+              {formData.specialty && (
+                <p className="text-xs text-muted-foreground">
+                  {specialties.find((s) => s.id === formData.specialty)?.description}
+                </p>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-4">

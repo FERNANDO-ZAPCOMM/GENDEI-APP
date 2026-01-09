@@ -337,11 +337,13 @@ class Appointment:
     clinic_id: str
     patient_id: str
     professional_id: str
-    service_id: Optional[str] = None
 
-    # Schedule
+    # Schedule (required fields must come before optional fields with defaults)
     date: str                       # YYYY-MM-DD
     time: str                       # HH:MM
+
+    # Optional fields
+    service_id: Optional[str] = None
     duration_minutes: int = 30
 
     # Status
