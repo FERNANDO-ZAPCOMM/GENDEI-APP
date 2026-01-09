@@ -705,4 +705,299 @@ router.post(
   }
 );
 
+// ============================================
+// WHATSAPP FLOWS ENDPOINTS
+// ============================================
+
+// POST /meta/flows/endpoint - WhatsApp Flow data exchange endpoint (PUBLIC - called by Meta)
+// This is the endpoint that WhatsApp Flows call when they need dynamic data
+router.post('/flows/endpoint', async (req: Request, res: Response) => {
+  try {
+    console.log('Flow endpoint called:', JSON.stringify(req.body, null, 2));
+
+    const { flow_token, screen, data, version } = req.body;
+
+    // Parse flow_token to get clinicId
+    let clinicId: string | null = null;
+    try {
+      const tokenData = JSON.parse(Buffer.from(flow_token, 'base64').toString());
+      clinicId = tokenData.clinicId;
+    } catch {
+      console.error('Failed to parse flow_token');
+    }
+
+    if (!clinicId) {
+      return res.status(400).json({ error: 'Invalid flow token' });
+    }
+
+    // Get clinic data
+    const clinicDoc = await db.collection(CLINICS).doc(clinicId).get();
+    const clinicData = clinicDoc.data();
+
+    if (!clinicData) {
+      return res.status(404).json({ error: 'Clinic not found' });
+    }
+
+    // Handle different screens
+    let responseData: any = {};
+    let nextScreen: string | null = null;
+
+    switch (screen) {
+      case 'ESPECIALIDADE': {
+        // User selected a specialty, navigate to next screen
+        const selectedEspecialidade = data?.especialidade;
+
+        // Get professional info for the selected specialty
+        const professionalsRef = db.collection(CLINICS).doc(clinicId).collection('professionals');
+        const profSnapshot = await professionalsRef
+          .where('specialty', '==', selectedEspecialidade)
+          .limit(1)
+          .get();
+
+        const professional = profSnapshot.docs[0]?.data();
+
+        if (clinicData.acceptsConvenio) {
+          nextScreen = 'TIPO_ATENDIMENTO';
+          responseData = {
+            especialidade: selectedEspecialidade,
+            profissional_nome: professional?.name || 'Profissional',
+          };
+        } else {
+          nextScreen = 'DADOS_PACIENTE';
+          responseData = {
+            especialidade: selectedEspecialidade,
+            profissional_nome: professional?.name || 'Profissional',
+            tipo_pagamento: 'particular',
+            convenio_nome: '',
+            convenio_numero: '',
+          };
+        }
+        break;
+      }
+
+      case 'TIPO_ATENDIMENTO': {
+        // User selected payment type
+        const tipoPagamento = data?.tipo_pagamento;
+
+        if (tipoPagamento === 'convenio') {
+          nextScreen = 'INFO_CONVENIO';
+          // Get accepted convenios from clinic settings
+          const conveniosAceitos = clinicData.acceptedConvenios || [
+            { id: 'unimed', title: 'Unimed' },
+            { id: 'bradesco_saude', title: 'Bradesco Saúde' },
+            { id: 'sulamerica', title: 'SulAmérica' },
+            { id: 'amil', title: 'Amil' },
+            { id: 'hapvida', title: 'Hapvida' },
+            { id: 'outro', title: 'Outro' },
+          ];
+          responseData = {
+            ...data,
+            convenios_aceitos: conveniosAceitos,
+          };
+        } else {
+          nextScreen = 'DADOS_PACIENTE';
+          responseData = {
+            ...data,
+            convenio_nome: '',
+            convenio_numero: '',
+          };
+        }
+        break;
+      }
+
+      case 'DADOS_PACIENTE': {
+        // User filled patient data, show available times
+        nextScreen = 'SELECAO_HORARIO';
+
+        // Get available time slots from clinic settings or defaults
+        const horariosDisponiveis = clinicData.availableTimeSlots || [
+          { id: '08:00', title: '08:00' },
+          { id: '09:00', title: '09:00' },
+          { id: '10:00', title: '10:00' },
+          { id: '11:00', title: '11:00' },
+          { id: '14:00', title: '14:00' },
+          { id: '15:00', title: '15:00' },
+          { id: '16:00', title: '16:00' },
+          { id: '17:00', title: '17:00' },
+        ];
+
+        responseData = {
+          ...data,
+          horarios_disponiveis: horariosDisponiveis,
+        };
+        break;
+      }
+
+      default:
+        return res.status(400).json({ error: `Unknown screen: ${screen}` });
+    }
+
+    // Return response in WhatsApp Flow format
+    return res.json({
+      version: version || '3.0',
+      screen: nextScreen,
+      data: responseData,
+    });
+  } catch (error: any) {
+    console.error('Flow endpoint error:', error);
+    return res.status(500).json({ error: error.message || 'Internal server error' });
+  }
+});
+
+// GET /meta/flows/endpoint - Health check for WhatsApp Flows (called by Meta to verify endpoint)
+router.get('/flows/endpoint', (_req: Request, res: Response) => {
+  return res.status(200).json({ status: 'ok' });
+});
+
+// GET /meta/flows/:clinicId - List flows for a clinic
+router.get(
+  '/flows/:clinicId',
+  verifyAuth,
+  verifyClinicAccess,
+  async (req: Request, res: Response) => {
+    try {
+      const { clinicId } = req.params;
+
+      const clinicDoc = await db.collection(CLINICS).doc(clinicId).get();
+      const clinicData = clinicDoc.data();
+
+      if (!clinicData?.whatsappWabaId) {
+        return res.status(400).json({ error: 'WhatsApp not configured for this clinic' });
+      }
+
+      const flows = await metaService.listFlows(clinicData.whatsappWabaId);
+
+      return res.json({
+        success: true,
+        flows,
+        clinicFlowId: clinicData.whatsappFlowId,
+        clinicFlowName: clinicData.whatsappFlowName,
+      });
+    } catch (error: any) {
+      console.error('Error listing flows:', error);
+      return res.status(500).json({ error: error.message || 'Failed to list flows' });
+    }
+  }
+);
+
+// POST /meta/flows/:clinicId - Create scheduling flow for a clinic
+router.post(
+  '/flows/:clinicId',
+  verifyAuth,
+  verifyClinicAccess,
+  async (req: Request, res: Response) => {
+    try {
+      const { clinicId } = req.params;
+      const { acceptsConvenio } = req.body;
+
+      const clinicDoc = await db.collection(CLINICS).doc(clinicId).get();
+      const clinicData = clinicDoc.data();
+
+      if (!clinicData?.whatsappWabaId) {
+        return res.status(400).json({ error: 'WhatsApp not configured for this clinic' });
+      }
+
+      // Get the endpoint URI from environment or construct it
+      const endpointUri =
+        process.env.GENDEI_FLOWS_ENDPOINT_URI ||
+        `${process.env.FUNCTIONS_URL || 'https://us-central1-gendei.cloudfunctions.net/api'}/meta/flows/endpoint`;
+
+      const result = await metaService.createSchedulingFlow(
+        clinicData.whatsappWabaId,
+        clinicId,
+        acceptsConvenio ?? clinicData.acceptsConvenio ?? false,
+        endpointUri
+      );
+
+      // Update clinic with acceptsConvenio setting
+      if (acceptsConvenio !== undefined) {
+        await db.collection(CLINICS).doc(clinicId).update({
+          acceptsConvenio,
+        });
+      }
+
+      return res.json({
+        success: result.success,
+        flowId: result.flowId,
+        errors: result.errors,
+      });
+    } catch (error: any) {
+      console.error('Error creating flow:', error);
+      return res.status(500).json({ error: error.message || 'Failed to create flow' });
+    }
+  }
+);
+
+// POST /meta/flows/:clinicId/send - Send a flow message to a patient
+router.post(
+  '/flows/:clinicId/send',
+  verifyAuth,
+  verifyClinicAccess,
+  async (req: Request, res: Response) => {
+    try {
+      const { clinicId } = req.params;
+      const { to, headerText, bodyText, ctaText } = req.body;
+
+      if (!to) {
+        return res.status(400).json({ error: 'Phone number (to) is required' });
+      }
+
+      const clinicDoc = await db.collection(CLINICS).doc(clinicId).get();
+      const clinicData = clinicDoc.data();
+
+      if (!clinicData?.whatsappFlowId) {
+        return res.status(400).json({ error: 'Flow not configured for this clinic' });
+      }
+
+      // Create flow token with clinic info
+      const flowToken = Buffer.from(
+        JSON.stringify({
+          clinicId,
+          timestamp: Date.now(),
+        })
+      ).toString('base64');
+
+      // Get specialties/services for initial data
+      const servicesRef = db.collection(CLINICS).doc(clinicId).collection('services');
+      const servicesSnapshot = await servicesRef.where('isActive', '==', true).get();
+
+      const especialidades = servicesSnapshot.docs.map((doc) => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          title: data.name,
+          description: data.professionalName || data.description || '',
+        };
+      });
+
+      // If no services, use default
+      const initialData = {
+        especialidades:
+          especialidades.length > 0
+            ? especialidades
+            : [{ id: 'consulta', title: 'Consulta Geral', description: 'Atendimento médico' }],
+      };
+
+      const result = await metaService.sendFlowMessage(
+        clinicId,
+        to,
+        clinicData.whatsappFlowId,
+        flowToken,
+        headerText || 'Agendar Consulta',
+        bodyText || 'Clique no botão abaixo para agendar sua consulta de forma rápida e fácil.',
+        ctaText || 'Agendar Agora',
+        initialData
+      );
+
+      return res.json({
+        success: true,
+        messageId: result.messageId,
+      });
+    } catch (error: any) {
+      console.error('Error sending flow message:', error);
+      return res.status(500).json({ error: error.message || 'Failed to send flow message' });
+    }
+  }
+);
+
 export default router;
