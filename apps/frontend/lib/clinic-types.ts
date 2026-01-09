@@ -150,3 +150,19 @@ export interface ClinicStats {
   confirmedToday: number;
   pendingToday: number;
 }
+
+// Payment settings for the clinic
+export interface PaymentSettings {
+  acceptsConvenio: boolean;         // Accepts health insurance
+  convenioList: string[];           // List of accepted convenios
+  acceptsParticular: boolean;       // Accepts private payment
+  requiresDeposit: boolean;         // Requires deposit for appointments
+  depositPercentage: number;        // 0-100, percentage required
+  pixKey?: string;                  // PIX key for payments
+  pixKeyType?: 'cpf' | 'cnpj' | 'email' | 'phone' | 'random';
+}
+
+// Extended clinic with payment settings
+export interface ClinicWithPayment extends Clinic {
+  paymentSettings?: PaymentSettings;
+}

@@ -20,6 +20,8 @@ import {
   UserPlus,
   Stethoscope,
   ClipboardList,
+  Clock,
+  CreditCard,
 } from 'lucide-react';
 import { FaWhatsapp } from 'react-icons/fa';
 
@@ -47,6 +49,7 @@ const navigation: NavItem[] = [
       { name: 'appointments', href: '/dashboard/appointments', icon: Calendar },
       { name: 'professionals', href: '/dashboard/professionals', icon: UserPlus },
       { name: 'services', href: '/dashboard/services', icon: ClipboardList },
+      { name: 'schedule', href: '/dashboard/schedule', icon: Clock },
     ],
   },
   {
@@ -64,6 +67,7 @@ const navigation: NavItem[] = [
     icon: Settings,
     children: [
       { name: 'clinic', href: '/dashboard/clinic', icon: Stethoscope },
+      { name: 'payments', href: '/dashboard/payments', icon: CreditCard },
       { name: 'whatsapp', href: '/dashboard/whatsapp', icon: FaWhatsapp },
       { name: 'account', href: '/dashboard/account', icon: User },
     ],

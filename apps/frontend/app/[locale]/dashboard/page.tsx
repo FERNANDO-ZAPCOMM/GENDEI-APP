@@ -22,11 +22,14 @@ import { useClinic, useClinicStats } from '@/hooks/use-clinic';
 import { useTodayAppointments } from '@/hooks/use-appointments';
 import { useMetaStatus } from '@/hooks/use-meta-status';
 import { useAuth } from '@/hooks/use-auth';
+import { useOnboardingStatus } from '@/hooks/use-onboarding-status';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ConnectionAlerts } from '@/components/dashboard/ConnectionAlerts';
+import { OnboardingProgressCard } from '@/components/dashboard/OnboardingProgressCard';
+import { SetupChecklist } from '@/components/dashboard/SetupChecklist';
 import { useParams } from 'next/navigation';
 import type { AppointmentStatus } from '@/lib/clinic-types';
 
@@ -50,6 +53,10 @@ export default function DashboardPage() {
   const { data: stats, isLoading: statsLoading } = useClinicStats(clinic?.id || '');
   const { data: todayAppointments, isLoading: appointmentsLoading } = useTodayAppointments(clinic?.id || '');
   const { status: metaStatus, error: metaError } = useMetaStatus(currentUser?.uid || '');
+
+  // Onboarding status
+  const onboardingStatus = useOnboardingStatus();
+  const showOnboarding = !onboardingStatus.isLoading && !onboardingStatus.isSetupComplete;
 
   const isWhatsAppConnected = clinic?.whatsappConnected || false;
 
@@ -89,6 +96,33 @@ export default function DashboardPage() {
 
       {/* Connection Alerts - Only show if we have valid meta status */}
       {metaStatus && !metaError && <ConnectionAlerts status={metaStatus} locale={locale} />}
+
+      {/* Onboarding Progress Card - Show prominently for new users */}
+      {showOnboarding && (
+        <OnboardingProgressCard
+          clinicInfoComplete={onboardingStatus.clinicInfoComplete}
+          professionalsComplete={onboardingStatus.professionalsComplete}
+          servicesComplete={onboardingStatus.servicesComplete}
+          scheduleComplete={onboardingStatus.scheduleComplete}
+          paymentComplete={onboardingStatus.paymentComplete}
+          whatsappComplete={onboardingStatus.whatsappComplete}
+          completionPercentage={onboardingStatus.completionPercentage}
+          nextStep={onboardingStatus.nextStep}
+        />
+      )}
+
+      {/* Setup Checklist - Show for users who have started but not completed setup */}
+      {!showOnboarding && !onboardingStatus.isSetupComplete && (
+        <SetupChecklist
+          clinicInfoComplete={onboardingStatus.clinicInfoComplete}
+          professionalsComplete={onboardingStatus.professionalsComplete}
+          servicesComplete={onboardingStatus.servicesComplete}
+          scheduleComplete={onboardingStatus.scheduleComplete}
+          paymentComplete={onboardingStatus.paymentComplete}
+          whatsappComplete={onboardingStatus.whatsappComplete}
+          nextStep={onboardingStatus.nextStep}
+        />
+      )}
 
       {/* Stats Grid */}
       <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
