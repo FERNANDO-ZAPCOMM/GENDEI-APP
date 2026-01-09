@@ -311,6 +311,11 @@ a.nav-logo,
   font-style: italic;
 }
 
+.hero-title-sans {
+  font-family: var(--font-sans);
+  font-weight: 700;
+}
+
 /* Marker Highlight Effect */
 .pencil-circle {
   position: relative;
@@ -341,23 +346,28 @@ a.nav-logo,
 }
 
 .hero-features {
-  display: flex;
-  gap: 24px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px 24px;
   margin-bottom: 32px;
+  max-width: 520px;
 }
 
 .hero-feature {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  align-items: flex-start;
+  gap: 10px;
   font-size: 16px;
   color: var(--foreground);
+  line-height: 1.4;
 }
 
 .hero-feature svg {
   width: 24px;
   height: 24px;
   color: var(--foreground);
+  flex-shrink: 0;
+  margin-top: 2px;
 }
 
 .hero-visual {
@@ -649,6 +659,10 @@ a.nav-logo,
   .hero-inner {
     gap: 48px;
   }
+
+  .hero-features {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 768px) {
@@ -666,7 +680,7 @@ a.nav-logo,
   }
 
   .hero-features {
-    flex-direction: column;
+    grid-template-columns: 1fr;
     gap: 12px;
   }
 
@@ -726,18 +740,20 @@ a.nav-logo,
   color: var(--foreground);
   margin-bottom: 20px;
   letter-spacing: -0.03em;
+  text-align: center;
 }
 
-@media (min-width: 769px) {
-  .section-title {
-    white-space: nowrap;
-  }
-}
 
 .section-title .serif {
   font-family: var(--font-serif);
   font-weight: 400;
   font-style: italic;
+}
+
+.section-title-sans {
+  font-family: var(--font-sans);
+  font-weight: 700;
+  font-style: normal;
 }
 
 .section-subtitle {
@@ -1592,7 +1608,7 @@ a.nav-logo,
    ============================================ */
 .stats-section {
   padding: var(--section-padding) 0;
-  background: linear-gradient(135deg, #fef9c3 0%, #fef08a 50%, #fde047 100%);
+  background: var(--background);
   position: relative;
 }
 
@@ -1608,10 +1624,9 @@ a.nav-logo,
 }
 
 .stat-value {
-  font-family: var(--font-serif);
+  font-family: var(--font-sans);
   font-size: 56px;
-  font-weight: 400;
-  font-style: italic;
+  font-weight: 700;
   color: var(--foreground);
   margin-bottom: 8px;
   letter-spacing: -0.02em;
@@ -1620,6 +1635,7 @@ a.nav-logo,
 
 .stat-label {
   font-size: 17px;
+  font-family: var(--font-sans);
   color: var(--foreground);
   line-height: 1.7;
 }
@@ -2035,4 +2051,3 @@ a.nav-logo,
     text-align: center;
   }
 }
-
