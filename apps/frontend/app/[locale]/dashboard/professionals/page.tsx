@@ -244,24 +244,24 @@ export default function ProfessionalsPage() {
     isUploading: boolean;
     inputRef: React.RefObject<HTMLInputElement>;
   }) => (
-    <div className="flex flex-col items-center gap-3">
+    <div className="flex flex-col items-center gap-2">
       <div className="relative">
-        <Avatar className="w-24 h-24 border-2 border-gray-200">
+        <Avatar className="w-16 h-16 border-2 border-gray-200">
           <AvatarImage src={photoUrl} alt={name || 'Foto'} />
-          <AvatarFallback className="text-lg bg-gray-100">
-            {name ? getInitials(name) : <User className="w-8 h-8 text-gray-400" />}
+          <AvatarFallback className="text-sm bg-gray-100">
+            {name ? getInitials(name) : <User className="w-5 h-5 text-gray-400" />}
           </AvatarFallback>
         </Avatar>
         <button
           type="button"
           onClick={() => inputRef.current?.click()}
           disabled={isUploading}
-          className="absolute bottom-0 right-0 p-2 bg-white border border-gray-200 rounded-full shadow-sm hover:bg-gray-50 transition-colors disabled:opacity-50"
+          className="absolute bottom-0 right-0 p-1.5 bg-white border border-gray-200 rounded-full shadow-sm hover:bg-gray-50 transition-colors disabled:opacity-50"
         >
           {isUploading ? (
-            <Loader2 className="w-4 h-4 animate-spin text-gray-500" />
+            <Loader2 className="w-3 h-3 animate-spin text-gray-500" />
           ) : (
-            <Camera className="w-4 h-4 text-gray-500" />
+            <Camera className="w-3 h-3 text-gray-500" />
           )}
         </button>
         <input
@@ -276,7 +276,7 @@ export default function ProfessionalsPage() {
           className="hidden"
         />
       </div>
-      <p className="text-xs text-muted-foreground">Clique para adicionar foto</p>
+      <p className="text-xs text-muted-foreground">Clique para foto</p>
     </div>
   );
 
@@ -309,8 +309,8 @@ export default function ProfessionalsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {/* Profile Photo */}
-            <div className="flex justify-center pb-2">
+            {/* Profile Photo + Name - inline */}
+            <div className="flex items-start gap-4">
               <AvatarUpload
                 photoUrl={formData.photoUrl}
                 name={formData.name}
@@ -318,17 +318,16 @@ export default function ProfessionalsPage() {
                 isUploading={isUploadingPhoto}
                 inputRef={fileInputRef}
               />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="name">Nome *</Label>
-              <Input
-                id="name"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="Nome do profissional"
-                disabled={isSaving}
-              />
+              <div className="flex-1 space-y-2">
+                <Label htmlFor="name">Nome *</Label>
+                <Input
+                  id="name"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  placeholder="Nome do profissional"
+                  disabled={isSaving}
+                />
+              </div>
             </div>
 
             <div className="space-y-2">
@@ -655,8 +654,8 @@ export default function ProfessionalsPage() {
           </DialogHeader>
 
           <div className="space-y-4 py-4">
-            {/* Profile Photo */}
-            <div className="flex justify-center pb-2">
+            {/* Profile Photo + Name - inline */}
+            <div className="flex items-start gap-4">
               <AvatarUpload
                 photoUrl={formData.photoUrl}
                 name={formData.name}
@@ -664,16 +663,15 @@ export default function ProfessionalsPage() {
                 isUploading={isUploadingPhoto}
                 inputRef={dialogFileInputRef}
               />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="dialog-name">Nome *</Label>
-              <Input
-                id="dialog-name"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="Nome do profissional"
-              />
+              <div className="flex-1 space-y-2">
+                <Label htmlFor="dialog-name">Nome *</Label>
+                <Input
+                  id="dialog-name"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  placeholder="Nome do profissional"
+                />
+              </div>
             </div>
 
             <div className="space-y-2">

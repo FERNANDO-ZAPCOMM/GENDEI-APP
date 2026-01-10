@@ -281,7 +281,7 @@ export function CalendarGrid({
   return (
     <TooltipProvider>
       <>
-        <div className="flex flex-col bg-white border shadow-sm overflow-hidden">
+        <div className="flex flex-col bg-white border shadow-sm overflow-hidden h-full">
           {/* Header with days */}
           <div className="flex border-b bg-gray-50/80 sticky top-0 z-20">
             {/* Time column header */}
@@ -314,8 +314,8 @@ export function CalendarGrid({
             ))}
           </div>
 
-          {/* Time grid - match clinic page card height */}
-          <div className="flex overflow-auto h-[320px]">
+          {/* Time grid */}
+          <div className="flex overflow-auto flex-1">
             {/* Time labels column */}
             <div className="w-20 flex-shrink-0 border-r bg-gray-50/50">
               {Array.from({ length: endHour - startHour }, (_, i) => (

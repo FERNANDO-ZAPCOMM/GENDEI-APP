@@ -167,8 +167,8 @@ export default function PatientsPage() {
       {/* Two Column Layout - Same as Clinic page */}
       <div className="flex gap-6">
         {/* Left Column - Patient List (constrained like clinic page) */}
-        <Card className="flex-1 max-w-2xl">
-            <CardHeader className="pb-3">
+        <Card className="flex-1 max-w-2xl h-[420px] flex flex-col">
+            <CardHeader className="pb-3 flex-shrink-0">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                   <CardTitle className="text-base">Lista de Pacientes</CardTitle>
@@ -190,7 +190,7 @@ export default function PatientsPage() {
                 </div>
               </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="flex-1 overflow-y-auto">
               {isLoading ? (
                 <div className="space-y-2">
                   <Skeleton className="h-12 w-full" />
@@ -198,7 +198,7 @@ export default function PatientsPage() {
                   <Skeleton className="h-12 w-full" />
                 </div>
               ) : patients.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-12 text-center">
+                <div className="flex flex-col items-center justify-center h-full text-center">
                   <div className="w-16 h-16 rounded-full bg-muted/50 flex items-center justify-center mb-4">
                     <Users className="w-8 h-8 text-muted-foreground/50" />
                   </div>
@@ -210,8 +210,8 @@ export default function PatientsPage() {
                 </div>
               ) : (
                 <>
-                  {/* Mobile Card View - match clinic page height */}
-                  <div className="sm:hidden space-y-3 h-[320px] overflow-y-auto">
+                  {/* Mobile Card View */}
+                  <div className="sm:hidden space-y-3">
                     {patients.map((patient) => (
                       <div key={patient.id} className="border rounded-lg p-3 bg-white">
                         <div className="flex items-start justify-between">
@@ -254,8 +254,8 @@ export default function PatientsPage() {
                     ))}
                   </div>
 
-                  {/* Desktop Table View - match clinic page height */}
-                  <div className="hidden sm:block h-[320px] overflow-y-auto">
+                  {/* Desktop Table View */}
+                  <div className="hidden sm:block">
                     <Table>
                       <TableHeader>
                         <TableRow>
@@ -316,20 +316,22 @@ export default function PatientsPage() {
         {/* Right Column - Professionals Filter (Desktop Only, same width as clinic page) */}
         <div className="hidden lg:block w-[360px] flex-shrink-0">
           <div className="sticky top-6 space-y-4">
-            <Card>
-              <CardHeader className="pb-3">
+            <Card className="h-[420px] flex flex-col">
+              <CardHeader className="pb-3 flex-shrink-0">
                 <CardTitle className="text-base">Filtrar por Profissional</CardTitle>
                 <CardDescription>
                   {selectedProfessionalId
-                    ? 'Clique novamente para remover o filtro'
-                    : 'Selecione para filtrar pacientes'}
+                    ? 'Clique para limpar filtro'
+                    : 'Selecione para filtrar'}
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-2 max-h-[300px] overflow-y-auto">
+              <CardContent className="space-y-2 flex-1 overflow-y-auto">
                 {activeProfessionals.length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-4">
-                    Nenhum profissional ativo
-                  </p>
+                  <div className="flex items-center justify-center h-full">
+                    <p className="text-sm text-muted-foreground text-center">
+                      Nenhum profissional ativo
+                    </p>
+                  </div>
                 ) : (
                   activeProfessionals.map((professional) => (
                     <div

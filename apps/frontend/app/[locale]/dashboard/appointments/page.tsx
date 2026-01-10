@@ -222,8 +222,8 @@ export default function AppointmentsPage() {
       {/* Two Column Layout - Same as Clinic page */}
       <div className="flex gap-6">
         {/* Left Column - Calendar (constrained like clinic page) */}
-        <Card className="flex-1 max-w-2xl">
-            <CardHeader className="pb-3">
+        <Card className="flex-1 max-w-2xl h-[420px] flex flex-col">
+            <CardHeader className="pb-3 flex-shrink-0">
               <div className="flex items-center justify-between">
                 <div>
                   <CardTitle className="text-base">Calendario</CardTitle>
@@ -248,7 +248,7 @@ export default function AppointmentsPage() {
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="p-2">
+            <CardContent className="p-2 flex-1 overflow-hidden">
               <CalendarGrid
                 selectedDate={selectedDate}
                 viewMode={viewMode}
@@ -266,18 +266,18 @@ export default function AppointmentsPage() {
         {/* Right Column - Professionals List (Desktop Only, sticky like clinic page) */}
         <div className="hidden lg:block w-[360px] flex-shrink-0">
           <div className="sticky top-6">
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">Profissionais</CardTitle>
+            <Card className="h-[420px] flex flex-col">
+              <CardHeader className="pb-3 flex-shrink-0">
+                <CardTitle className="text-base">Filtrar por Profissional</CardTitle>
                 <CardDescription>
                   {selectedProfessional === 'all'
-                    ? 'Todos os profissionais'
+                    ? 'Selecione para filtrar'
                     : 'Clique para limpar filtro'}
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-2">
+              <CardContent className="space-y-2 flex-1 overflow-y-auto">
                 {activeProfessionals.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-6 text-center">
+                  <div className="flex flex-col items-center justify-center h-full text-center">
                     <User className="w-8 h-8 text-muted-foreground/50 mb-2" />
                     <p className="text-sm text-muted-foreground">Nenhum profissional cadastrado</p>
                   </div>
