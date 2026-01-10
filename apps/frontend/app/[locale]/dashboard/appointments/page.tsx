@@ -2,19 +2,16 @@
 
 import { useState, useMemo } from 'react';
 import { useTranslations } from 'next-intl';
-import { format, addDays, isToday, isSameDay, parseISO } from 'date-fns';
+import { format, addDays, isToday, parseISO, startOfWeek } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
-  Calendar as CalendarIcon,
   ChevronLeft,
   ChevronRight,
   Clock,
-  User,
   CheckCircle,
   XCircle,
   AlertCircle,
-  List,
-  LayoutGrid,
+  User,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -26,6 +23,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   Select,
   SelectContent,
@@ -42,6 +40,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { CalendarGrid } from '@/components/calendar/CalendarGrid';
+import { getSpecialtyName } from '@/lib/specialties';
 import type { Appointment, AppointmentStatus } from '@/lib/clinic-types';
 
 const statusConfig: Record<AppointmentStatus, { label: string; color: string; icon: any }> = {
@@ -54,6 +53,25 @@ const statusConfig: Record<AppointmentStatus, { label: string; color: string; ic
   no_show: { label: 'Nao Compareceu', color: 'bg-gray-100 text-gray-700', icon: XCircle },
 };
 
+// Format price for display
+const formatPrice = (price: number) => {
+  if (!price) return '';
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+  }).format(price);
+};
+
+// Get initials for avatar fallback
+const getInitials = (name: string) => {
+  return name
+    .split(' ')
+    .map(n => n[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2);
+};
+
 export default function AppointmentsPage() {
   const t = useTranslations();
   const { currentClinic: clinic, isLoading: clinicLoading } = useClinic();
@@ -61,28 +79,23 @@ export default function AppointmentsPage() {
 
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [selectedProfessional, setSelectedProfessional] = useState<string>('all');
-  const [viewMode, setViewMode] = useState<'day' | 'week'>('week');
-  const [displayMode, setDisplayMode] = useState<'calendar' | 'list'>('calendar');
+  const [viewMode] = useState<'day' | 'week'>('week'); // Always week view
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
 
-  const dateStr = format(selectedDate, 'yyyy-MM-dd');
-  // Week view starts from selected date and shows 7 days forward
-  const weekStart = format(selectedDate, 'yyyy-MM-dd');
-  const weekEnd = format(addDays(selectedDate, 6), 'yyyy-MM-dd');
+  // Always start week from Monday
+  const monday = startOfWeek(selectedDate, { weekStartsOn: 1 });
+  const weekStart = format(monday, 'yyyy-MM-dd');
+  const weekEnd = format(addDays(monday, 6), 'yyyy-MM-dd');
 
   const { data: appointments = [], isLoading, updateStatus, cancel } = useAppointments(
     clinic?.id || '',
-    viewMode === 'day'
-      ? { date: dateStr, professionalId: selectedProfessional !== 'all' ? selectedProfessional : undefined }
-      : { startDate: weekStart, endDate: weekEnd, professionalId: selectedProfessional !== 'all' ? selectedProfessional : undefined }
+    { startDate: weekStart, endDate: weekEnd, professionalId: selectedProfessional !== 'all' ? selectedProfessional : undefined }
   );
 
   const { timeBlocks, createBlock, deleteBlock } = useTimeBlocks(
     clinic?.id || '',
-    viewMode === 'day'
-      ? { startDate: dateStr, endDate: dateStr }
-      : { startDate: weekStart, endDate: weekEnd }
+    { startDate: weekStart, endDate: weekEnd }
   );
 
   const stats = useMemo(() => {
@@ -94,28 +107,12 @@ export default function AppointmentsPage() {
     };
   }, [appointments]);
 
-  const sortedAppointments = useMemo(() => {
-    return [...appointments].sort((a, b) => {
-      if (a.date !== b.date) return a.date.localeCompare(b.date);
-      return a.time.localeCompare(b.time);
-    });
-  }, [appointments]);
-
-  const groupedByDate = useMemo(() => {
-    const groups: Record<string, Appointment[]> = {};
-    sortedAppointments.forEach(apt => {
-      if (!groups[apt.date]) groups[apt.date] = [];
-      groups[apt.date].push(apt);
-    });
-    return groups;
-  }, [sortedAppointments]);
-
-  const handlePrevDay = () => {
-    setSelectedDate(prev => addDays(prev, viewMode === 'week' ? -7 : -1));
+  const handlePrevWeek = () => {
+    setSelectedDate(prev => addDays(prev, -7));
   };
 
-  const handleNextDay = () => {
-    setSelectedDate(prev => addDays(prev, viewMode === 'week' ? 7 : 1));
+  const handleNextWeek = () => {
+    setSelectedDate(prev => addDays(prev, 7));
   };
 
   const handleStatusChange = async (appointmentId: string, newStatus: AppointmentStatus) => {
@@ -163,6 +160,13 @@ export default function AppointmentsPage() {
     }
   };
 
+  const handleProfessionalSelect = (professionalId: string) => {
+    setSelectedProfessional(professionalId === selectedProfessional ? 'all' : professionalId);
+  };
+
+  // Filter active professionals
+  const activeProfessionals = professionals.filter(p => p.active);
+
   if (clinicLoading || !clinic) {
     return (
       <div className="space-y-6 page-transition">
@@ -178,39 +182,15 @@ export default function AppointmentsPage() {
   }
 
   return (
-    <div className="flex flex-col gap-4 sm:gap-6 page-transition">
+    <div className="space-y-6 page-transition">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-semibold text-gray-900">Agenda</h1>
-          <p className="text-sm sm:text-base text-gray-600 mt-1">
-            Gerencie as consultas agendadas
-          </p>
-        </div>
-
-        {/* View mode toggle */}
-        <div className="flex items-center gap-2">
-          <Button
-            variant={displayMode === 'calendar' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setDisplayMode('calendar')}
-          >
-            <LayoutGrid className="w-4 h-4 mr-1" />
-            Calendario
-          </Button>
-          <Button
-            variant={displayMode === 'list' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setDisplayMode('list')}
-          >
-            <List className="w-4 h-4 mr-1" />
-            Lista
-          </Button>
-        </div>
+      <div>
+        <h1 className="text-2xl sm:text-3xl font-semibold text-gray-900">Agenda</h1>
+        <p className="text-sm sm:text-base text-gray-600 mt-1">Gerencie as consultas agendadas</p>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-3 gap-3">
+      {/* Stats Cards - Span both columns (calc: max-w-2xl + gap + sidebar) */}
+      <div className="grid grid-cols-3 gap-3" style={{ maxWidth: 'calc(672px + 24px + 360px)' }}>
         <Card className="bg-gradient-to-br from-blue-50 to-white border-blue-100">
           <CardContent className="p-4">
             <div className="text-center">
@@ -239,172 +219,139 @@ export default function AppointmentsPage() {
         </Card>
       </div>
 
-      {/* Date Navigation */}
-      <Card>
-        <CardContent className="p-4">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-            {/* Date Selector */}
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="icon" onClick={handlePrevDay}>
-                <ChevronLeft className="w-4 h-4" />
-              </Button>
-              <div className="text-center min-w-[200px]">
-                <p className="text-lg uppercase">
-                  {viewMode === 'day'
-                    ? format(selectedDate, "EEEE, d 'de' MMMM", { locale: ptBR })
-                    : `${format(selectedDate, 'd MMM', { locale: ptBR })} - ${format(addDays(selectedDate, 6), 'd MMM', { locale: ptBR })}`
-                  }
-                </p>
-                {isToday(selectedDate) && (
-                  <Badge className="bg-emerald-100 text-emerald-700 border-0 text-xs">Hoje</Badge>
-                )}
-              </div>
-              <Button variant="outline" size="icon" onClick={handleNextDay}>
-                <ChevronRight className="w-4 h-4" />
-              </Button>
-              {!isToday(selectedDate) && (
-                <Button variant="ghost" size="sm" onClick={() => setSelectedDate(new Date())}>
-                  Hoje
-                </Button>
-              )}
-            </div>
-
-            {/* Filters */}
-            <div className="flex items-center gap-2">
-              <Select value={viewMode} onValueChange={(v) => setViewMode(v as 'day' | 'week')}>
-                <SelectTrigger className="w-24">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="day">Dia</SelectItem>
-                  <SelectItem value="week">Semana</SelectItem>
-                </SelectContent>
-              </Select>
-
-              <Select value={selectedProfessional} onValueChange={setSelectedProfessional}>
-                <SelectTrigger className="w-40">
-                  <SelectValue placeholder="Profissional" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos</SelectItem>
-                  {professionals.map((prof) => (
-                    <SelectItem key={prof.id} value={prof.id}>{prof.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Calendar or List View */}
-      {displayMode === 'calendar' ? (
-        <CalendarGrid
-          selectedDate={selectedDate}
-          viewMode={viewMode}
-          appointments={appointments}
-          timeBlocks={timeBlocks}
-          professionals={professionals}
-          selectedProfessional={selectedProfessional}
-          onAppointmentClick={handleAppointmentClick}
-          onBlockTime={handleBlockTime}
-          onRemoveBlock={handleRemoveBlock}
-        />
-      ) : (
-        /* List View */
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <CalendarIcon className="w-5 h-5" />
-              Consultas
-            </CardTitle>
-            <CardDescription>
-              {appointments.length === 0
-                ? 'Nenhuma consulta agendada'
-                : `${appointments.length} consulta(s) encontrada(s)`}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {isLoading ? (
-              <div className="space-y-3">
-                <Skeleton className="h-20 w-full" />
-                <Skeleton className="h-20 w-full" />
-                <Skeleton className="h-20 w-full" />
-              </div>
-            ) : appointments.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12 text-center">
-                <div className="w-16 h-16 rounded-full bg-muted/50 flex items-center justify-center mb-4">
-                  <CalendarIcon className="w-8 h-8 text-muted-foreground/50" />
+      {/* Two Column Layout - Same as Clinic page */}
+      <div className="flex gap-6">
+        {/* Left Column - Calendar (constrained like clinic page) */}
+        <Card className="flex-1 max-w-2xl">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-base">Calendario</CardTitle>
+                  <CardDescription>Visualize e gerencie horarios</CardDescription>
                 </div>
-                <p className="text-muted-foreground text-sm">Nenhuma consulta para este periodo</p>
+                {/* Date Navigation */}
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="icon" onClick={handlePrevWeek}>
+                    <ChevronLeft className="w-4 h-4" />
+                  </Button>
+                  <div className="text-center min-w-[120px]">
+                    <p className="text-sm font-medium">
+                      {format(monday, 'dd/MM')} - {format(addDays(monday, 6), 'dd/MM')}
+                    </p>
+                  </div>
+                  <Button variant="outline" size="icon" onClick={handleNextWeek}>
+                    <ChevronRight className="w-4 h-4" />
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => setSelectedDate(new Date())}>
+                    Hoje
+                  </Button>
+                </div>
               </div>
-            ) : (
-              <div className="space-y-4">
-                {Object.entries(groupedByDate).map(([date, dayAppointments]) => (
-                  <div key={date}>
-                    {viewMode === 'week' && (
-                      <div className="flex items-center gap-2 mb-3">
-                        <p className="text-sm font-semibold text-gray-700">
-                          {format(parseISO(date), "EEEE, d 'de' MMMM", { locale: ptBR })}
-                        </p>
-                        {isSameDay(parseISO(date), new Date()) && (
-                          <Badge className="bg-emerald-100 text-emerald-700 border-0 text-xs">Hoje</Badge>
+            </CardHeader>
+            <CardContent className="p-2">
+              <CalendarGrid
+                selectedDate={selectedDate}
+                viewMode={viewMode}
+                appointments={appointments}
+                timeBlocks={timeBlocks}
+                professionals={professionals}
+                selectedProfessional={selectedProfessional}
+                onAppointmentClick={handleAppointmentClick}
+                onBlockTime={handleBlockTime}
+                onRemoveBlock={handleRemoveBlock}
+              />
+            </CardContent>
+          </Card>
+
+        {/* Right Column - Professionals List (Desktop Only, sticky like clinic page) */}
+        <div className="hidden lg:block w-[360px] flex-shrink-0">
+          <div className="sticky top-6">
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Profissionais</CardTitle>
+                <CardDescription>
+                  {selectedProfessional === 'all'
+                    ? 'Todos os profissionais'
+                    : 'Clique para limpar filtro'}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {activeProfessionals.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-6 text-center">
+                    <User className="w-8 h-8 text-muted-foreground/50 mb-2" />
+                    <p className="text-sm text-muted-foreground">Nenhum profissional cadastrado</p>
+                  </div>
+                ) : (
+                  activeProfessionals.map((professional) => {
+                    const isSelected = selectedProfessional === professional.id;
+                    return (
+                      <div
+                        key={professional.id}
+                        onClick={() => handleProfessionalSelect(professional.id)}
+                        className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all ${
+                          isSelected
+                            ? 'bg-primary/10 border-2 border-primary'
+                            : 'border border-gray-100 hover:bg-gray-50'
+                        }`}
+                      >
+                        <Avatar className="w-10 h-10">
+                          <AvatarImage src={professional.photoUrl} alt={professional.name} />
+                          <AvatarFallback className="text-sm bg-gray-100">
+                            {getInitials(professional.name)}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-sm truncate">{professional.name}</p>
+                          {professional.specialty && (
+                            <p className="text-xs text-muted-foreground truncate">
+                              {getSpecialtyName(professional.specialty)}
+                            </p>
+                          )}
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className="text-xs text-muted-foreground">
+                              {professional.appointmentDuration || 30}min
+                            </span>
+                            {(professional.consultationPrice ?? 0) > 0 && (
+                              <span className="text-xs font-medium text-green-600">
+                                {formatPrice(professional.consultationPrice ?? 0)}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        {isSelected && (
+                          <div className="w-2 h-2 rounded-full bg-primary" />
                         )}
                       </div>
-                    )}
+                    );
+                  })
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </div>
 
-                    <div className="space-y-2">
-                      {dayAppointments.map((appointment) => {
-                        const status = statusConfig[appointment.status] || statusConfig.pending;
-                        const StatusIcon = status.icon;
-
-                        return (
-                          <div
-                            key={appointment.id}
-                            className="flex items-center justify-between p-3 border rounded-lg bg-white hover:shadow-sm transition-shadow cursor-pointer"
-                            onClick={() => handleAppointmentClick(appointment)}
-                          >
-                            <div className="flex items-center gap-4">
-                              {/* Time */}
-                              <div className="text-center min-w-[60px]">
-                                <p className="text-lg font-bold text-gray-900">{appointment.time}</p>
-                                <p className="text-xs text-muted-foreground">{appointment.duration}min</p>
-                              </div>
-
-                              {/* Patient & Service */}
-                              <div>
-                                <p className="font-medium text-gray-900">{appointment.patientName}</p>
-                                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                  <User className="w-3 h-3" />
-                                  {appointment.professionalName}
-                                  {appointment.serviceName && (
-                                    <>
-                                      <span>-</span>
-                                      <span>{appointment.serviceName}</span>
-                                    </>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-
-                            <div className="flex items-center gap-2">
-                              {/* Status Badge */}
-                              <Badge className={`${status.color} border-0 flex items-center gap-1`}>
-                                <StatusIcon className="w-3 h-3" />
-                                {status.label}
-                              </Badge>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
+      {/* Mobile: Professional Filter */}
+      <div className="lg:hidden">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Filtrar por Profissional</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Select value={selectedProfessional} onValueChange={setSelectedProfessional}>
+              <SelectTrigger>
+                <SelectValue placeholder="Todos os profissionais" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos</SelectItem>
+                {activeProfessionals.map((prof) => (
+                  <SelectItem key={prof.id} value={prof.id}>{prof.name}</SelectItem>
                 ))}
-              </div>
-            )}
+              </SelectContent>
+            </Select>
           </CardContent>
         </Card>
-      )}
+      </div>
 
       {/* Appointment Details Dialog */}
       <Dialog open={detailsDialogOpen} onOpenChange={setDetailsDialogOpen}>

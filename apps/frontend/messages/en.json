@@ -774,7 +774,9 @@
   "dashboard": {
     "welcome": "Welcome",
     "overview": "Overview",
+    "agendaSection": "Schedule",
     "agenda": "Schedule",
+    "professionalsSection": "Professionals",
     "patientsSection": "Patients",
     "patients": "Patients",
     "conversations": "Conversations",

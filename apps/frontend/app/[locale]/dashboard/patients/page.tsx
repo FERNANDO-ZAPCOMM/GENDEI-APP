@@ -2,13 +2,16 @@
 
 import { useState, useMemo } from 'react';
 import { useTranslations } from 'next-intl';
-import { Search, Users, Calendar, Phone, Mail, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
+import { Search, Users, Calendar, Phone, Mail, MoreHorizontal, Trash2, UserCheck } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
 
 import { useClinic } from '@/hooks/use-clinic';
 import { usePatients } from '@/hooks/use-patients';
+import { useProfessionals } from '@/hooks/use-professionals';
+import { getSpecialtyName } from '@/lib/specialties';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -29,15 +32,42 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
+function getInitials(name: string): string {
+  if (!name) return '?';
+  const words = name.trim().split(/\s+/);
+  if (words.length === 1) {
+    return words[0].substring(0, 2).toUpperCase();
+  }
+  return (words[0][0] + words[words.length - 1][0]).toUpperCase();
+}
+
 export default function PatientsPage() {
   const t = useTranslations();
   const { currentClinic: clinic, isLoading: clinicLoading } = useClinic();
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedProfessionalId, setSelectedProfessionalId] = useState<string | null>(null);
+
+  const { data: professionals } = useProfessionals(clinic?.id || '');
+  const activeProfessionals = useMemo(
+    () => professionals.filter((p) => p.active),
+    [professionals]
+  );
+
+  const filters = useMemo(() => {
+    const f: { search?: string; professionalId?: string } = {};
+    if (searchQuery) f.search = searchQuery;
+    if (selectedProfessionalId) f.professionalId = selectedProfessionalId;
+    return Object.keys(f).length > 0 ? f : undefined;
+  }, [searchQuery, selectedProfessionalId]);
 
   const { data: patients, isLoading, remove } = usePatients(
     clinic?.id || '',
-    searchQuery ? { search: searchQuery } : undefined
+    filters
   );
+
+  const handleProfessionalSelect = (professionalId: string) => {
+    setSelectedProfessionalId((prev) => (prev === professionalId ? null : professionalId));
+  };
 
   const stats = useMemo(() => {
     const now = new Date();
@@ -46,9 +76,14 @@ export default function PatientsPage() {
       const created = new Date(p.createdAt);
       return created.getMonth() === now.getMonth() && created.getFullYear() === now.getFullYear();
     });
+
+    // Calculate patients with appointments
+    const withAppointments = patients.filter(p => (p.totalAppointments || 0) > 0);
+
     return {
       total: patients.length,
       newThisMonth: thisMonth.length,
+      withAppointments: withAppointments.length,
     };
   }, [patients]);
 
@@ -77,22 +112,20 @@ export default function PatientsPage() {
   }
 
   return (
-    <div className="flex flex-col gap-4 sm:gap-6 page-transition">
+    <div className="space-y-6 page-transition">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-semibold text-gray-900">Pacientes</h1>
-          <p className="text-sm sm:text-base text-gray-600 mt-1">Gerencie os pacientes da sua clinica</p>
-        </div>
+      <div>
+        <h1 className="text-2xl sm:text-3xl font-semibold text-gray-900">Pacientes</h1>
+        <p className="text-sm sm:text-base text-gray-600 mt-1">Gerencie os pacientes da sua clinica</p>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-2 gap-3">
+      {/* Stats Cards - 3 cards to fit nicely */}
+      <div className="grid grid-cols-3 gap-3" style={{ maxWidth: 'calc(672px + 24px + 360px)' }}>
         <Card className="bg-gradient-to-br from-indigo-50 to-white border-indigo-100">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs text-indigo-600 font-medium">Total de Pacientes</p>
+                <p className="text-xs text-indigo-600 font-medium">Total</p>
                 <p className="text-2xl font-bold text-indigo-700">{stats.total}</p>
               </div>
               <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center">
@@ -115,126 +148,94 @@ export default function PatientsPage() {
             </div>
           </CardContent>
         </Card>
-      </div>
 
-      {/* Search */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <Input
-          placeholder="Buscar por nome ou telefone..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="pl-10"
-        />
-      </div>
-
-      {/* Patients List */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Lista de Pacientes</CardTitle>
-          <CardDescription>
-            {patients.length === 0
-              ? 'Nenhum paciente encontrado'
-              : `${patients.length} paciente(s) encontrado(s)`}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <div className="space-y-2">
-              <Skeleton className="h-12 w-full" />
-              <Skeleton className="h-12 w-full" />
-              <Skeleton className="h-12 w-full" />
-            </div>
-          ) : patients.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <div className="w-16 h-16 rounded-full bg-muted/50 flex items-center justify-center mb-4">
-                <Users className="w-8 h-8 text-muted-foreground/50" />
+        <Card className="bg-gradient-to-br from-blue-50 to-white border-blue-100">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-blue-600 font-medium">Com Consultas</p>
+                <p className="text-2xl font-bold text-blue-700">{stats.withAppointments}</p>
               </div>
-              <p className="text-muted-foreground text-sm">
-                {searchQuery ? 'Nenhum paciente encontrado com este termo' : 'Pacientes serao adicionados automaticamente via WhatsApp'}
-              </p>
+              <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
+                <UserCheck className="w-5 h-5 text-blue-600" />
+              </div>
             </div>
-          ) : (
-            <>
-              {/* Mobile Card View */}
-              <div className="sm:hidden space-y-3">
-                {patients.map((patient) => (
-                  <div key={patient.id} className="border rounded-lg p-3 bg-white">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <h3 className="font-medium text-sm">{patient.name}</h3>
-                        <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
-                          <Phone className="w-3 h-3" />
-                          {patient.phone}
-                        </div>
-                        {patient.email && (
-                          <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
-                            <Mail className="w-3 h-3" />
-                            {patient.email}
-                          </div>
-                        )}
-                        <div className="flex items-center gap-2 mt-2">
-                          <Badge variant="secondary" className="text-xs">
-                            {patient.totalAppointments || 0} consulta(s)
-                          </Badge>
-                        </div>
-                      </div>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                            <MoreHorizontal className="w-4 h-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem
-                            onClick={() => handleDelete(patient.id)}
-                            className="text-destructive"
-                          >
-                            <Trash2 className="w-4 h-4 mr-2" />
-                            Excluir
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Two Column Layout - Same as Clinic page */}
+      <div className="flex gap-6">
+        {/* Left Column - Patient List (constrained like clinic page) */}
+        <Card className="flex-1 max-w-2xl">
+            <CardHeader className="pb-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <CardTitle className="text-base">Lista de Pacientes</CardTitle>
+                  <CardDescription>
+                    {patients.length === 0
+                      ? 'Nenhum paciente encontrado'
+                      : `${patients.length} paciente(s)`}
+                  </CardDescription>
+                </div>
+                {/* Search */}
+                <div className="relative w-full sm:w-64">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Buscar..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-10"
+                  />
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {isLoading ? (
+                <div className="space-y-2">
+                  <Skeleton className="h-12 w-full" />
+                  <Skeleton className="h-12 w-full" />
+                  <Skeleton className="h-12 w-full" />
+                </div>
+              ) : patients.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 text-center">
+                  <div className="w-16 h-16 rounded-full bg-muted/50 flex items-center justify-center mb-4">
+                    <Users className="w-8 h-8 text-muted-foreground/50" />
                   </div>
-                ))}
-              </div>
-
-              {/* Desktop Table View */}
-              <div className="hidden sm:block">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Nome</TableHead>
-                      <TableHead>Telefone</TableHead>
-                      <TableHead>E-mail</TableHead>
-                      <TableHead>Consultas</TableHead>
-                      <TableHead>Ultima Consulta</TableHead>
-                      <TableHead className="text-right">Acoes</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
+                  <p className="text-muted-foreground text-sm">
+                    {searchQuery || selectedProfessionalId
+                      ? 'Nenhum paciente encontrado'
+                      : 'Pacientes serao adicionados via WhatsApp'}
+                  </p>
+                </div>
+              ) : (
+                <>
+                  {/* Mobile Card View - match clinic page height */}
+                  <div className="sm:hidden space-y-3 h-[320px] overflow-y-auto">
                     {patients.map((patient) => (
-                      <TableRow key={patient.id}>
-                        <TableCell className="font-medium">{patient.name}</TableCell>
-                        <TableCell>{patient.phone}</TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {patient.email || '-'}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="secondary">
-                            {patient.totalAppointments || 0}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {patient.lastAppointmentAt
-                            ? format(new Date(patient.lastAppointmentAt), 'dd/MM/yyyy', { locale: ptBR })
-                            : '-'}
-                        </TableCell>
-                        <TableCell className="text-right">
+                      <div key={patient.id} className="border rounded-lg p-3 bg-white">
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <h3 className="font-medium text-sm">{patient.name}</h3>
+                            <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
+                              <Phone className="w-3 h-3" />
+                              {patient.phone}
+                            </div>
+                            {patient.email && (
+                              <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
+                                <Mail className="w-3 h-3" />
+                                {patient.email}
+                              </div>
+                            )}
+                            <div className="flex items-center gap-2 mt-2">
+                              <Badge variant="secondary" className="text-xs">
+                                {patient.totalAppointments || 0} consulta(s)
+                              </Badge>
+                            </div>
+                          </div>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="sm">
+                              <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
                                 <MoreHorizontal className="w-4 h-4" />
                               </Button>
                             </DropdownMenuTrigger>
@@ -248,16 +249,120 @@ export default function PatientsPage() {
                               </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
-                        </TableCell>
-                      </TableRow>
+                        </div>
+                      </div>
                     ))}
-                  </TableBody>
-                </Table>
-              </div>
-            </>
-          )}
-        </CardContent>
-      </Card>
+                  </div>
+
+                  {/* Desktop Table View - match clinic page height */}
+                  <div className="hidden sm:block h-[320px] overflow-y-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Nome</TableHead>
+                          <TableHead>Telefone</TableHead>
+                          <TableHead>E-mail</TableHead>
+                          <TableHead>Consultas</TableHead>
+                          <TableHead>Ultima Consulta</TableHead>
+                          <TableHead className="text-right">Acoes</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {patients.map((patient) => (
+                          <TableRow key={patient.id}>
+                            <TableCell className="font-medium">{patient.name}</TableCell>
+                            <TableCell>{patient.phone}</TableCell>
+                            <TableCell className="text-muted-foreground">
+                              {patient.email || '-'}
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="secondary">
+                                {patient.totalAppointments || 0}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-muted-foreground">
+                              {patient.lastAppointmentAt
+                                ? format(new Date(patient.lastAppointmentAt), 'dd/MM/yyyy', { locale: ptBR })
+                                : '-'}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" size="sm">
+                                    <MoreHorizontal className="w-4 h-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem
+                                    onClick={() => handleDelete(patient.id)}
+                                    className="text-destructive"
+                                  >
+                                    <Trash2 className="w-4 h-4 mr-2" />
+                                    Excluir
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
+
+        {/* Right Column - Professionals Filter (Desktop Only, same width as clinic page) */}
+        <div className="hidden lg:block w-[360px] flex-shrink-0">
+          <div className="sticky top-6 space-y-4">
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Filtrar por Profissional</CardTitle>
+                <CardDescription>
+                  {selectedProfessionalId
+                    ? 'Clique novamente para remover o filtro'
+                    : 'Selecione para filtrar pacientes'}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2 max-h-[300px] overflow-y-auto">
+                {activeProfessionals.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    Nenhum profissional ativo
+                  </p>
+                ) : (
+                  activeProfessionals.map((professional) => (
+                    <div
+                      key={professional.id}
+                      onClick={() => handleProfessionalSelect(professional.id)}
+                      className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-colors ${
+                        selectedProfessionalId === professional.id
+                          ? 'bg-indigo-100 border-2 border-indigo-500'
+                          : 'hover:bg-muted/50 border-2 border-transparent'
+                      }`}
+                    >
+                      <Avatar className="h-9 w-9">
+                        <AvatarImage src={professional.photoUrl} alt={professional.name} />
+                        <AvatarFallback className="bg-indigo-100 text-indigo-700 text-xs">
+                          {getInitials(professional.name)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{professional.name}</p>
+                        {professional.specialty && (
+                          <p className="text-xs text-muted-foreground truncate">
+                            {getSpecialtyName(professional.specialty)}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

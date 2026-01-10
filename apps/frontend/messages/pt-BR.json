@@ -773,7 +773,9 @@
   "dashboard": {
     "welcome": "Bem-vindo",
     "overview": "Visão Geral",
+    "agendaSection": "Agenda",
     "agenda": "Agenda",
+    "professionalsSection": "Profissionais",
     "patientsSection": "Pacientes",
     "patients": "Pacientes",
     "conversations": "Conversas",

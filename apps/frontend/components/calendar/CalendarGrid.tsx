@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { format, addDays, isSameDay, addMinutes } from 'date-fns';
+import { format, addDays, isSameDay, addMinutes, startOfWeek } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { Clock, User, X, Plus, Phone, FileText, MoreHorizontal } from 'lucide-react';
@@ -157,13 +157,14 @@ export function CalendarGrid({
     return slots;
   }, [startHour, endHour]);
 
-  // Generate days for week view - start from selected date (today) and show 7 days forward
+  // Generate days for week view - always start from Monday
   const weekDays = useMemo(() => {
     if (viewMode === 'day') {
       return [selectedDate];
     }
-    // Start from selectedDate and show 7 days forward (today first)
-    return Array.from({ length: 7 }, (_, i) => addDays(selectedDate, i));
+    // Get Monday of the week containing selectedDate
+    const monday = startOfWeek(selectedDate, { weekStartsOn: 1 });
+    return Array.from({ length: 7 }, (_, i) => addDays(monday, i));
   }, [selectedDate, viewMode]);
 
   // Calculate position and height for an appointment
@@ -275,7 +276,7 @@ export function CalendarGrid({
     return (hours - startHour) * HOUR_HEIGHT + (minutes / 60) * HOUR_HEIGHT;
   }, [startHour, endHour]);
 
-  const columnWidth = viewMode === 'day' ? 'min-w-full' : 'min-w-[160px]';
+  const columnWidth = viewMode === 'day' ? 'min-w-full' : 'min-w-[70px]';
 
   return (
     <TooltipProvider>
@@ -288,39 +289,33 @@ export function CalendarGrid({
               <Clock className="w-4 h-4 text-gray-400" />
             </div>
 
-            {/* Day headers */}
+            {/* Day headers - compact format */}
             {weekDays.map((day) => (
               <div
                 key={day.toISOString()}
                 className={cn(
-                  `flex-1 ${columnWidth} p-3 text-center border-r last:border-r-0 transition-colors`,
+                  `flex-1 ${columnWidth} py-2 px-1 text-center border-r last:border-r-0 transition-colors`,
                   isToday(day) ? 'bg-black text-white' : 'bg-gray-50/80'
                 )}
               >
                 <p className={cn(
-                  'text-xs font-medium uppercase tracking-wide',
+                  'text-[10px] font-medium uppercase tracking-wide',
                   isToday(day) ? 'text-gray-300' : 'text-gray-500'
                 )}>
                   {format(day, 'EEE', { locale: ptBR })}
                 </p>
                 <p className={cn(
-                  'text-2xl font-semibold mt-0.5',
+                  'text-sm font-semibold',
                   isToday(day) ? 'text-white' : 'text-gray-900'
                 )}>
-                  {format(day, 'd')}
-                </p>
-                <p className={cn(
-                  'text-xs',
-                  isToday(day) ? 'text-gray-400' : 'text-gray-400'
-                )}>
-                  {format(day, 'MMM', { locale: ptBR })}
+                  {format(day, 'dd/MM')}
                 </p>
               </div>
             ))}
           </div>
 
-          {/* Time grid */}
-          <div className="flex overflow-auto max-h-[calc(100vh-320px)] min-h-[500px]">
+          {/* Time grid - match clinic page card height */}
+          <div className="flex overflow-auto h-[320px]">
             {/* Time labels column */}
             <div className="w-20 flex-shrink-0 border-r bg-gray-50/50">
               {Array.from({ length: endHour - startHour }, (_, i) => (
@@ -552,13 +547,13 @@ export function CalendarGrid({
             })}
           </div>
 
-          {/* Legend */}
+          {/* Legend - only show main statuses */}
           <div className="flex items-center gap-4 px-4 py-3 border-t bg-gray-50/50 overflow-x-auto">
             <span className="text-xs text-gray-500 font-medium flex-shrink-0">Status:</span>
-            {Object.entries(statusConfig).slice(0, 5).map(([key, config]) => (
+            {(['pending', 'confirmed', 'completed', 'cancelled'] as const).map((key) => (
               <div key={key} className="flex items-center gap-1.5 flex-shrink-0">
-                <div className={cn('w-2.5 h-2.5 rounded-full', config.dot)} />
-                <span className="text-xs text-gray-600">{config.label}</span>
+                <div className={cn('w-2.5 h-2.5 rounded-full', statusConfig[key].dot)} />
+                <span className="text-xs text-gray-600">{statusConfig[key].label}</span>
               </div>
             ))}
           </div>

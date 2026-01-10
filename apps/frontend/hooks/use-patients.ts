@@ -6,6 +6,7 @@ import type { Patient } from '@/lib/clinic-types';
 interface PatientFilters {
   search?: string;
   tag?: string;
+  professionalId?: string;
 }
 
 /**
@@ -24,6 +25,7 @@ export function usePatients(clinicId: string, filters?: PatientFilters) {
       const params = new URLSearchParams();
       if (filters?.search) params.append('search', filters.search);
       if (filters?.tag) params.append('tag', filters.tag);
+      if (filters?.professionalId) params.append('professionalId', filters.professionalId);
 
       const queryString = params.toString();
       const url = `/patients/clinic/${clinicId}${queryString ? `?${queryString}` : ''}`;

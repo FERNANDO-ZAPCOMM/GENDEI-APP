@@ -66,10 +66,25 @@ interface NavItem {
 }
 
 // Gendei clinic navigation structure
-// Organized by: Operational (daily use) → Patient Management → Team → Configuration (setup)
+// Organized by: Overview → Agenda Section → Professionals Section → Patients Section → Configuration
 const navigation: NavItem[] = [
   { name: 'overview', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'agenda', href: '/dashboard/appointments', icon: Calendar },
+  {
+    name: 'agendaSection',
+    href: '#',
+    icon: Calendar,
+    children: [
+      { name: 'agenda', href: '/dashboard/appointments', icon: Calendar },
+    ],
+  },
+  {
+    name: 'professionalsSection',
+    href: '#',
+    icon: UserPlus,
+    children: [
+      { name: 'professionals', href: '/dashboard/professionals', icon: UserPlus },
+    ],
+  },
   {
     name: 'patientsSection',
     href: '#',
@@ -77,15 +92,6 @@ const navigation: NavItem[] = [
     children: [
       { name: 'patients', href: '/dashboard/patients', icon: Users },
       { name: 'conversations', href: '/dashboard/conversations', icon: MessageSquare },
-    ],
-  },
-  {
-    name: 'teamSection',
-    href: '#',
-    icon: Building2,
-    children: [
-      { name: 'professionals', href: '/dashboard/professionals', icon: UserPlus },
-      { name: 'services', href: '/dashboard/services', icon: ClipboardList },
     ],
   },
   {
@@ -115,8 +121,9 @@ function NavigationItems({
   todayCount: number;
 }) {
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
+    agendaSection: true,
+    professionalsSection: true,
     patientsSection: true,
-    teamSection: true,
     configuration: true,
   });
 
