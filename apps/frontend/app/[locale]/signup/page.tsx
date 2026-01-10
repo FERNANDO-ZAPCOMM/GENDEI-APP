@@ -49,11 +49,11 @@ export default function SignUpPage() {
       setLoading(true);
       await signUp(data.email, data.password);
       toast.success('Conta criada com sucesso!');
-      router.push(`/${locale}/dashboard`);
+      // Use hard redirect to ensure fresh auth state
+      window.location.href = `/${locale}/dashboard`;
     } catch (error: any) {
       const errorMessage = getFirebaseErrorMessage(error.code);
       toast.error(errorMessage);
-    } finally {
       setLoading(false);
     }
   };
@@ -62,11 +62,11 @@ export default function SignUpPage() {
     try {
       setGoogleLoading(true);
       await signInWithGoogle();
-      router.push(`/${locale}/dashboard`);
+      // Use hard redirect to ensure fresh auth state
+      window.location.href = `/${locale}/dashboard`;
     } catch (error: any) {
       const errorMessage = getFirebaseErrorMessage(error.code);
       toast.error(errorMessage);
-    } finally {
       setGoogleLoading(false);
     }
   };

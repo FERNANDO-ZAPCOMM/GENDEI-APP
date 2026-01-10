@@ -107,8 +107,8 @@ export default function UploadProductPage() {
       }
 
       // Save product to Firestore via backend API
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
-      const response = await fetch(`${API_URL}/products`, {
+      // Use /api prefix to route through Next.js rewrite proxy (avoids CORS)
+      const response = await fetch(`/api/products`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

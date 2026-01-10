@@ -35,8 +35,8 @@ export default function AcceptInvitationPage() {
 
       try {
         setLoading(true);
-        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
-        const response = await fetch(`${API_URL}/team/invitation/${token}`);
+        // Use /api prefix to route through Next.js rewrite proxy (avoids CORS)
+        const response = await fetch(`/api/team/invitation/${token}`);
 
         if (!response.ok) {
           const errorData = await response.json();

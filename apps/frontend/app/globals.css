@@ -82,7 +82,7 @@
   }
   h1, h2, h3, h4, h5, h6 {
     font-family: var(--font-urbanist);
-    font-weight: 600;
+    font-weight: 500;
   }
 
   .logo-font {
@@ -97,9 +97,8 @@
   }
 
   /* Prevent text size adjustment on orientation change in iOS */
-  /* Base font size increased 10% for better readability on modern displays */
   html {
-    font-size: 110%;
+    font-size: 100%;
     -webkit-text-size-adjust: 100%;
   }
 }

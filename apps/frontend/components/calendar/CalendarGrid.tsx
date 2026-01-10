@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { format, addDays, startOfWeek, isSameDay, addMinutes } from 'date-fns';
+import { format, addDays, isSameDay, addMinutes } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { Clock, User, X, Plus, Phone, FileText, MoreHorizontal } from 'lucide-react';
@@ -157,13 +157,13 @@ export function CalendarGrid({
     return slots;
   }, [startHour, endHour]);
 
-  // Generate days for week view
+  // Generate days for week view - start from selected date (today) and show 7 days forward
   const weekDays = useMemo(() => {
     if (viewMode === 'day') {
       return [selectedDate];
     }
-    const start = startOfWeek(selectedDate, { locale: ptBR });
-    return Array.from({ length: 7 }, (_, i) => addDays(start, i));
+    // Start from selectedDate and show 7 days forward (today first)
+    return Array.from({ length: 7 }, (_, i) => addDays(selectedDate, i));
   }, [selectedDate, viewMode]);
 
   // Calculate position and height for an appointment
@@ -280,7 +280,7 @@ export function CalendarGrid({
   return (
     <TooltipProvider>
       <>
-        <div className="flex flex-col bg-white rounded-xl border shadow-sm overflow-hidden">
+        <div className="flex flex-col bg-white border shadow-sm overflow-hidden">
           {/* Header with days */}
           <div className="flex border-b bg-gray-50/80 sticky top-0 z-20">
             {/* Time column header */}

@@ -613,6 +613,10 @@
         "messageId": "ID da Mensagem: {id}",
         "invalidPhone": "Por favor, insira um número de telefone válido no formato E.164 (ex: +1234567890)"
       },
+      "preview": {
+        "title": "Prévia do WhatsApp",
+        "description": "Como seu bot aparece para os pacientes"
+      },
       "danger": {
         "title": "Zona de Perigo",
         "description": "Desconectar permanentemente sua conta do WhatsApp Business"
@@ -626,7 +630,7 @@
       "status": "Status"
     },
     "user": {
-      "title": "Informações do Usuário",
+      "title": "Informações do Administrador",
       "description": "Seus dados de acesso",
       "profile": "Perfil",
       "profileDescription": "Informações do seu perfil",
@@ -770,15 +774,14 @@
     "welcome": "Bem-vindo",
     "overview": "Visão Geral",
     "agenda": "Agenda",
-    "appointments": "Consultas",
-    "professionals": "Profissionais",
-    "services": "Serviços",
-    "schedule": "Horários",
+    "patientsSection": "Pacientes",
     "patients": "Pacientes",
-    "patientList": "Lista de Pacientes",
     "conversations": "Conversas",
+    "teamSection": "Equipe",
     "configuration": "Configuração",
     "clinic": "Clínica",
+    "professionals": "Profissionais",
+    "services": "Serviços",
     "payments": "Pagamentos",
     "whatsapp": "WhatsApp",
     "account": "Conta",

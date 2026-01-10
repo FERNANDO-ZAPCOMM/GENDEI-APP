@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { useTranslations } from 'next-intl';
-import { format, addDays, startOfWeek, endOfWeek, isToday, isSameDay, parseISO } from 'date-fns';
+import { format, addDays, isToday, isSameDay, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
   Calendar as CalendarIcon,
@@ -61,14 +61,15 @@ export default function AppointmentsPage() {
 
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [selectedProfessional, setSelectedProfessional] = useState<string>('all');
-  const [viewMode, setViewMode] = useState<'day' | 'week'>('day');
+  const [viewMode, setViewMode] = useState<'day' | 'week'>('week');
   const [displayMode, setDisplayMode] = useState<'calendar' | 'list'>('calendar');
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
 
   const dateStr = format(selectedDate, 'yyyy-MM-dd');
-  const weekStart = format(startOfWeek(selectedDate, { locale: ptBR }), 'yyyy-MM-dd');
-  const weekEnd = format(endOfWeek(selectedDate, { locale: ptBR }), 'yyyy-MM-dd');
+  // Week view starts from selected date and shows 7 days forward
+  const weekStart = format(selectedDate, 'yyyy-MM-dd');
+  const weekEnd = format(addDays(selectedDate, 6), 'yyyy-MM-dd');
 
   const { data: appointments = [], isLoading, updateStatus, cancel } = useAppointments(
     clinic?.id || '',
@@ -248,13 +249,13 @@ export default function AppointmentsPage() {
                 <ChevronLeft className="w-4 h-4" />
               </Button>
               <div className="text-center min-w-[200px]">
-                <p className="font-semibold text-lg">
+                <p className="text-lg uppercase">
                   {viewMode === 'day'
                     ? format(selectedDate, "EEEE, d 'de' MMMM", { locale: ptBR })
-                    : `${format(startOfWeek(selectedDate, { locale: ptBR }), 'd MMM', { locale: ptBR })} - ${format(endOfWeek(selectedDate, { locale: ptBR }), 'd MMM', { locale: ptBR })}`
+                    : `${format(selectedDate, 'd MMM', { locale: ptBR })} - ${format(addDays(selectedDate, 6), 'd MMM', { locale: ptBR })}`
                   }
                 </p>
-                {isToday(selectedDate) && viewMode === 'day' && (
+                {isToday(selectedDate) && (
                   <Badge className="bg-emerald-100 text-emerald-700 border-0 text-xs">Hoje</Badge>
                 )}
               </div>

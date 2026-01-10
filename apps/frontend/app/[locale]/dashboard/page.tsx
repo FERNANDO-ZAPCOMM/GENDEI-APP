@@ -103,7 +103,6 @@ export default function DashboardPage() {
           clinicInfoComplete={onboardingStatus.clinicInfoComplete}
           professionalsComplete={onboardingStatus.professionalsComplete}
           servicesComplete={onboardingStatus.servicesComplete}
-          scheduleComplete={onboardingStatus.scheduleComplete}
           paymentComplete={onboardingStatus.paymentComplete}
           whatsappComplete={onboardingStatus.whatsappComplete}
           completionPercentage={onboardingStatus.completionPercentage}
@@ -117,7 +116,6 @@ export default function DashboardPage() {
           clinicInfoComplete={onboardingStatus.clinicInfoComplete}
           professionalsComplete={onboardingStatus.professionalsComplete}
           servicesComplete={onboardingStatus.servicesComplete}
-          scheduleComplete={onboardingStatus.scheduleComplete}
           paymentComplete={onboardingStatus.paymentComplete}
           whatsappComplete={onboardingStatus.whatsappComplete}
           nextStep={onboardingStatus.nextStep}

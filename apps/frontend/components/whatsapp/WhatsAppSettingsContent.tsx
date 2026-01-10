@@ -15,6 +15,7 @@ import { DisconnectButton } from './DisconnectButton';
 import { BusinessProfileCard } from './BusinessProfileCard';
 import { QRCodesCard } from './QRCodesCard';
 import { TemplateStatusCard } from './TemplateStatusCard';
+import { WhatsAppPreviewCard } from './WhatsAppPreviewCard';
 
 /**
  * Shared WhatsApp settings content component
@@ -132,6 +133,9 @@ export function WhatsAppSettingsContent() {
               </CardContent>
             </Card>
           )}
+
+          {/* WhatsApp Preview - Show when connected */}
+          {isReady && <WhatsAppPreviewCard />}
 
           <ConnectionStatusCard
             status={status}

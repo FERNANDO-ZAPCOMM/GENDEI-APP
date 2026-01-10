@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import Link from 'next/link';
@@ -12,6 +12,7 @@ import {
   Settings,
   ChevronDown,
   ChevronRight,
+  ChevronLeft,
   User,
   Menu,
   X,
@@ -20,14 +21,39 @@ import {
   UserPlus,
   Stethoscope,
   ClipboardList,
-  Clock,
   CreditCard,
+  Search,
+  Bell,
+  Plus,
+  CalendarPlus,
+  UserPlus2,
+  Clock,
+  PanelLeftClose,
+  PanelLeft,
+  Building2,
 } from 'lucide-react';
 import { FaWhatsapp } from 'react-icons/fa';
 
 import { useAuth } from '@/hooks/use-auth';
-import { useClinic } from '@/hooks/use-clinic';
+import { useClinic, useClinicStats } from '@/hooks/use-clinic';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
 import { TypingDots } from '@/components/PageLoader';
 import { cn } from '@/lib/utils';
 
@@ -36,29 +62,30 @@ interface NavItem {
   href: string;
   icon: any;
   children?: NavItem[];
+  badge?: number;
 }
 
 // Gendei clinic navigation structure
+// Organized by: Operational (daily use) → Patient Management → Team → Configuration (setup)
 const navigation: NavItem[] = [
   { name: 'overview', href: '/dashboard', icon: LayoutDashboard },
+  { name: 'agenda', href: '/dashboard/appointments', icon: Calendar },
   {
-    name: 'agenda',
-    href: '#',
-    icon: Calendar,
-    children: [
-      { name: 'appointments', href: '/dashboard/appointments', icon: Calendar },
-      { name: 'professionals', href: '/dashboard/professionals', icon: UserPlus },
-      { name: 'services', href: '/dashboard/services', icon: ClipboardList },
-      { name: 'schedule', href: '/dashboard/schedule', icon: Clock },
-    ],
-  },
-  {
-    name: 'patients',
+    name: 'patientsSection',
     href: '#',
     icon: Users,
     children: [
-      { name: 'patientList', href: '/dashboard/patients', icon: Users },
+      { name: 'patients', href: '/dashboard/patients', icon: Users },
       { name: 'conversations', href: '/dashboard/conversations', icon: MessageSquare },
+    ],
+  },
+  {
+    name: 'teamSection',
+    href: '#',
+    icon: Building2,
+    children: [
+      { name: 'professionals', href: '/dashboard/professionals', icon: UserPlus },
+      { name: 'services', href: '/dashboard/services', icon: ClipboardList },
     ],
   },
   {
@@ -78,16 +105,18 @@ function NavigationItems({
   navigation,
   pathname,
   t,
-  userRole,
+  collapsed,
+  todayCount,
 }: {
   navigation: NavItem[];
   pathname: string;
   t: any;
-  userRole: any;
+  collapsed: boolean;
+  todayCount: number;
 }) {
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
-    agenda: true,
-    patients: true,
+    patientsSection: true,
+    teamSection: true,
     configuration: true,
   });
 
@@ -103,18 +132,14 @@ function NavigationItems({
   const isActive = (href: string) => {
     const fullPath = `/${locale}${href}`;
 
-    // Exact match for overview/dashboard
     if (href === '/dashboard') {
       return pathname === fullPath;
     }
 
-    // For nested routes, check if this is the most specific match
-    // to avoid highlighting both parent and child items
     const allHrefs = navigation.flatMap((item) =>
       item.children ? item.children.map((c) => c.href) : [item.href]
     ).filter((h) => h !== '#');
 
-    // Check if there's a more specific route that matches
     const hasMoreSpecificMatch = allHrefs.some(
       (otherHref) =>
         otherHref !== href &&
@@ -126,7 +151,6 @@ function NavigationItems({
       return false;
     }
 
-    // Check for exact match first, then prefix match
     return pathname === fullPath || pathname.startsWith(`${fullPath}/`);
   };
 
@@ -136,10 +160,70 @@ function NavigationItems({
     const isExpanded = expandedSections[item.name];
     const fullHref = item.href === '#' ? undefined : `/${locale}${item.href}`;
     const active = fullHref ? isActive(item.href) : false;
-
-    // For Gendei, show all navigation items (no role-based filtering)
     const visibleChildren = item.children || [];
 
+    // Show today count badge on agenda
+    const showBadge = item.name === 'agenda' && todayCount > 0;
+
+    if (collapsed && level === 0) {
+      // Collapsed view - icons only
+      if (hasChildren) {
+        return (
+          <DropdownMenu key={item.name}>
+            <DropdownMenuTrigger asChild>
+              <button
+                className={cn(
+                  'w-full flex items-center justify-center p-3 rounded-lg transition-colors',
+                  'text-gray-600 hover:bg-gray-100'
+                )}
+              >
+                <Icon className="w-5 h-5" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent side="right" align="start" className="w-48">
+              <DropdownMenuLabel className="text-xs text-gray-500 uppercase">
+                {t(`dashboard.${item.name}`)}
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {visibleChildren.map((child) => {
+                const ChildIcon = child.icon;
+                return (
+                  <DropdownMenuItem key={child.name} asChild>
+                    <Link href={`/${locale}${child.href}`} className="flex items-center gap-2">
+                      <ChildIcon className="w-4 h-4" />
+                      {t(`dashboard.${child.name}`)}
+                    </Link>
+                  </DropdownMenuItem>
+                );
+              })}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        );
+      }
+
+      return (
+        <Link
+          key={item.name}
+          href={fullHref || '#'}
+          className={cn(
+            'flex items-center justify-center p-3 rounded-lg transition-colors relative',
+            active
+              ? 'bg-gray-100 text-gray-900'
+              : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+          )}
+          title={t(`dashboard.${item.name}`)}
+        >
+          <Icon className="w-5 h-5" />
+          {showBadge && (
+            <span className="absolute -top-1 -right-1 bg-blue-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+              {todayCount}
+            </span>
+          )}
+        </Link>
+      );
+    }
+
+    // Expanded view
     return (
       <div key={item.name}>
         {hasChildren ? (
@@ -183,7 +267,12 @@ function NavigationItems({
             style={{ paddingLeft: `${level * 12 + 16}px` }}
           >
             <Icon className="w-4 h-4" />
-            {t(`dashboard.${item.name}`)}
+            <span className="flex-1">{t(`dashboard.${item.name}`)}</span>
+            {showBadge && (
+              <Badge variant="secondary" className="bg-blue-100 text-blue-700 text-xs">
+                {todayCount}
+              </Badge>
+            )}
           </Link>
         )}
       </div>
@@ -193,22 +282,121 @@ function NavigationItems({
   return <>{navigation.map((item) => renderNavItem(item))}</>;
 }
 
+// Quick Add Dialog
+function QuickAddDialog({ locale }: { locale: string }) {
+  const [open, setOpen] = useState(false);
+
+  const quickActions = [
+    { name: 'Nova Consulta', href: `/dashboard/appointments`, icon: CalendarPlus, description: 'Agendar consulta' },
+    { name: 'Novo Paciente', href: `/dashboard/patients/new`, icon: UserPlus2, description: 'Cadastrar paciente' },
+    { name: 'Bloquear Horário', href: `/dashboard/appointments`, icon: Clock, description: 'Bloquear agenda' },
+  ];
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button size="sm" className="gap-2">
+          <Plus className="w-4 h-4" />
+          <span className="hidden sm:inline">Novo</span>
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Ação Rápida</DialogTitle>
+        </DialogHeader>
+        <div className="grid gap-3 py-4">
+          {quickActions.map((action) => {
+            const Icon = action.icon;
+            return (
+              <Link
+                key={action.name}
+                href={`/${locale}${action.href}`}
+                onClick={() => setOpen(false)}
+                className="flex items-center gap-4 p-4 rounded-lg border hover:bg-gray-50 transition-colors"
+              >
+                <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center">
+                  <Icon className="w-5 h-5 text-gray-600" />
+                </div>
+                <div>
+                  <p className="font-medium">{action.name}</p>
+                  <p className="text-sm text-gray-500">{action.description}</p>
+                </div>
+              </Link>
+            );
+          })}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// Mobile Bottom Navigation
+function MobileBottomNav({ pathname, locale }: { pathname: string; locale: string }) {
+  const bottomNavItems = [
+    { name: 'Início', href: '/dashboard', icon: LayoutDashboard },
+    { name: 'Agenda', href: '/dashboard/appointments', icon: Calendar },
+    { name: 'Pacientes', href: '/dashboard/patients', icon: Users },
+    { name: 'Config', href: '/dashboard/clinic', icon: Settings },
+  ];
+
+  const isActive = (href: string) => {
+    const fullPath = `/${locale}${href}`;
+    if (href === '/dashboard') return pathname === fullPath;
+    return pathname.startsWith(fullPath);
+  };
+
+  return (
+    <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-200 safe-area-bottom">
+      <div className="flex items-center justify-around py-2">
+        {bottomNavItems.map((item) => {
+          const Icon = item.icon;
+          const active = isActive(item.href);
+          return (
+            <Link
+              key={item.name}
+              href={`/${locale}${item.href}`}
+              className={cn(
+                'flex flex-col items-center gap-1 px-3 py-2 rounded-lg transition-colors min-w-[64px]',
+                active ? 'text-blue-600' : 'text-gray-500'
+              )}
+            >
+              <Icon className={cn('w-5 h-5', active && 'text-blue-600')} />
+              <span className="text-xs font-medium">{item.name}</span>
+            </Link>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const t = useTranslations();
   const router = useRouter();
   const pathname = usePathname();
   const { currentUser, signOut, loading: authLoading } = useAuth();
   const { currentClinic: clinic, isLoading: clinicLoading } = useClinic();
+  const { data: stats } = useClinicStats(clinic?.id || '');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const locale = pathname.split('/')[1];
+  const todayCount = stats?.todayAppointments || 0;
+
+  // Mock notifications (replace with real data)
+  const notifications = [
+    { id: 1, title: 'Nova consulta agendada', time: '5 min atrás' },
+    { id: 2, title: 'Paciente confirmou presença', time: '15 min atrás' },
+  ];
 
   useEffect(() => {
     if (!authLoading && !currentUser) {
-      const locale = pathname.split('/')[1];
       router.push(`/${locale}/signin`);
     }
-  }, [currentUser, authLoading, router, pathname]);
+  }, [currentUser, authLoading, router, locale]);
 
-  // Close mobile menu when route changes
   useEffect(() => {
     setMobileMenuOpen(false);
   }, [pathname]);
@@ -216,13 +404,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const handleSignOut = async () => {
     try {
       await signOut();
-      const locale = pathname.split('/')[1];
-      // Force navigation to signin page using window.location for full page reload
       window.location.href = `/${locale}/signin`;
     } catch (error) {
       console.error('Error signing out:', error);
-      // Still redirect even if there's an error
-      const locale = pathname.split('/')[1];
       window.location.href = `/${locale}/signin`;
     }
   };
@@ -241,72 +425,186 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="min-h-screen bg-white">
-      {/* Mobile Header */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-white border-b border-gray-200">
-        <div className="flex items-center px-4 py-3">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="p-2 -ml-2 rounded-lg hover:bg-gray-100"
-            >
-              {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-            </button>
-            <span className="text-xl text-black logo-font">Gendei</span>
+      {/* Desktop Header */}
+      <header className={cn(
+        'hidden md:flex fixed top-0 right-0 z-30 h-16 bg-white border-b border-gray-200 items-center justify-between px-6 transition-all',
+        sidebarCollapsed ? 'left-16' : 'left-64'
+      )}>
+        {/* Search Bar */}
+        <div className="flex-1 max-w-md">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <Input
+              type="search"
+              placeholder="Buscar pacientes, consultas..."
+              className="pl-10 bg-gray-50 border-gray-200 focus:bg-white"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
           </div>
         </div>
+
+        {/* Right Actions */}
+        <div className="flex items-center gap-3">
+          <QuickAddDialog locale={locale} />
+
+          {/* Notifications */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="relative h-10 w-10">
+                <Bell className="w-6 h-6" />
+                {notifications.length > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                    {notifications.length}
+                  </span>
+                )}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-80">
+              <DropdownMenuLabel>Notificações</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {notifications.length === 0 ? (
+                <div className="p-4 text-center text-gray-500 text-sm">
+                  Nenhuma notificação
+                </div>
+              ) : (
+                notifications.map((notif) => (
+                  <DropdownMenuItem key={notif.id} className="flex flex-col items-start gap-1 py-3">
+                    <span className="font-medium">{notif.title}</span>
+                    <span className="text-xs text-gray-500">{notif.time}</span>
+                  </DropdownMenuItem>
+                ))
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </header>
+
+      {/* Mobile Header */}
+      <div className="md:hidden fixed top-0 left-0 right-0 z-50 bg-white border-b border-gray-200">
+        <div className="flex items-center justify-between px-4 py-3">
+          <div className="flex items-center gap-3">
+            <span className="text-xl text-black logo-font">Gendei</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="icon" onClick={() => setSearchOpen(!searchOpen)}>
+              <Search className="w-5 h-5" />
+            </Button>
+            <QuickAddDialog locale={locale} />
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="relative">
+                  <Bell className="w-5 h-5" />
+                  {notifications.length > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center text-[10px]">
+                      {notifications.length}
+                    </span>
+                  )}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-72">
+                <DropdownMenuLabel>Notificações</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {notifications.map((notif) => (
+                  <DropdownMenuItem key={notif.id} className="flex flex-col items-start gap-1 py-3">
+                    <span className="font-medium text-sm">{notif.title}</span>
+                    <span className="text-xs text-gray-500">{notif.time}</span>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </div>
+        {/* Mobile Search Bar */}
+        {searchOpen && (
+          <div className="px-4 pb-3">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <Input
+                type="search"
+                placeholder="Buscar..."
+                className="pl-10"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                autoFocus
+              />
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Mobile Sidebar Overlay */}
-      {mobileMenuOpen && (
-        <div
-          className="lg:hidden fixed inset-0 z-40 bg-black/50"
-          onClick={() => setMobileMenuOpen(false)}
-        />
-      )}
-
-      {/* Sidebar */}
-      <div
+      {/* Desktop Sidebar */}
+      <aside
         className={cn(
-          'fixed inset-y-0 left-0 w-64 bg-white border-r border-gray-200 transition-transform duration-300',
-          'lg:z-0 z-40',
-          'lg:translate-x-0',
-          mobileMenuOpen ? 'translate-x-0' : 'lg:translate-x-0 -translate-x-full'
+          'hidden md:flex fixed inset-y-0 left-0 bg-white border-r border-gray-200 flex-col transition-all duration-300 z-40',
+          sidebarCollapsed ? 'w-16' : 'w-64'
         )}
       >
-        <div className="flex flex-col h-full">
-          {/* Logo/Brand - Always visible on desktop, hidden on mobile (shown in header instead) */}
-          <div className="p-6 hidden lg:block">
-            <span className="text-2xl text-black logo-font">Gendei</span>
-            {clinic && <p className="text-sm text-muted-foreground mt-1">{clinic.name}</p>}
-          </div>
+        {/* Logo */}
+        <div className={cn(
+          'h-16 flex items-center border-b border-gray-200',
+          sidebarCollapsed ? 'justify-center px-2' : 'justify-between px-4'
+        )}>
+          {!sidebarCollapsed && (
+            <div>
+              <span className="text-xl text-black logo-font">Gendei</span>
+            </div>
+          )}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+            className="h-8 w-8"
+          >
+            {sidebarCollapsed ? (
+              <PanelLeft className="w-4 h-4" />
+            ) : (
+              <PanelLeftClose className="w-4 h-4" />
+            )}
+          </Button>
+        </div>
 
-          {/* Mobile clinic name */}
-          <div className="lg:hidden p-4 pt-20 border-b border-gray-200">
-            {clinic && <p className="text-sm text-muted-foreground">{clinic.name}</p>}
-          </div>
+        {/* Navigation */}
+        <nav className={cn(
+          'flex-1 overflow-y-auto',
+          sidebarCollapsed ? 'p-2 space-y-2' : 'p-4 space-y-1'
+        )}>
+          <NavigationItems
+            navigation={navigation}
+            pathname={pathname}
+            t={t}
+            collapsed={sidebarCollapsed}
+            todayCount={todayCount}
+          />
+        </nav>
 
-          {/* Navigation */}
-          <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
-            <NavigationItems navigation={navigation} pathname={pathname} t={t} userRole={null} />
-          </nav>
-
-          {/* User section */}
+        {/* User section - only show when expanded */}
+        {!sidebarCollapsed && (
           <div className="p-4 border-t border-gray-200">
             <div className="mb-3">
               <p className="text-sm font-medium text-gray-900 truncate">{currentUser.email}</p>
+              <p className="text-xs text-gray-500">{clinic?.name}</p>
             </div>
-            <Button variant="outline" className="w-full justify-start" onClick={handleSignOut}>
+            <Button variant="outline" className="w-full justify-start" size="sm" onClick={handleSignOut}>
               <LogOut className="w-4 h-4 mr-2" />
               {t('auth.signout')}
             </Button>
           </div>
-        </div>
-      </div>
+        )}
+      </aside>
 
       {/* Main content */}
-      <div className="lg:pl-64 pt-16 lg:pt-0">
-        <div className="p-4 sm:p-6 lg:p-8">{children}</div>
-      </div>
+      <main className={cn(
+        'transition-all duration-300 pt-16 pb-20 md:pb-0',
+        sidebarCollapsed ? 'md:pl-16' : 'md:pl-64'
+      )}>
+        <div className="p-4 sm:p-6 md:p-6">
+          {children}
+        </div>
+      </main>
+
+      {/* Mobile Bottom Navigation */}
+      <MobileBottomNav pathname={pathname} locale={locale} />
     </div>
   );
 }

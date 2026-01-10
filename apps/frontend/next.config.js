@@ -3,6 +3,7 @@ if (process.env.VERCEL === '1' && process.env.NODE_ENV !== 'production') {
   process.env.NODE_ENV = 'production';
 }
 
+const path = require('path');
 const createNextIntlPlugin = require('next-intl/plugin');
 
 const withNextIntl = createNextIntlPlugin('./i18n/request.ts');
@@ -14,6 +15,11 @@ const nextConfig = {
 
   // Enable standalone output for Docker
   output: 'standalone',
+
+  // Fix Turbopack root for monorepo
+  turbopack: {
+    root: path.resolve(__dirname, '../..'),
+  },
 
   // Performance: Optimize package imports for better tree-shaking
   // NOTE: Firebase packages are excluded due to ESM/barrel optimization conflicts

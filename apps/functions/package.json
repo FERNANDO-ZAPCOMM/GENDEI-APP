@@ -24,7 +24,7 @@
     "dotenv": "^17.2.3",
     "express": "^4.18.2",
     "firebase-admin": "^13.6.0",
-    "firebase-functions": "^7.0.0",
+    "firebase-functions": "^7.0.3",
     "jsonwebtoken": "^9.0.2",
     "openai": "^4.52.0",
     "pdf-parse": "^1.1.1",

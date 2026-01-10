@@ -614,6 +614,10 @@
         "messageId": "Message ID: {id}",
         "invalidPhone": "Please enter a valid phone number in E.164 format (e.g., +1234567890)"
       },
+      "preview": {
+        "title": "WhatsApp Preview",
+        "description": "How your bot appears to patients"
+      },
       "danger": {
         "title": "Danger Zone",
         "description": "Permanently disconnect your WhatsApp Business account"
@@ -771,15 +775,14 @@
     "welcome": "Welcome",
     "overview": "Overview",
     "agenda": "Schedule",
-    "appointments": "Appointments",
-    "professionals": "Professionals",
-    "services": "Services",
-    "schedule": "Hours",
+    "patientsSection": "Patients",
     "patients": "Patients",
-    "patientList": "Patient List",
     "conversations": "Conversations",
+    "teamSection": "Team",
     "configuration": "Configuration",
     "clinic": "Clinic",
+    "professionals": "Professionals",
+    "services": "Services",
     "payments": "Payments",
     "whatsapp": "WhatsApp",
     "account": "Account",

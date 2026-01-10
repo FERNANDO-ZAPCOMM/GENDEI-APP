@@ -1,18 +1,19 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
 import {
   Building2,
   UserPlus,
   ClipboardList,
-  Calendar,
   CreditCard,
   MessageCircle,
   CheckCircle2,
-  ArrowRight,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
 import { ONBOARDING_STEPS, type OnboardingStep } from '@/lib/onboarding-types';
@@ -21,7 +22,6 @@ interface OnboardingProgressCardProps {
   clinicInfoComplete: boolean;
   professionalsComplete: boolean;
   servicesComplete: boolean;
-  scheduleComplete: boolean;
   paymentComplete: boolean;
   whatsappComplete: boolean;
   completionPercentage: number;
@@ -32,7 +32,6 @@ const STEP_ICONS = {
   Building2,
   UserPlus,
   ClipboardList,
-  Calendar,
   CreditCard,
   MessageCircle,
 };
@@ -41,150 +40,158 @@ export function OnboardingProgressCard({
   clinicInfoComplete,
   professionalsComplete,
   servicesComplete,
-  scheduleComplete,
   paymentComplete,
   whatsappComplete,
   completionPercentage,
-  nextStep,
 }: OnboardingProgressCardProps) {
   const params = useParams();
-  const router = useRouter();
   const locale = params.locale as string;
 
   const completionStatus = [
     clinicInfoComplete,
     professionalsComplete,
     servicesComplete,
-    scheduleComplete,
     paymentComplete,
     whatsappComplete,
   ];
 
   const completedCount = completionStatus.filter(Boolean).length;
-  const isAllComplete = completedCount === 6;
+  const totalSteps = 5;
+  const isAllComplete = completedCount === totalSteps;
 
-  // Find current step info
-  const currentStepInfo = nextStep ? ONBOARDING_STEPS.find(s => s.step === nextStep) : null;
+  // Auto-collapse when all complete
+  const [isExpanded, setIsExpanded] = useState(!isAllComplete);
 
-  if (isAllComplete) {
+  // Update expansion state when completion changes
+  useEffect(() => {
+    if (isAllComplete) {
+      // Collapse after a short delay to show the completion animation
+      const timer = setTimeout(() => {
+        setIsExpanded(false);
+      }, 1500);
+      return () => clearTimeout(timer);
+    } else {
+      setIsExpanded(true);
+    }
+  }, [isAllComplete]);
+
+  // Build steps with completion status
+  const stepsWithStatus = ONBOARDING_STEPS.map((step, index) => ({
+    ...step,
+    isComplete: completionStatus[index],
+    href: `/${locale}${step.href}`,
+  }));
+
+  // If all complete and collapsed, show minimal view
+  if (isAllComplete && !isExpanded) {
     return (
-      <Card className="border-green-200 bg-green-50/50">
-        <CardContent className="py-6">
-          <div className="flex items-center gap-4">
-            <div className="h-12 w-12 rounded-full bg-green-100 flex items-center justify-center">
-              <CheckCircle2 className="h-6 w-6 text-green-600" />
+      <Card>
+        <CardContent className="py-3">
+          <button
+            onClick={() => setIsExpanded(true)}
+            className="w-full flex items-center justify-between"
+          >
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4 text-green-600" />
+              <div className="text-left">
+                <p className="text-sm font-medium text-gray-900">Configuração Completa!</p>
+                <p className="text-xs text-gray-600">Sua clínica está pronta para receber agendamentos</p>
+              </div>
             </div>
-            <div className="flex-1">
-              <h3 className="font-semibold text-green-900">Configuração Completa!</h3>
-              <p className="text-sm text-green-700">
-                Sua clínica está pronta para receber agendamentos pelo WhatsApp.
-              </p>
-            </div>
-          </div>
+            <ChevronDown className="h-4 w-4 text-gray-500" />
+          </button>
         </CardContent>
       </Card>
     );
   }
 
-  const handleContinue = () => {
-    if (currentStepInfo) {
-      router.push(`/${locale}${currentStepInfo.href}`);
-    }
-  };
-
   return (
-    <Card className="border-blue-200 bg-gradient-to-br from-blue-50/50 to-white">
-      <CardHeader className="pb-4">
-        <div className="flex items-start justify-between">
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
           <div>
-            <CardTitle className="text-lg">Configure sua Clínica</CardTitle>
-            <CardDescription>
-              Complete os passos abaixo para começar a receber agendamentos
-            </CardDescription>
+            <span className="text-sm font-medium">
+              {isAllComplete ? 'Configuração Completa!' : 'Configure sua Clínica'}
+            </span>
+            <p className="text-xs text-gray-500">
+              {isAllComplete
+                ? 'Sua clínica está pronta para receber agendamentos'
+                : `${completedCount} de ${totalSteps} passos completos`}
+            </p>
           </div>
-          <div className="flex items-center gap-2 text-sm font-medium text-blue-600">
-            <span>{completedCount}/6</span>
-            <span className="text-gray-400">passos</span>
-          </div>
+          <button
+            onClick={() => setIsExpanded(!isExpanded)}
+            className="p-1.5 rounded-full hover:bg-gray-100 transition-colors text-gray-500"
+          >
+            {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          </button>
+        </div>
+
+        {/* Progress bar */}
+        <div className="mt-3">
+          <Progress value={completionPercentage} className="h-1.5" />
         </div>
       </CardHeader>
 
-      <CardContent className="space-y-6">
-        {/* Progress bar */}
-        <div className="space-y-2">
-          <Progress value={completionPercentage} className="h-2" />
-          <p className="text-xs text-gray-500 text-right">{completionPercentage}% completo</p>
-        </div>
-
-        {/* Step indicators */}
-        <div className="flex justify-between">
-          {ONBOARDING_STEPS.map((step, index) => {
+      {isExpanded && (
+        <CardContent className="space-y-0 pt-0">
+          {stepsWithStatus.map((step, index) => {
             const Icon = STEP_ICONS[step.icon as keyof typeof STEP_ICONS];
-            const isComplete = completionStatus[index];
-            const isCurrent = step.step === nextStep;
 
             return (
-              <div key={step.step} className="flex flex-col items-center gap-1">
-                <div
-                  className={cn(
-                    'h-10 w-10 rounded-full flex items-center justify-center transition-all',
-                    isComplete
-                      ? 'bg-green-100 text-green-600'
-                      : isCurrent
-                        ? 'bg-blue-100 text-blue-600 ring-2 ring-blue-300'
-                        : 'bg-gray-100 text-gray-400'
-                  )}
-                >
-                  {isComplete ? (
-                    <CheckCircle2 className="h-5 w-5" />
-                  ) : (
-                    <Icon className="h-5 w-5" />
-                  )}
+              <Link
+                key={step.step}
+                href={step.href}
+                className={cn(
+                  'flex items-center gap-3 py-2.5 hover:bg-gray-50 transition-colors -mx-2 px-2 rounded-lg',
+                  index < stepsWithStatus.length - 1 && 'border-b'
+                )}
+              >
+                {/* Status indicator */}
+                <div className={cn(
+                  'h-6 w-6 rounded-full flex items-center justify-center flex-shrink-0',
+                  step.isComplete
+                    ? 'bg-green-100 text-green-600'
+                    : 'bg-gray-100 text-gray-400'
+                )}>
+                  <CheckCircle2 className="h-4 w-4" />
                 </div>
-                <span
-                  className={cn(
-                    'text-[10px] text-center max-w-[60px] leading-tight',
-                    isComplete
-                      ? 'text-green-600 font-medium'
-                      : isCurrent
-                        ? 'text-blue-600 font-medium'
-                        : 'text-gray-400'
-                  )}
-                >
-                  {step.title.split(' ')[0]}
-                </span>
-              </div>
+
+                {/* Icon */}
+                <div className={cn(
+                  'h-6 w-6 rounded-full flex items-center justify-center flex-shrink-0',
+                  step.isComplete
+                    ? 'bg-green-100 text-green-600'
+                    : 'bg-blue-100 text-blue-600'
+                )}>
+                  <Icon className="h-3.5 w-3.5" />
+                </div>
+
+                {/* Content */}
+                <div className="flex-1 min-w-0">
+                  <span className="text-sm font-medium">
+                    {step.title}
+                  </span>
+                  <p className={cn(
+                    'text-xs',
+                    step.isComplete ? 'text-green-600' : 'text-gray-500'
+                  )}>
+                    {step.isComplete ? 'Completo' : step.description}
+                  </p>
+                </div>
+
+                {/* Right status */}
+                <div className="flex-shrink-0">
+                  <CheckCircle2 className={cn(
+                    'h-4 w-4',
+                    step.isComplete ? 'text-green-500' : 'text-gray-300'
+                  )} />
+                </div>
+              </Link>
             );
           })}
-        </div>
-
-        {/* Current step highlight */}
-        {currentStepInfo && (
-          <div className="bg-white rounded-lg border p-4">
-            <div className="flex items-start gap-3">
-              <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
-                {(() => {
-                  const Icon = STEP_ICONS[currentStepInfo.icon as keyof typeof STEP_ICONS];
-                  return <Icon className="h-5 w-5 text-blue-600" />;
-                })()}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs text-blue-600 font-medium uppercase tracking-wide">
-                  Próximo passo
-                </p>
-                <h4 className="font-semibold text-gray-900">{currentStepInfo.title}</h4>
-                <p className="text-sm text-gray-500 mt-0.5">{currentStepInfo.description}</p>
-              </div>
-            </div>
-            <div className="flex justify-end mt-4">
-              <Button onClick={handleContinue}>
-                Continuar Configuração
-                <ArrowRight className="h-4 w-4 ml-2" />
-              </Button>
-            </div>
-          </div>
-        )}
-      </CardContent>
+        </CardContent>
+      )}
     </Card>
   );
 }

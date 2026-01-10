@@ -22,6 +22,7 @@ import appointmentsRouter from './routes/appointments';
 import patientsRouter from './routes/patients';
 import metaRouter from './routes/meta';
 import remindersRouter from './routes/reminders';
+import teamRouter from './routes/team';
 
 // Import services
 import { sendScheduledReminders } from './services/reminders';
@@ -50,6 +51,7 @@ app.use('/appointments', appointmentsRouter);
 app.use('/patients', patientsRouter);
 app.use('/meta', metaRouter);
 app.use('/reminders', remindersRouter);
+app.use('/team', teamRouter);
 
 // Error handler
 app.use(

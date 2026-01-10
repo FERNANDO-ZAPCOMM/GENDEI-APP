@@ -16,7 +16,6 @@ interface SetupChecklistProps {
   clinicInfoComplete: boolean;
   professionalsComplete: boolean;
   servicesComplete: boolean;
-  scheduleComplete: boolean;
   paymentComplete: boolean;
   whatsappComplete: boolean;
   nextStep: OnboardingStep | null;
@@ -26,7 +25,6 @@ export function SetupChecklist({
   clinicInfoComplete,
   professionalsComplete,
   servicesComplete,
-  scheduleComplete,
   paymentComplete,
   whatsappComplete,
   nextStep,
@@ -35,13 +33,12 @@ export function SetupChecklist({
     clinicInfoComplete,
     professionalsComplete,
     servicesComplete,
-    scheduleComplete,
     paymentComplete,
     whatsappComplete,
   ];
 
   const completedCount = completionStatus.filter(Boolean).length;
-  const totalSteps = 6;
+  const totalSteps = 5;
   const progressPercent = (completedCount / totalSteps) * 100;
   const isAllComplete = completedCount === totalSteps;
 

@@ -41,9 +41,11 @@ export interface Professional {
   email?: string;
   phone?: string;
   photoUrl?: string;
+  bio?: string; // Brief description/summary about the professional
   active: boolean;
   workingHours?: WorkingHours;
   appointmentDuration?: number; // Default duration in minutes
+  consultationPrice?: number; // Consultation price in BRL (R$)
   createdAt?: string;
   updatedAt?: string;
 }

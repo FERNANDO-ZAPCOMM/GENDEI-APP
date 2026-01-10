@@ -6,16 +6,47 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { TypingDots } from '@/components/PageLoader';
-import { Building2, Phone, Mail, Clock, Navigation, Globe } from 'lucide-react';
-import { FaWhatsapp } from 'react-icons/fa';
+import {
+  Phone,
+  Clock,
+  MapPin,
+  Info,
+  CheckCircle2,
+  Save,
+  Loader2
+} from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { AddressAutocomplete, AddressDetails } from '@/components/AddressAutocomplete';
 import { ClinicWhatsAppPreview } from '@/components/chat/ClinicWhatsAppPreview';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
+import { cn } from '@/lib/utils';
 import type { ClinicAddress } from '@/lib/clinic-types';
+
+// Business categories (similar to Google Business Profile)
+const BUSINESS_CATEGORIES = [
+  { value: 'clinica_medica', label: 'Clínica Médica' },
+  { value: 'consultorio_odontologico', label: 'Consultório Odontológico' },
+  { value: 'clinica_estetica', label: 'Clínica de Estética' },
+  { value: 'fisioterapia', label: 'Clínica de Fisioterapia' },
+  { value: 'psicologia', label: 'Consultório de Psicologia' },
+  { value: 'nutricao', label: 'Consultório de Nutrição' },
+  { value: 'oftalmologia', label: 'Clínica de Oftalmologia' },
+  { value: 'dermatologia', label: 'Clínica de Dermatologia' },
+  { value: 'pediatria', label: 'Clínica Pediátrica' },
+  { value: 'ortopedia', label: 'Clínica de Ortopedia' },
+  { value: 'cardiologia', label: 'Clínica de Cardiologia' },
+  { value: 'ginecologia', label: 'Clínica de Ginecologia' },
+  { value: 'urologia', label: 'Clínica de Urologia' },
+  { value: 'laboratorio', label: 'Laboratório de Análises' },
+  { value: 'clinica_imagem', label: 'Clínica de Imagem' },
+  { value: 'hospital', label: 'Hospital' },
+  { value: 'pronto_socorro', label: 'Pronto Socorro' },
+  { value: 'outros', label: 'Outros' },
+];
 
 // Days of the week
 const DAYS = [
@@ -29,6 +60,7 @@ const DAYS = [
 ] as const;
 
 type DayKey = typeof DAYS[number]['key'];
+type TabKey = 'basic' | 'contact' | 'location' | 'hours';
 
 // Format selected days into readable string
 const formatDaysString = (selectedDays: Record<DayKey, boolean>): string => {
@@ -43,7 +75,6 @@ const formatDaysString = (selectedDays: Record<DayKey, boolean>): string => {
   if (enabledDays.length === 6 && !selectedDays.dom) {
     return 'Seg-Sáb';
   }
-  // For other combinations, list consecutive ranges
   return enabledDays.map(d => d.label).join(', ');
 };
 
@@ -58,7 +89,7 @@ const formatPhone = (value: string): string => {
 
 // Email validation helper
 const isValidEmail = (email: string): boolean => {
-  if (!email) return true; // Empty is valid (not required)
+  if (!email) return true;
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   return emailRegex.test(email);
 };
@@ -74,8 +105,11 @@ export default function ClinicSettingsPage() {
   const t = useTranslations();
   const { currentClinic, isLoading, updateClinic } = useClinic();
 
+  const [activeTab, setActiveTab] = useState<TabKey>('basic');
   const [formData, setFormData] = useState({
     name: '',
+    category: '',
+    description: '',
     address: '',
     phone: '',
     email: '',
@@ -94,6 +128,8 @@ export default function ClinicSettingsPage() {
     if (currentClinic) {
       setFormData({
         name: currentClinic.name || '',
+        category: (currentClinic as any).category || '',
+        description: (currentClinic as any).description || '',
         address: currentClinic.address || currentClinic.addressData?.formatted || '',
         phone: currentClinic.phone || '',
         email: currentClinic.email || '',
@@ -102,7 +138,6 @@ export default function ClinicSettingsPage() {
       });
       setAddressData(currentClinic.addressData);
 
-      // Parse opening hours if available (format: "Seg-Sex: 08:00-18:00")
       if (currentClinic.openingHours) {
         const match = currentClinic.openingHours.match(/(\d{2}:\d{2})-(\d{2}:\d{2})/);
         if (match) {
@@ -178,6 +213,21 @@ export default function ClinicSettingsPage() {
     }
   };
 
+  // Check completion status for each tab
+  const hasBasicInfo = !!(formData.name && formData.category);
+  const hasContact = !!(formData.phone);
+  const hasLocation = !!(formData.address && addressData);
+  const hasHours = !!(selectedDays && Object.values(selectedDays).some(Boolean));
+
+  const completedTabs = [hasBasicInfo, hasContact, hasLocation, hasHours].filter(Boolean).length;
+
+  const tabs: { key: TabKey; icon: React.ReactNode; label: string; completed: boolean }[] = [
+    { key: 'basic', icon: <Info className="h-4 w-4" />, label: 'Informações', completed: hasBasicInfo },
+    { key: 'contact', icon: <Phone className="h-4 w-4" />, label: 'Contato', completed: hasContact },
+    { key: 'location', icon: <MapPin className="h-4 w-4" />, label: 'Localização', completed: hasLocation },
+    { key: 'hours', icon: <Clock className="h-4 w-4" />, label: 'Horários', completed: hasHours },
+  ];
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -186,49 +236,67 @@ export default function ClinicSettingsPage() {
     );
   }
 
-  // Data for the preview
-  const daysStr = formatDaysString(selectedDays);
-  const previewData = {
-    name: formData.name,
-    phone: formData.phone,
-    email: formData.email,
-    website: formData.website,
-    openingHours: formData.openingHours || (daysStr ? `${daysStr}: ${openTime}-${closeTime}` : ''),
-    address: formData.address,
-    addressData: addressData,
-  };
-
-  // Show preview when there's at least a clinic name
-  const showPreview = Boolean(formData.name?.trim());
-
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 page-transition">
+      {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Configurações da Clínica</h1>
-        <p className="text-muted-foreground">Gerencie as informações da sua clínica</p>
+        <h1 className="text-3xl font-semibold text-gray-900">Configurações da Clínica</h1>
+        <p className="text-gray-600 mt-1">Configure as informações do seu negócio</p>
       </div>
 
-      {/* Main Content - Side-by-side layout */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 380px', gap: '24px' }}>
-        {/* Form Section */}
-        <div>
+      {/* Main Content - Side by side layout */}
+      <div className="flex gap-6">
+        {/* Business Profile Card */}
+        <Card className="flex-1 max-w-2xl">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Perfil do Negócio</CardTitle>
+              <CardDescription>Complete as informações para aparecer corretamente</CardDescription>
+            </div>
+            <div className="text-xs text-muted-foreground">
+              {completedTabs}/4 completos
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Horizontal Tabs */}
+          <div className="flex flex-row gap-1 pb-2 border-b overflow-x-auto">
+            {tabs.map((tab) => (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => setActiveTab(tab.key)}
+                className={cn(
+                  'flex-1 min-w-0 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap',
+                  activeTab === tab.key
+                    ? tab.completed
+                      ? 'border-2 border-green-500 bg-green-50 text-green-700'
+                      : 'border-2 border-gray-400 bg-gray-100 text-gray-700'
+                    : tab.completed
+                      ? 'border border-green-200 bg-green-50 text-green-600 hover:bg-green-100'
+                      : 'border border-gray-200 bg-gray-50 text-gray-500 hover:bg-gray-100'
+                )}
+              >
+                {tab.completed && activeTab !== tab.key ? (
+                  <CheckCircle2 className="h-4 w-4 flex-shrink-0" />
+                ) : (
+                  <span className="flex-shrink-0">{tab.icon}</span>
+                )}
+                <span className="truncate">{tab.label}</span>
+              </button>
+            ))}
+          </div>
+
+          {/* Tab Content */}
           <form onSubmit={handleSubmit}>
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Building2 className="w-5 h-5" />
-                  Informações Básicas
-                </CardTitle>
-                <CardDescription>
-                  Dados de identificação e contato da clínica
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid gap-4 md:grid-cols-2">
+            <div className="min-h-[280px] py-2">
+              {/* Basic Info Tab */}
+              {activeTab === 'basic' && (
+                <div className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="name" className="flex items-center gap-2">
-                      <Building2 className="w-4 h-4" />
-                      Nome da Clínica
+                    <Label htmlFor="name">
+                      Nome do Negócio *
                     </Label>
                     <Input
                       id="name"
@@ -236,12 +304,58 @@ export default function ClinicSettingsPage() {
                       onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                       placeholder="Ex: Clínica São Paulo"
                     />
+                    <p className="text-xs text-muted-foreground">
+                      Use o nome oficial como aparece na fachada
+                    </p>
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="phone" className="flex items-center gap-2">
-                      <Phone className="w-4 h-4" />
-                      Telefone
+                    <Label htmlFor="category">
+                      Categoria *
+                    </Label>
+                    <Select
+                      value={formData.category}
+                      onValueChange={(v) => setFormData({ ...formData, category: v })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione a categoria" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {BUSINESS_CATEGORIES.map((cat) => (
+                          <SelectItem key={cat.value} value={cat.value}>
+                            {cat.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="description">
+                      Descrição
+                    </Label>
+                    <Textarea
+                      id="description"
+                      value={formData.description}
+                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                      placeholder="Descreva os serviços oferecidos..."
+                      rows={4}
+                      maxLength={750}
+                      className="resize-none"
+                    />
+                    <p className="text-xs text-muted-foreground text-right">
+                      {formData.description.length}/750
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Contact Tab */}
+              {activeTab === 'contact' && (
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="phone">
+                      Telefone *
                     </Label>
                     <Input
                       id="phone"
@@ -253,8 +367,7 @@ export default function ClinicSettingsPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="email" className="flex items-center gap-2">
-                      <Mail className="w-4 h-4" />
+                    <Label htmlFor="email">
                       Email
                     </Label>
                     <Input
@@ -271,8 +384,7 @@ export default function ClinicSettingsPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="website" className="flex items-center gap-2">
-                      <Globe className="w-4 h-4" />
+                    <Label htmlFor="website">
                       Website
                     </Label>
                     <Input
@@ -282,21 +394,42 @@ export default function ClinicSettingsPage() {
                       placeholder="https://www.suaclinica.com.br"
                     />
                   </div>
+                </div>
+              )}
 
-                  <div className="space-y-3 md:col-span-2">
-                    <Label className="flex items-center gap-2">
-                      <Clock className="w-4 h-4" />
-                      Horário de Funcionamento
+              {/* Location Tab */}
+              {activeTab === 'location' && (
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="address">
+                      Endereço Completo *
                     </Label>
+                    <AddressAutocomplete
+                      value={formData.address}
+                      addressData={addressData}
+                      onChange={handleAddressChange}
+                      placeholder="Digite o endereço e selecione da lista"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Selecione da lista para obter as coordenadas automaticamente
+                    </p>
+                    <AddressDetails addressData={addressData} />
+                  </div>
+                </div>
+              )}
 
-                    {/* Day selection */}
+              {/* Hours Tab */}
+              {activeTab === 'hours' && (
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>Dias de Funcionamento</Label>
                     <div className="flex flex-wrap gap-2">
                       {DAYS.map((day) => (
                         <label
                           key={day.key}
                           className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition-colors ${
                             selectedDays[day.key]
-                              ? 'bg-primary/10 border-primary text-primary'
+                              ? 'bg-green-600 border-green-600 text-white'
                               : 'bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100'
                           }`}
                         >
@@ -309,11 +442,13 @@ export default function ClinicSettingsPage() {
                         </label>
                       ))}
                     </div>
+                  </div>
 
-                    {/* Time selection */}
+                  <div className="space-y-2">
+                    <Label>Horário</Label>
                     <div className="flex items-center gap-3">
                       <Select value={openTime} onValueChange={(v) => handleTimeChange('open', v)}>
-                        <SelectTrigger className="w-[110px]">
+                        <SelectTrigger className="w-[120px]">
                           <SelectValue placeholder="Abertura" />
                         </SelectTrigger>
                         <SelectContent>
@@ -324,7 +459,7 @@ export default function ClinicSettingsPage() {
                       </Select>
                       <span className="text-muted-foreground">até</span>
                       <Select value={closeTime} onValueChange={(v) => handleTimeChange('close', v)}>
-                        <SelectTrigger className="w-[110px]">
+                        <SelectTrigger className="w-[120px]">
                           <SelectValue placeholder="Fechamento" />
                         </SelectTrigger>
                         <SelectContent>
@@ -334,62 +469,54 @@ export default function ClinicSettingsPage() {
                         </SelectContent>
                       </Select>
                     </div>
+                  </div>
 
-                    {/* Preview of the formatted hours */}
-                    {formData.openingHours && (
-                      <p className="text-sm text-muted-foreground">
-                        Resultado: <span className="font-medium text-foreground">{formData.openingHours}</span>
+                  {formData.openingHours && (
+                    <div className="bg-gray-50 rounded-lg p-3">
+                      <p className="text-sm">
+                        <span className="text-muted-foreground">Resumo: </span>
+                        <span className="font-medium">{formData.openingHours}</span>
                       </p>
-                    )}
-                  </div>
+                    </div>
+                  )}
                 </div>
+              )}
+            </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="address" className="flex items-center gap-2">
-                    <Navigation className="w-4 h-4" />
-                    Endereço Completo
-                  </Label>
-                  <p className="text-xs text-muted-foreground mb-2">
-                    Digite o endereço e selecione da lista para obter as coordenadas automaticamente (usado para enviar localização no WhatsApp)
-                  </p>
-                  <AddressAutocomplete
-                    value={formData.address}
-                    addressData={addressData}
-                    onChange={handleAddressChange}
-                    placeholder="Rua, número, bairro - cidade/UF"
-                  />
-                  <AddressDetails addressData={addressData} />
-                </div>
-
-                <div className="flex justify-end pt-4">
-                  <Button type="submit" disabled={updateClinic.isPending}>
-                    {updateClinic.isPending ? 'Salvando...' : 'Salvar Alterações'}
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+            {/* Save Button */}
+            <Button type="submit" disabled={updateClinic.isPending}>
+              {updateClinic.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Salvando...
+                </>
+              ) : (
+                t('common.save') || 'Salvar'
+              )}
+            </Button>
           </form>
-        </div>
+        </CardContent>
+      </Card>
 
-        {/* Preview Section - Sticky */}
-        <div>
-          <div style={{ position: 'sticky', top: '24px' }}>
+        {/* WhatsApp Preview - Right side, sticky */}
+        <div className="hidden lg:block w-[360px] flex-shrink-0">
+          <div className="sticky top-6">
             <Card>
-              <CardHeader className="pb-4">
-                <CardTitle className="text-sm font-medium">Preview do Assistente</CardTitle>
-                <CardDescription>Veja como seu assistente aparecerá no WhatsApp</CardDescription>
+              <CardHeader>
+                <CardTitle>Prévia do WhatsApp</CardTitle>
+                <CardDescription>Como seu bot aparece para os pacientes</CardDescription>
               </CardHeader>
-              <CardContent className="flex justify-center">
-                {showPreview ? (
-                  <ClinicWhatsAppPreview clinicData={previewData} />
-                ) : (
-                  <div className="border border-dashed border-gray-200 rounded-lg p-8 text-center w-full">
-                    <FaWhatsapp className="h-10 w-10 text-gray-300 mx-auto mb-3" />
-                    <p className="text-sm text-gray-500">
-                      Preencha o nome da clínica para ver o preview
-                    </p>
-                  </div>
-                )}
+              <CardContent className="flex justify-center py-4">
+                <ClinicWhatsAppPreview
+                  clinicData={{
+                    name: formData.name,
+                    phone: formData.phone,
+                    email: formData.email,
+                    openingHours: formData.openingHours || (formatDaysString(selectedDays) ? `${formatDaysString(selectedDays)}: ${openTime}-${closeTime}` : ''),
+                    address: formData.address,
+                    addressData: addressData,
+                  }}
+                />
               </CardContent>
             </Card>
           </div>

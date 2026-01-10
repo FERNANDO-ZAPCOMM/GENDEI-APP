@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { Plus, MoreHorizontal, Pencil, Trash2, ClipboardList, Clock, DollarSign, CheckCircle } from 'lucide-react';
+import { Plus, MoreHorizontal, Pencil, Trash2, ClipboardList, Clock } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { useClinic } from '@/hooks/use-clinic';
@@ -66,11 +66,6 @@ export default function ServicesPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingService, setEditingService] = useState<any>(null);
   const [formData, setFormData] = useState<ServiceFormData>(defaultFormData);
-
-  const stats = useMemo(() => ({
-    total: services.length,
-    active: services.filter(s => s.active).length,
-  }), [services]);
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', {
@@ -136,10 +131,6 @@ export default function ServicesPage() {
     return (
       <div className="space-y-6 page-transition">
         <Skeleton className="h-9 w-48" />
-        <div className="grid grid-cols-2 gap-4">
-          <Skeleton className="h-24" />
-          <Skeleton className="h-24" />
-        </div>
         <Skeleton className="h-64" />
       </div>
     );
@@ -157,37 +148,6 @@ export default function ServicesPage() {
           <Plus className="w-4 h-4 mr-2" />
           Novo Serviço
         </Button>
-      </div>
-
-      {/* Stats Cards */}
-      <div className="grid grid-cols-2 gap-3">
-        <Card className="bg-gradient-to-br from-purple-50 to-white border-purple-100">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs text-purple-600 font-medium">Total de Serviços</p>
-                <p className="text-2xl font-bold text-purple-700">{stats.total}</p>
-              </div>
-              <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center">
-                <ClipboardList className="w-5 h-5 text-purple-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-emerald-100" style={{ background: 'linear-gradient(to bottom right, #f5fefa, white)' }}>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs text-emerald-600 font-medium">Ativos</p>
-                <p className="text-2xl font-bold text-emerald-700">{stats.active}</p>
-              </div>
-              <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center">
-                <CheckCircle className="w-5 h-5 text-emerald-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
       </div>
 
       {/* Services List */}

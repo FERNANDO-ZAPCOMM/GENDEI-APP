@@ -2,7 +2,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from './use-auth';
 import type { WhatsAppStatus, MetaStatusResponse } from '@/lib/types';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+// Use /api prefix to route through Next.js rewrite proxy (avoids CORS)
+const API_URL = '/api';
 
 /**
  * Hook for fetching and managing WhatsApp connection status

@@ -1,7 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from './use-auth';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+// Use /api prefix to route through Next.js rewrite proxy (avoids CORS)
+const API_URL = '/api';
 
 export interface MessageTemplate {
   id: string;

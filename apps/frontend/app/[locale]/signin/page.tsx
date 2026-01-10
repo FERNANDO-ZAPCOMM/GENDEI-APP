@@ -44,11 +44,11 @@ export default function SignInPage() {
     try {
       setLoading(true);
       await signIn(data.email, data.password);
-      router.push(`/${locale}/dashboard`);
+      // Use hard redirect to ensure fresh auth state
+      window.location.href = `/${locale}/dashboard`;
     } catch (error: any) {
       const errorMessage = getFirebaseErrorMessage(error.code);
       toast.error(errorMessage);
-    } finally {
       setLoading(false);
     }
   };
@@ -57,11 +57,11 @@ export default function SignInPage() {
     try {
       setGoogleLoading(true);
       await signInWithGoogle();
-      router.push(`/${locale}/dashboard`);
+      // Use hard redirect to ensure fresh auth state
+      window.location.href = `/${locale}/dashboard`;
     } catch (error: any) {
       const errorMessage = getFirebaseErrorMessage(error.code);
       toast.error(errorMessage);
-    } finally {
       setGoogleLoading(false);
     }
   };
