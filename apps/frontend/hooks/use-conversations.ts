@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from './use-auth';
+import { apiClient } from '@/lib/api';
 
 export enum ConversationState {
   NOVO = 'novo',
@@ -11,7 +12,7 @@ export enum ConversationState {
 
 export interface ConversationDocument {
   id: string;
-  creatorId: string;
+  clinicId: string;
   waUserId: string;
   waUserName?: string;
   waUserPhone?: string;
@@ -41,8 +42,8 @@ export interface ConversationStats {
 export interface MessageLog {
   id: string;
   conversationId: string;
-  creatorId: string;
-  direction: 'in' | 'out';  // Backend enum uses 'in'/'out' not 'inbound'/'outbound'
+  clinicId: string;
+  direction: 'in' | 'out';
   from: string;
   to: string;
   body: string;
@@ -55,11 +56,11 @@ export interface MessageLog {
 }
 
 /**
- * Hook to fetch conversations for a creator
+ * Hook to fetch conversations for a clinic
  */
-export function useConversations(creatorId: string, filters?: ConversationFilters) {
+export function useConversations(clinicId: string, filters?: ConversationFilters) {
   const { getIdToken } = useAuth();
-  const queryKey = ['conversations', creatorId, filters];
+  const queryKey = ['conversations', clinicId, filters];
 
   const { data, isLoading, error, refetch } = useQuery<ConversationDocument[]>({
     queryKey,
@@ -68,29 +69,20 @@ export function useConversations(creatorId: string, filters?: ConversationFilter
       if (!token) throw new Error('Not authenticated');
 
       const params = new URLSearchParams();
+      params.append('clinicId', clinicId);
       if (filters?.state) params.append('state', filters.state);
       if (filters?.isHumanTakeover !== undefined) {
         params.append('isHumanTakeover', filters.isHumanTakeover.toString());
       }
       if (filters?.search) params.append('search', filters.search);
 
-      const response = await fetch(
-        `/api/conversations/creator/${creatorId}?${params.toString()}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        }
+      const result = await apiClient<{ data: ConversationDocument[] }>(
+        `/conversations?${params.toString()}`,
+        { token }
       );
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch conversations');
-      }
-
-      const result = await response.json();
       return result.data || [];
     },
-    enabled: !!creatorId,
+    enabled: !!clinicId,
     retry: 3,
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000),
   });
@@ -106,32 +98,22 @@ export function useConversations(creatorId: string, filters?: ConversationFilter
 /**
  * Hook to fetch conversation statistics
  */
-export function useConversationStats(creatorId: string) {
+export function useConversationStats(clinicId: string) {
   const { getIdToken } = useAuth();
 
   const { data, isLoading, error } = useQuery<ConversationStats>({
-    queryKey: ['conversation-stats', creatorId],
+    queryKey: ['conversation-stats', clinicId],
     queryFn: async () => {
       const token = await getIdToken();
       if (!token) throw new Error('Not authenticated');
 
-      const response = await fetch(
-        `/api/conversations/creator/${creatorId}/stats`,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        }
+      const result = await apiClient<{ data: ConversationStats }>(
+        `/conversations/stats?clinicId=${clinicId}`,
+        { token }
       );
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch conversation stats');
-      }
-
-      const result = await response.json();
       return result.data;
     },
-    enabled: !!creatorId,
+    enabled: !!clinicId,
     retry: 3,
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000),
   });
@@ -146,32 +128,22 @@ export function useConversationStats(creatorId: string) {
 /**
  * Hook to fetch a single conversation
  */
-export function useConversation(creatorId: string, conversationId: string) {
+export function useConversation(clinicId: string, conversationId: string) {
   const { getIdToken } = useAuth();
 
   const { data, isLoading, error, refetch } = useQuery<ConversationDocument>({
-    queryKey: ['conversation', creatorId, conversationId],
+    queryKey: ['conversation', clinicId, conversationId],
     queryFn: async () => {
       const token = await getIdToken();
       if (!token) throw new Error('Not authenticated');
 
-      const response = await fetch(
-        `/api/conversations/${creatorId}/${conversationId}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        }
+      const result = await apiClient<{ data: ConversationDocument }>(
+        `/conversations/${conversationId}?clinicId=${clinicId}`,
+        { token }
       );
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch conversation');
-      }
-
-      const result = await response.json();
       return result.data;
     },
-    enabled: !!creatorId && !!conversationId,
+    enabled: !!clinicId && !!conversationId,
     retry: 3,
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000),
   });
@@ -187,32 +159,22 @@ export function useConversation(creatorId: string, conversationId: string) {
 /**
  * Hook to fetch messages for a conversation
  */
-export function useConversationMessages(creatorId: string, conversationId: string) {
+export function useConversationMessages(clinicId: string, conversationId: string) {
   const { getIdToken } = useAuth();
 
   const { data, isLoading, error, refetch } = useQuery<MessageLog[]>({
-    queryKey: ['conversation-messages', creatorId, conversationId],
+    queryKey: ['conversation-messages', clinicId, conversationId],
     queryFn: async () => {
       const token = await getIdToken();
       if (!token) throw new Error('Not authenticated');
 
-      const response = await fetch(
-        `/api/conversations/${creatorId}/${conversationId}/messages`,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        }
+      const result = await apiClient<{ data: MessageLog[] }>(
+        `/conversations/${conversationId}/messages?clinicId=${clinicId}`,
+        { token }
       );
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch messages');
-      }
-
-      const result = await response.json();
       return result.data || [];
     },
-    enabled: !!creatorId && !!conversationId,
+    enabled: !!clinicId && !!conversationId,
     refetchInterval: 5000, // Poll every 5 seconds for new messages
     retry: 3,
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000),
@@ -235,46 +197,36 @@ export function useTakeoverConversation() {
 
   const mutation = useMutation({
     mutationFn: async ({
-      creatorId,
+      clinicId,
       conversationId,
       userId,
     }: {
-      creatorId: string;
+      clinicId: string;
       conversationId: string;
       userId: string;
     }) => {
       const token = await getIdToken();
       if (!token) throw new Error('Not authenticated');
 
-      const response = await fetch(
-        `/api/conversations/${creatorId}/${conversationId}/takeover`,
+      const result = await apiClient<{ data: { success: boolean } }>(
+        `/conversations/${conversationId}/takeover?clinicId=${clinicId}`,
         {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-          },
+          token,
           body: JSON.stringify({ userId }),
         }
       );
-
-      if (!response.ok) {
-        throw new Error('Failed to take over conversation');
-      }
-
-      const result = await response.json();
       return result.data;
     },
     onSuccess: (_, variables) => {
-      // Invalidate conversation queries to refresh data
       queryClient.invalidateQueries({
-        queryKey: ['conversation', variables.creatorId, variables.conversationId],
+        queryKey: ['conversation', variables.clinicId, variables.conversationId],
       });
       queryClient.invalidateQueries({
-        queryKey: ['conversations', variables.creatorId],
+        queryKey: ['conversations', variables.clinicId],
       });
       queryClient.invalidateQueries({
-        queryKey: ['conversation-stats', variables.creatorId],
+        queryKey: ['conversation-stats', variables.clinicId],
       });
     },
   });
@@ -291,41 +243,33 @@ export function useReleaseConversation() {
 
   const mutation = useMutation({
     mutationFn: async ({
-      creatorId,
+      clinicId,
       conversationId,
     }: {
-      creatorId: string;
+      clinicId: string;
       conversationId: string;
     }) => {
       const token = await getIdToken();
       if (!token) throw new Error('Not authenticated');
 
-      const response = await fetch(
-        `/api/conversations/${creatorId}/${conversationId}/release`,
+      const result = await apiClient<{ data: { success: boolean } }>(
+        `/conversations/${conversationId}/release?clinicId=${clinicId}`,
         {
           method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
+          token,
         }
       );
-
-      if (!response.ok) {
-        throw new Error('Failed to release conversation');
-      }
-
-      const result = await response.json();
       return result.data;
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({
-        queryKey: ['conversation', variables.creatorId, variables.conversationId],
+        queryKey: ['conversation', variables.clinicId, variables.conversationId],
       });
       queryClient.invalidateQueries({
-        queryKey: ['conversations', variables.creatorId],
+        queryKey: ['conversations', variables.clinicId],
       });
       queryClient.invalidateQueries({
-        queryKey: ['conversation-stats', variables.creatorId],
+        queryKey: ['conversation-stats', variables.clinicId],
       });
     },
   });
@@ -342,12 +286,12 @@ export function useSendMessage() {
 
   const mutation = useMutation({
     mutationFn: async ({
-      creatorId,
+      clinicId,
       conversationId,
       message,
       userId,
     }: {
-      creatorId: string;
+      clinicId: string;
       conversationId: string;
       message: string;
       userId: string;
@@ -355,29 +299,62 @@ export function useSendMessage() {
       const token = await getIdToken();
       if (!token) throw new Error('Not authenticated');
 
-      const response = await fetch(
-        `/api/conversations/${creatorId}/${conversationId}/messages`,
+      const result = await apiClient<{ data: { success: boolean; messageId: string } }>(
+        `/conversations/${conversationId}/messages?clinicId=${clinicId}`,
         {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-          },
+          token,
           body: JSON.stringify({ message, userId }),
         }
       );
-
-      if (!response.ok) {
-        throw new Error('Failed to send message');
-      }
-
-      const result = await response.json();
       return result.data;
     },
     onSuccess: (_, variables) => {
-      // Invalidate messages query to refresh chat
       queryClient.invalidateQueries({
-        queryKey: ['conversation-messages', variables.creatorId, variables.conversationId],
+        queryKey: ['conversation-messages', variables.clinicId, variables.conversationId],
+      });
+    },
+  });
+
+  return mutation;
+}
+
+/**
+ * Hook to update conversation state
+ */
+export function useUpdateConversationState() {
+  const { getIdToken } = useAuth();
+  const queryClient = useQueryClient();
+
+  const mutation = useMutation({
+    mutationFn: async ({
+      clinicId,
+      conversationId,
+      state,
+    }: {
+      clinicId: string;
+      conversationId: string;
+      state: ConversationState;
+    }) => {
+      const token = await getIdToken();
+      if (!token) throw new Error('Not authenticated');
+
+      const result = await apiClient<{ data: { success: boolean } }>(
+        `/conversations/${conversationId}?clinicId=${clinicId}`,
+        {
+          method: 'PATCH',
+          token,
+          body: JSON.stringify({ state }),
+        }
+      );
+      return result.data;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: ['conversation', variables.clinicId, variables.conversationId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ['conversations', variables.clinicId],
       });
     },
   });

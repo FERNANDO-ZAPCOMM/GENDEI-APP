@@ -23,14 +23,12 @@ export function usePatients(clinicId: string, filters?: PatientFilters) {
       if (!token) throw new Error('Not authenticated');
 
       const params = new URLSearchParams();
+      params.append('clinicId', clinicId);
       if (filters?.search) params.append('search', filters.search);
       if (filters?.tag) params.append('tag', filters.tag);
       if (filters?.professionalId) params.append('professionalId', filters.professionalId);
 
-      const queryString = params.toString();
-      const url = `/patients/clinic/${clinicId}${queryString ? `?${queryString}` : ''}`;
-
-      return apiClient<Patient[]>(url, { token });
+      return apiClient<Patient[]>(`/patients?${params.toString()}`, { token });
     },
     enabled: !!clinicId,
     staleTime: 5 * 60 * 1000,
@@ -41,7 +39,7 @@ export function usePatients(clinicId: string, filters?: PatientFilters) {
       const token = await getIdToken();
       if (!token) throw new Error('Not authenticated');
 
-      return apiClient<Patient>(`/patients/clinic/${clinicId}`, {
+      return apiClient<Patient>(`/patients`, {
         method: 'POST',
         token,
         body: JSON.stringify(data),
@@ -105,7 +103,7 @@ export function usePatientByPhone(clinicId: string, phone: string) {
       if (!token) throw new Error('Not authenticated');
 
       try {
-        return await apiClient<Patient>(`/patients/clinic/${clinicId}/phone/${phone}`, {
+        return await apiClient<Patient>(`/patients/by-phone/${phone}`, {
           token,
           suppressErrorLog: true,
         });

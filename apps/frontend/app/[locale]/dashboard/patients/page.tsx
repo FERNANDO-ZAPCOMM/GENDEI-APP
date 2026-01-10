@@ -119,35 +119,37 @@ export default function PatientsPage() {
         <p className="text-sm sm:text-base text-gray-600 mt-1">Gerencie os pacientes da sua clinica</p>
       </div>
 
-      {/* Stats Cards - 3 cards to fit nicely */}
-      <div className="grid grid-cols-3 gap-3" style={{ maxWidth: 'calc(672px + 24px + 360px)' }}>
-        <Card className="bg-gradient-to-br from-indigo-50 to-white border-indigo-100">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs text-indigo-600 font-medium">Total</p>
-                <p className="text-2xl font-bold text-indigo-700">{stats.total}</p>
+      {/* Stats Cards Row - Desktop */}
+      <div className="hidden lg:grid grid-cols-3 gap-6">
+        <div className="col-span-2 grid grid-cols-2 gap-6">
+          <Card className="bg-gradient-to-br from-indigo-50 to-white border-indigo-100">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-indigo-600 font-medium">Total</p>
+                  <p className="text-2xl font-bold text-indigo-700">{stats.total}</p>
+                </div>
+                <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center">
+                  <Users className="w-5 h-5 text-indigo-600" />
+                </div>
               </div>
-              <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center">
-                <Users className="w-5 h-5 text-indigo-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
 
-        <Card className="border-emerald-100" style={{ background: 'linear-gradient(to bottom right, #f5fefa, white)' }}>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs text-emerald-600 font-medium">Novos este Mes</p>
-                <p className="text-2xl font-bold text-emerald-700">{stats.newThisMonth}</p>
+          <Card className="border-emerald-100" style={{ background: 'linear-gradient(to bottom right, #f5fefa, white)' }}>
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-emerald-600 font-medium">Novos este Mes</p>
+                  <p className="text-2xl font-bold text-emerald-700">{stats.newThisMonth}</p>
+                </div>
+                <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center">
+                  <Calendar className="w-5 h-5 text-emerald-600" />
+                </div>
               </div>
-              <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center">
-                <Calendar className="w-5 h-5 text-emerald-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </div>
 
         <Card className="bg-gradient-to-br from-blue-50 to-white border-blue-100">
           <CardContent className="p-4">
@@ -164,206 +166,273 @@ export default function PatientsPage() {
         </Card>
       </div>
 
-      {/* Two Column Layout - Same as Clinic page */}
-      <div className="flex gap-6">
-        {/* Left Column - Patient List (constrained like clinic page) */}
-        <Card className="flex-1 max-w-2xl h-[420px] flex flex-col">
-            <CardHeader className="pb-3 flex-shrink-0">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div>
-                  <CardTitle className="text-base">Lista de Pacientes</CardTitle>
-                  <CardDescription>
-                    {patients.length === 0
-                      ? 'Nenhum paciente encontrado'
-                      : `${patients.length} paciente(s)`}
-                  </CardDescription>
-                </div>
-                {/* Search */}
-                <div className="relative w-full sm:w-64">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Buscar..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10"
-                  />
-                </div>
+      {/* Mobile Stats Cards */}
+      <div className="lg:hidden grid grid-cols-3 gap-3">
+        <Card className="bg-gradient-to-br from-indigo-50 to-white border-indigo-100">
+          <CardContent className="p-4">
+            <div className="text-center">
+              <p className="text-xs text-indigo-600 font-medium">Total</p>
+              <p className="text-2xl font-bold text-indigo-700">{stats.total}</p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-emerald-100" style={{ background: 'linear-gradient(to bottom right, #f5fefa, white)' }}>
+          <CardContent className="p-4">
+            <div className="text-center">
+              <p className="text-xs text-emerald-600 font-medium">Novos</p>
+              <p className="text-2xl font-bold text-emerald-700">{stats.newThisMonth}</p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gradient-to-br from-blue-50 to-white border-blue-100">
+          <CardContent className="p-4">
+            <div className="text-center">
+              <p className="text-xs text-blue-600 font-medium">Com Consultas</p>
+              <p className="text-2xl font-bold text-blue-700">{stats.withAppointments}</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Two Column Layout - Patient List aligned with Total+Novos, Filter aligned with Com Consultas */}
+      <div className="hidden lg:grid grid-cols-3 gap-6">
+        {/* Patient List spans 2 columns */}
+        <Card className="col-span-2 h-[420px] flex flex-col">
+          <CardHeader className="pb-3 flex-shrink-0">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <CardTitle className="text-base">Lista de Pacientes</CardTitle>
+                <CardDescription>
+                  {patients.length === 0
+                    ? 'Nenhum paciente encontrado'
+                    : `${patients.length} paciente(s)`}
+                </CardDescription>
               </div>
-            </CardHeader>
-            <CardContent className="flex-1 overflow-y-auto">
-              {isLoading ? (
-                <div className="space-y-2">
-                  <Skeleton className="h-12 w-full" />
-                  <Skeleton className="h-12 w-full" />
-                  <Skeleton className="h-12 w-full" />
+              {/* Search */}
+              <div className="relative w-full sm:w-64">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="flex-1 overflow-y-auto">
+            {isLoading ? (
+              <div className="space-y-2">
+                <Skeleton className="h-12 w-full" />
+                <Skeleton className="h-12 w-full" />
+                <Skeleton className="h-12 w-full" />
+              </div>
+            ) : patients.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full text-center">
+                <div className="w-16 h-16 rounded-full bg-muted/50 flex items-center justify-center mb-4">
+                  <Users className="w-8 h-8 text-muted-foreground/50" />
                 </div>
-              ) : patients.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-full text-center">
-                  <div className="w-16 h-16 rounded-full bg-muted/50 flex items-center justify-center mb-4">
-                    <Users className="w-8 h-8 text-muted-foreground/50" />
+                <p className="text-muted-foreground text-sm">
+                  {searchQuery || selectedProfessionalId
+                    ? 'Nenhum paciente encontrado'
+                    : 'Pacientes serao adicionados via WhatsApp'}
+                </p>
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Nome</TableHead>
+                    <TableHead>Telefone</TableHead>
+                    <TableHead>E-mail</TableHead>
+                    <TableHead>Consultas</TableHead>
+                    <TableHead>Ultima Consulta</TableHead>
+                    <TableHead className="text-right">Acoes</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {patients.map((patient) => (
+                    <TableRow key={patient.id}>
+                      <TableCell className="font-medium">{patient.name}</TableCell>
+                      <TableCell>{patient.phone}</TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {patient.email || '-'}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="secondary">
+                          {patient.totalAppointments || 0}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {patient.lastAppointmentAt
+                          ? format(new Date(patient.lastAppointmentAt), 'dd/MM/yyyy', { locale: ptBR })
+                          : '-'}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="sm">
+                              <MoreHorizontal className="w-4 h-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              onClick={() => handleDelete(patient.id)}
+                              className="text-destructive"
+                            >
+                              <Trash2 className="w-4 h-4 mr-2" />
+                              Excluir
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Professional Filter - aligned with Com Consultas */}
+        <Card className="h-[420px] flex flex-col">
+          <CardHeader className="pb-3 flex-shrink-0">
+            <CardTitle className="text-base">Filtrar por Profissional</CardTitle>
+            <CardDescription>
+              {selectedProfessionalId
+                ? 'Clique para limpar filtro'
+                : 'Selecione para filtrar'}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2 flex-1 overflow-y-auto">
+            {activeProfessionals.length === 0 ? (
+              <div className="flex items-center justify-center h-full">
+                <p className="text-sm text-muted-foreground text-center">
+                  Nenhum profissional ativo
+                </p>
+              </div>
+            ) : (
+              activeProfessionals.map((professional) => (
+                <div
+                  key={professional.id}
+                  onClick={() => handleProfessionalSelect(professional.id)}
+                  className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-colors ${
+                    selectedProfessionalId === professional.id
+                      ? 'bg-indigo-100 border-2 border-indigo-500'
+                      : 'hover:bg-muted/50 border-2 border-transparent'
+                  }`}
+                >
+                  <Avatar className="h-9 w-9">
+                    <AvatarImage src={professional.photoUrl} alt={professional.name} />
+                    <AvatarFallback className="bg-indigo-100 text-indigo-700 text-xs">
+                      {getInitials(professional.name)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{professional.name}</p>
+                    {professional.specialty && (
+                      <p className="text-xs text-muted-foreground truncate">
+                        {getSpecialtyName(professional.specialty)}
+                      </p>
+                    )}
                   </div>
-                  <p className="text-muted-foreground text-sm">
-                    {searchQuery || selectedProfessionalId
-                      ? 'Nenhum paciente encontrado'
-                      : 'Pacientes serao adicionados via WhatsApp'}
-                  </p>
                 </div>
-              ) : (
-                <>
-                  {/* Mobile Card View */}
-                  <div className="sm:hidden space-y-3">
-                    {patients.map((patient) => (
-                      <div key={patient.id} className="border rounded-lg p-3 bg-white">
-                        <div className="flex items-start justify-between">
-                          <div>
-                            <h3 className="font-medium text-sm">{patient.name}</h3>
-                            <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
-                              <Phone className="w-3 h-3" />
-                              {patient.phone}
-                            </div>
-                            {patient.email && (
-                              <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
-                                <Mail className="w-3 h-3" />
-                                {patient.email}
-                              </div>
-                            )}
-                            <div className="flex items-center gap-2 mt-2">
-                              <Badge variant="secondary" className="text-xs">
-                                {patient.totalAppointments || 0} consulta(s)
-                              </Badge>
-                            </div>
+              ))
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Mobile: Patient List Card */}
+      <div className="lg:hidden">
+        <Card className="h-[420px] flex flex-col">
+          <CardHeader className="pb-3 flex-shrink-0">
+            <div className="flex flex-col gap-3">
+              <div>
+                <CardTitle className="text-base">Lista de Pacientes</CardTitle>
+                <CardDescription>
+                  {patients.length === 0
+                    ? 'Nenhum paciente encontrado'
+                    : `${patients.length} paciente(s)`}
+                </CardDescription>
+              </div>
+              <div className="relative w-full">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="flex-1 overflow-y-auto">
+            {isLoading ? (
+              <div className="space-y-2">
+                <Skeleton className="h-12 w-full" />
+                <Skeleton className="h-12 w-full" />
+                <Skeleton className="h-12 w-full" />
+              </div>
+            ) : patients.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full text-center">
+                <div className="w-16 h-16 rounded-full bg-muted/50 flex items-center justify-center mb-4">
+                  <Users className="w-8 h-8 text-muted-foreground/50" />
+                </div>
+                <p className="text-muted-foreground text-sm">
+                  {searchQuery || selectedProfessionalId
+                    ? 'Nenhum paciente encontrado'
+                    : 'Pacientes serao adicionados via WhatsApp'}
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {patients.map((patient) => (
+                  <div key={patient.id} className="border rounded-lg p-3 bg-white">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <h3 className="font-medium text-sm">{patient.name}</h3>
+                        <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
+                          <Phone className="w-3 h-3" />
+                          {patient.phone}
+                        </div>
+                        {patient.email && (
+                          <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
+                            <Mail className="w-3 h-3" />
+                            {patient.email}
                           </div>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                                <MoreHorizontal className="w-4 h-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem
-                                onClick={() => handleDelete(patient.id)}
-                                className="text-destructive"
-                              >
-                                <Trash2 className="w-4 h-4 mr-2" />
-                                Excluir
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+                        )}
+                        <div className="flex items-center gap-2 mt-2">
+                          <Badge variant="secondary" className="text-xs">
+                            {patient.totalAppointments || 0} consulta(s)
+                          </Badge>
                         </div>
                       </div>
-                    ))}
-                  </div>
-
-                  {/* Desktop Table View */}
-                  <div className="hidden sm:block">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Nome</TableHead>
-                          <TableHead>Telefone</TableHead>
-                          <TableHead>E-mail</TableHead>
-                          <TableHead>Consultas</TableHead>
-                          <TableHead>Ultima Consulta</TableHead>
-                          <TableHead className="text-right">Acoes</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {patients.map((patient) => (
-                          <TableRow key={patient.id}>
-                            <TableCell className="font-medium">{patient.name}</TableCell>
-                            <TableCell>{patient.phone}</TableCell>
-                            <TableCell className="text-muted-foreground">
-                              {patient.email || '-'}
-                            </TableCell>
-                            <TableCell>
-                              <Badge variant="secondary">
-                                {patient.totalAppointments || 0}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-muted-foreground">
-                              {patient.lastAppointmentAt
-                                ? format(new Date(patient.lastAppointmentAt), 'dd/MM/yyyy', { locale: ptBR })
-                                : '-'}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button variant="ghost" size="sm">
-                                    <MoreHorizontal className="w-4 h-4" />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                  <DropdownMenuItem
-                                    onClick={() => handleDelete(patient.id)}
-                                    className="text-destructive"
-                                  >
-                                    <Trash2 className="w-4 h-4 mr-2" />
-                                    Excluir
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </>
-              )}
-            </CardContent>
-          </Card>
-
-        {/* Right Column - Professionals Filter (Desktop Only, same width as clinic page) */}
-        <div className="hidden lg:block w-[360px] flex-shrink-0">
-          <div className="sticky top-6 space-y-4">
-            <Card className="h-[420px] flex flex-col">
-              <CardHeader className="pb-3 flex-shrink-0">
-                <CardTitle className="text-base">Filtrar por Profissional</CardTitle>
-                <CardDescription>
-                  {selectedProfessionalId
-                    ? 'Clique para limpar filtro'
-                    : 'Selecione para filtrar'}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-2 flex-1 overflow-y-auto">
-                {activeProfessionals.length === 0 ? (
-                  <div className="flex items-center justify-center h-full">
-                    <p className="text-sm text-muted-foreground text-center">
-                      Nenhum profissional ativo
-                    </p>
-                  </div>
-                ) : (
-                  activeProfessionals.map((professional) => (
-                    <div
-                      key={professional.id}
-                      onClick={() => handleProfessionalSelect(professional.id)}
-                      className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-colors ${
-                        selectedProfessionalId === professional.id
-                          ? 'bg-indigo-100 border-2 border-indigo-500'
-                          : 'hover:bg-muted/50 border-2 border-transparent'
-                      }`}
-                    >
-                      <Avatar className="h-9 w-9">
-                        <AvatarImage src={professional.photoUrl} alt={professional.name} />
-                        <AvatarFallback className="bg-indigo-100 text-indigo-700 text-xs">
-                          {getInitials(professional.name)}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">{professional.name}</p>
-                        {professional.specialty && (
-                          <p className="text-xs text-muted-foreground truncate">
-                            {getSpecialtyName(professional.specialty)}
-                          </p>
-                        )}
-                      </div>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                            <MoreHorizontal className="w-4 h-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            onClick={() => handleDelete(patient.id)}
+                            className="text-destructive"
+                          >
+                            <Trash2 className="w-4 h-4 mr-2" />
+                            Excluir
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
-                  ))
-                )}
-              </CardContent>
-            </Card>
-          </div>
-        </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

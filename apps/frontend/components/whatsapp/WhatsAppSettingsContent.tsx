@@ -4,9 +4,9 @@ import { useTranslations } from 'next-intl';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
 import { useMetaStatus } from '@/hooks/use-meta-status';
-import { useProducts } from '@/hooks/use-products';
-import { useCreator } from '@/hooks/use-creator';
-import { Loader2, ShoppingBag } from 'lucide-react';
+import { useServices } from '@/hooks/use-services';
+import { useClinic } from '@/hooks/use-clinic';
+import { Loader2, Stethoscope } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ConnectMetaButton } from './ConnectMetaButton';
@@ -27,8 +27,8 @@ export function WhatsAppSettingsContent() {
   const params = useParams();
   const locale = params.locale as string || 'pt-BR';
   const { currentUser } = useAuth();
-  const { currentCreator } = useCreator();
-  const { data: products } = useProducts(currentCreator?.id || '');
+  const { currentClinic: clinic } = useClinic();
+  const { data: services } = useServices(clinic?.id || '');
 
   const {
     status,
@@ -41,7 +41,7 @@ export function WhatsAppSettingsContent() {
     isDisconnecting,
   } = useMetaStatus(currentUser?.uid || '');
 
-  const hasProducts = products && products.length > 0;
+  const hasServices = services && services.length > 0;
 
   // Loading state
   if (isLoading) {
@@ -110,24 +110,24 @@ export function WhatsAppSettingsContent() {
       {/* CONNECTED/NEEDS_VERIFICATION/READY: Show connection status */}
       {!isDisconnected && (
         <>
-          {/* Alert to add first product when WhatsApp is connected but no products - TOP OF PAGE */}
-          {isReady && !hasProducts && (
+          {/* Alert to add first service when WhatsApp is connected but no services - TOP OF PAGE */}
+          {isReady && !hasServices && (
             <Card className="border-amber-200 bg-amber-50">
               <CardContent className="py-4">
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
-                    <ShoppingBag className="h-5 w-5 text-amber-600" />
+                    <Stethoscope className="h-5 w-5 text-amber-600" />
                     <p className="text-sm text-amber-800">
-                      {t('connections.whatsapp.addProductAlert') || 'WhatsApp conectado! Agora adicione seu primeiro produto para começar a vender.'}
+                      {t('connections.whatsapp.addServiceAlert') || 'WhatsApp conectado! Agora adicione seu primeiro serviço para começar a agendar.'}
                     </p>
                   </div>
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => router.push(`/${locale}/dashboard/products/new`)}
+                    onClick={() => router.push(`/${locale}/dashboard/services`)}
                     className="text-amber-700 border-amber-300 hover:bg-amber-100 shrink-0"
                   >
-                    {t('connections.whatsapp.addProductButton') || 'Adicionar Produto'}
+                    {t('connections.whatsapp.addServiceButton') || 'Adicionar Serviço'}
                   </Button>
                 </div>
               </CardContent>

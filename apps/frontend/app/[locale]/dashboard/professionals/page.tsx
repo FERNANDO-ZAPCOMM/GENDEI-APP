@@ -6,7 +6,6 @@ import { Plus, MoreHorizontal, Pencil, Trash2, Clock, Loader2, UserPlus, Camera,
 import { toast } from 'sonner';
 
 import { useClinic } from '@/hooks/use-clinic';
-import { useCreator } from '@/hooks/use-creator';
 import { useProfessionals } from '@/hooks/use-professionals';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -85,7 +84,6 @@ const formatPrice = (price: number) => {
 export default function ProfessionalsPage() {
   const t = useTranslations();
   const { currentClinic: clinic, isLoading: clinicLoading } = useClinic();
-  const { currentCreator } = useCreator();
   const { data: professionals, isLoading, create, update, remove } = useProfessionals(clinic?.id || '');
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -118,7 +116,7 @@ export default function ProfessionalsPage() {
   };
 
   const handlePhotoUpload = async (file: File, isDialog: boolean = false) => {
-    if (!file || !currentCreator?.id) return;
+    if (!file || !clinic?.id) return;
 
     // Validate file type
     if (!file.type.startsWith('image/')) {
@@ -136,7 +134,7 @@ export default function ProfessionalsPage() {
     try {
       const downloadURL = await uploadFile({
         file,
-        creatorId: currentCreator.id,
+        creatorId: clinic.id,
         onProgress: (progress) => {
           // Could show progress if needed
         },

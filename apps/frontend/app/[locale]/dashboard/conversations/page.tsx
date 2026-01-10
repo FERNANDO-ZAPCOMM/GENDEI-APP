@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Search, Filter, MessageSquare, MessageCircle, Zap, CalendarDays, Eye } from 'lucide-react';
 import { format } from 'date-fns';
 
-import { useCreator } from '@/hooks/use-creator';
+import { useClinic } from '@/hooks/use-clinic';
 import { getConversationStateColor } from '@/lib/meta-utils';
 import {
   useConversations,
@@ -71,7 +71,7 @@ function getColorFromString(str: string): string {
 function ConversationsPageContent() {
   const t = useTranslations();
   const router = useRouter();
-  const { currentCreator: creator } = useCreator();
+  const { currentClinic: clinic } = useClinic();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [stateFilter, setStateFilter] = useState<ConversationState | 'all'>('all');
@@ -86,8 +86,8 @@ function ConversationsPageContent() {
     return f;
   }, [stateFilter, takeoverFilter, searchQuery]);
 
-  const { conversations, isLoading } = useConversations(creator?.id || '', filters);
-  const { stats } = useConversationStats(creator?.id || '');
+  const { conversations, isLoading } = useConversations(clinic?.id || '', filters);
+  const { stats } = useConversationStats(clinic?.id || '');
 
   const handleConversationClick = (conversationId: string) => {
     router.push(`/dashboard/conversations/${conversationId}`);

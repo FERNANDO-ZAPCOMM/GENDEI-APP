@@ -91,7 +91,19 @@ export async function verifyAuth(
 async function findClinicForUser(
   userId: string
 ): Promise<{ clinicId: string; isOwner: boolean; isAdmin: boolean } | null> {
-  // Check if user is a clinic owner
+  // In Gendei, the clinic document ID is the user's UID for owners
+  // Check if a clinic exists with doc ID = userId (primary ownership check)
+  const clinicDoc = await db.collection(CLINICS).doc(userId).get();
+
+  if (clinicDoc.exists) {
+    return {
+      clinicId: userId,
+      isOwner: true,
+      isAdmin: true,
+    };
+  }
+
+  // Check if user is a clinic owner via ownerId field (legacy support)
   const ownerQuery = await db
     .collection(CLINICS)
     .where('ownerId', '==', userId)

@@ -16,7 +16,7 @@ export function useProfessionals(clinicId: string) {
       const token = await getIdToken();
       if (!token) throw new Error('Not authenticated');
 
-      return apiClient<Professional[]>(`/professionals/clinic/${clinicId}`, {
+      return apiClient<Professional[]>(`/professionals?clinicId=${clinicId}`, {
         token,
       });
     },
@@ -29,10 +29,10 @@ export function useProfessionals(clinicId: string) {
       const token = await getIdToken();
       if (!token) throw new Error('Not authenticated');
 
-      return apiClient<Professional>(`/professionals/clinic/${clinicId}`, {
+      return apiClient<Professional>(`/professionals`, {
         method: 'POST',
         token,
-        body: JSON.stringify(data),
+        body: JSON.stringify({ ...data, clinicId }),
       });
     },
     onSuccess: () => {
@@ -46,9 +46,9 @@ export function useProfessionals(clinicId: string) {
       if (!token) throw new Error('Not authenticated');
 
       return apiClient<Professional>(`/professionals/${id}`, {
-        method: 'PATCH',
+        method: 'PUT',
         token,
-        body: JSON.stringify(data),
+        body: JSON.stringify({ ...data, clinicId }),
       });
     },
     onSuccess: () => {
@@ -61,7 +61,7 @@ export function useProfessionals(clinicId: string) {
       const token = await getIdToken();
       if (!token) throw new Error('Not authenticated');
 
-      return apiClient<void>(`/professionals/${id}`, {
+      return apiClient<void>(`/professionals/${id}?clinicId=${clinicId}`, {
         method: 'DELETE',
         token,
       });

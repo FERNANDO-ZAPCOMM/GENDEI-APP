@@ -7,7 +7,7 @@ import { ArrowLeft, Bot, User, Send, Play, Pause, Clock } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 
-import { useCreator } from '@/hooks/use-creator';
+import { useClinic } from '@/hooks/use-clinic';
 import { useAuth } from '@/hooks/use-auth';
 import { getConversationStateColor } from '@/lib/meta-utils';
 import {
@@ -29,17 +29,17 @@ export default function ConversationDetailPage() {
   const t = useTranslations();
   const params = useParams();
   const router = useRouter();
-  const { currentCreator: creator } = useCreator();
+  const { currentClinic: clinic } = useClinic();
   const { currentUser } = useAuth();
 
   const conversationId = params.id as string;
 
   const { conversation, isLoading, refetch } = useConversation(
-    creator?.id || '',
+    clinic?.id || '',
     conversationId
   );
   const { messages, isLoading: messagesLoading } = useConversationMessages(
-    creator?.id || '',
+    clinic?.id || '',
     conversationId
   );
 
@@ -56,11 +56,11 @@ export default function ConversationDetailPage() {
   }, [messages]);
 
   const handleTakeover = async () => {
-    if (!creator?.id || !currentUser?.uid) return;
+    if (!clinic?.id || !currentUser?.uid) return;
 
     try {
       await takeoverMutation.mutateAsync({
-        creatorId: creator.id,
+        clinicId: clinic.id,
         conversationId,
         userId: currentUser.uid,
       });
@@ -72,11 +72,11 @@ export default function ConversationDetailPage() {
   };
 
   const handleRelease = async () => {
-    if (!creator?.id) return;
+    if (!clinic?.id) return;
 
     try {
       await releaseMutation.mutateAsync({
-        creatorId: creator.id,
+        clinicId: clinic.id,
         conversationId,
       });
       toast.success(t('conversations.release.success'));
@@ -87,11 +87,11 @@ export default function ConversationDetailPage() {
   };
 
   const handleSendMessage = async () => {
-    if (!creator?.id || !currentUser?.uid || !messageInput.trim()) return;
+    if (!clinic?.id || !currentUser?.uid || !messageInput.trim()) return;
 
     try {
       await sendMessageMutation.mutateAsync({
-        creatorId: creator.id,
+        clinicId: clinic.id,
         conversationId,
         message: messageInput.trim(),
         userId: currentUser.uid,

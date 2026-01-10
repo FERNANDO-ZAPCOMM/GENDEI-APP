@@ -189,8 +189,40 @@ export default function AppointmentsPage() {
         <p className="text-sm sm:text-base text-gray-600 mt-1">Gerencie as consultas agendadas</p>
       </div>
 
-      {/* Stats Cards - Span both columns (calc: max-w-2xl + gap + sidebar) */}
-      <div className="grid grid-cols-3 gap-3" style={{ maxWidth: 'calc(672px + 24px + 360px)' }}>
+      {/* Stats Cards Row */}
+      <div className="hidden lg:grid grid-cols-3 gap-6">
+        <div className="col-span-2 grid grid-cols-2 gap-6">
+          <Card className="bg-gradient-to-br from-blue-50 to-white border-blue-100">
+            <CardContent className="p-4">
+              <div className="text-center">
+                <p className="text-xs text-blue-600 font-medium">Hoje</p>
+                <p className="text-2xl font-bold text-blue-700">{stats.today}</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-emerald-100" style={{ background: 'linear-gradient(to bottom right, #f5fefa, white)' }}>
+            <CardContent className="p-4">
+              <div className="text-center">
+                <p className="text-xs text-emerald-600 font-medium">Confirmados</p>
+                <p className="text-2xl font-bold text-emerald-700">{stats.confirmed}</p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        <Card className="bg-gradient-to-br from-yellow-50 to-white border-yellow-100">
+          <CardContent className="p-4">
+            <div className="text-center">
+              <p className="text-xs text-yellow-600 font-medium">Pendentes</p>
+              <p className="text-2xl font-bold text-yellow-700">{stats.pending}</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Mobile Stats Cards */}
+      <div className="lg:hidden grid grid-cols-3 gap-3">
         <Card className="bg-gradient-to-br from-blue-50 to-white border-blue-100">
           <CardContent className="p-4">
             <div className="text-center">
@@ -219,116 +251,152 @@ export default function AppointmentsPage() {
         </Card>
       </div>
 
-      {/* Two Column Layout - Same as Clinic page */}
-      <div className="flex gap-6">
-        {/* Left Column - Calendar (constrained like clinic page) */}
-        <Card className="flex-1 max-w-2xl h-[420px] flex flex-col">
-            <CardHeader className="pb-3 flex-shrink-0">
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="text-base">Calendario</CardTitle>
-                  <CardDescription>Visualize e gerencie horarios</CardDescription>
-                </div>
-                {/* Date Navigation */}
-                <div className="flex items-center gap-2">
-                  <Button variant="outline" size="icon" onClick={handlePrevWeek}>
-                    <ChevronLeft className="w-4 h-4" />
-                  </Button>
-                  <div className="text-center min-w-[120px]">
-                    <p className="text-sm font-medium">
-                      {format(monday, 'dd/MM')} - {format(addDays(monday, 6), 'dd/MM')}
-                    </p>
-                  </div>
-                  <Button variant="outline" size="icon" onClick={handleNextWeek}>
-                    <ChevronRight className="w-4 h-4" />
-                  </Button>
-                  <Button variant="ghost" size="sm" onClick={() => setSelectedDate(new Date())}>
-                    Hoje
-                  </Button>
-                </div>
+      {/* Two Column Layout - Calendar aligned with Hoje+Confirmados, Filter aligned with Pendentes */}
+      <div className="hidden lg:grid grid-cols-3 gap-6">
+        {/* Calendar spans 2 columns - aligned with Hoje + Confirmados */}
+        <Card className="col-span-2 h-[420px] flex flex-col">
+          <CardHeader className="pb-3 flex-shrink-0">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-base">Calendario</CardTitle>
+                <CardDescription>Visualize e gerencie horarios</CardDescription>
               </div>
-            </CardHeader>
-            <CardContent className="p-2 flex-1 overflow-hidden">
-              <CalendarGrid
-                selectedDate={selectedDate}
-                viewMode={viewMode}
-                appointments={appointments}
-                timeBlocks={timeBlocks}
-                professionals={professionals}
-                selectedProfessional={selectedProfessional}
-                onAppointmentClick={handleAppointmentClick}
-                onBlockTime={handleBlockTime}
-                onRemoveBlock={handleRemoveBlock}
-              />
-            </CardContent>
-          </Card>
+              {/* Date Navigation */}
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="icon" onClick={handlePrevWeek}>
+                  <ChevronLeft className="w-4 h-4" />
+                </Button>
+                <div className="text-center min-w-[120px]">
+                  <p className="text-sm font-medium">
+                    {format(monday, 'dd/MM')} - {format(addDays(monday, 6), 'dd/MM')}
+                  </p>
+                </div>
+                <Button variant="outline" size="icon" onClick={handleNextWeek}>
+                  <ChevronRight className="w-4 h-4" />
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => setSelectedDate(new Date())}>
+                  Hoje
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="p-2 flex-1 overflow-hidden">
+            <CalendarGrid
+              selectedDate={selectedDate}
+              viewMode={viewMode}
+              appointments={appointments}
+              timeBlocks={timeBlocks}
+              professionals={professionals}
+              selectedProfessional={selectedProfessional}
+              onAppointmentClick={handleAppointmentClick}
+              onBlockTime={handleBlockTime}
+              onRemoveBlock={handleRemoveBlock}
+            />
+          </CardContent>
+        </Card>
 
-        {/* Right Column - Professionals List (Desktop Only, sticky like clinic page) */}
-        <div className="hidden lg:block w-[360px] flex-shrink-0">
-          <div className="sticky top-6">
-            <Card className="h-[420px] flex flex-col">
-              <CardHeader className="pb-3 flex-shrink-0">
-                <CardTitle className="text-base">Filtrar por Profissional</CardTitle>
-                <CardDescription>
-                  {selectedProfessional === 'all'
-                    ? 'Selecione para filtrar'
-                    : 'Clique para limpar filtro'}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-2 flex-1 overflow-y-auto">
-                {activeProfessionals.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center h-full text-center">
-                    <User className="w-8 h-8 text-muted-foreground/50 mb-2" />
-                    <p className="text-sm text-muted-foreground">Nenhum profissional cadastrado</p>
-                  </div>
-                ) : (
-                  activeProfessionals.map((professional) => {
-                    const isSelected = selectedProfessional === professional.id;
-                    return (
-                      <div
-                        key={professional.id}
-                        onClick={() => handleProfessionalSelect(professional.id)}
-                        className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all ${
-                          isSelected
-                            ? 'bg-primary/10 border-2 border-primary'
-                            : 'border border-gray-100 hover:bg-gray-50'
-                        }`}
-                      >
-                        <Avatar className="w-10 h-10">
-                          <AvatarImage src={professional.photoUrl} alt={professional.name} />
-                          <AvatarFallback className="text-sm bg-gray-100">
-                            {getInitials(professional.name)}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-sm truncate">{professional.name}</p>
-                          {professional.specialty && (
-                            <p className="text-xs text-muted-foreground truncate">
-                              {getSpecialtyName(professional.specialty)}
-                            </p>
-                          )}
-                          <div className="flex items-center gap-2 mt-1">
-                            <span className="text-xs text-muted-foreground">
-                              {professional.appointmentDuration || 30}min
-                            </span>
-                            {(professional.consultationPrice ?? 0) > 0 && (
-                              <span className="text-xs font-medium text-green-600">
-                                {formatPrice(professional.consultationPrice ?? 0)}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                        {isSelected && (
-                          <div className="w-2 h-2 rounded-full bg-primary" />
+        {/* Professional Filter - aligned with Pendentes */}
+        <Card className="h-[420px] flex flex-col">
+          <CardHeader className="pb-3 flex-shrink-0">
+            <CardTitle className="text-base">Filtrar por Profissional</CardTitle>
+            <CardDescription>
+              {selectedProfessional === 'all'
+                ? 'Selecione para filtrar'
+                : 'Clique para limpar filtro'}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2 flex-1 overflow-y-auto">
+            {activeProfessionals.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full text-center">
+                <User className="w-8 h-8 text-muted-foreground/50 mb-2" />
+                <p className="text-sm text-muted-foreground">Nenhum profissional cadastrado</p>
+              </div>
+            ) : (
+              activeProfessionals.map((professional) => {
+                const isSelected = selectedProfessional === professional.id;
+                return (
+                  <div
+                    key={professional.id}
+                    onClick={() => handleProfessionalSelect(professional.id)}
+                    className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all ${
+                      isSelected
+                        ? 'bg-primary/10 border-2 border-primary'
+                        : 'border border-gray-100 hover:bg-gray-50'
+                    }`}
+                  >
+                    <Avatar className="w-10 h-10">
+                      <AvatarImage src={professional.photoUrl} alt={professional.name} />
+                      <AvatarFallback className="text-sm bg-gray-100">
+                        {getInitials(professional.name)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm truncate">{professional.name}</p>
+                      {professional.specialty && (
+                        <p className="text-xs text-muted-foreground truncate">
+                          {getSpecialtyName(professional.specialty)}
+                        </p>
+                      )}
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="text-xs text-muted-foreground">
+                          {professional.appointmentDuration || 30}min
+                        </span>
+                        {(professional.consultationPrice ?? 0) > 0 && (
+                          <span className="text-xs font-medium text-green-600">
+                            {formatPrice(professional.consultationPrice ?? 0)}
+                          </span>
                         )}
                       </div>
-                    );
-                  })
-                )}
-              </CardContent>
-            </Card>
-          </div>
-        </div>
+                    </div>
+                    {isSelected && (
+                      <div className="w-2 h-2 rounded-full bg-primary" />
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Mobile: Calendar Card */}
+      <div className="lg:hidden">
+        <Card className="h-[420px] flex flex-col">
+          <CardHeader className="pb-3 flex-shrink-0">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-base">Calendario</CardTitle>
+                <CardDescription>Visualize e gerencie horarios</CardDescription>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="icon" onClick={handlePrevWeek}>
+                  <ChevronLeft className="w-4 h-4" />
+                </Button>
+                <div className="text-center min-w-[100px]">
+                  <p className="text-xs font-medium">
+                    {format(monday, 'dd/MM')} - {format(addDays(monday, 6), 'dd/MM')}
+                  </p>
+                </div>
+                <Button variant="outline" size="icon" onClick={handleNextWeek}>
+                  <ChevronRight className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="p-2 flex-1 overflow-hidden">
+            <CalendarGrid
+              selectedDate={selectedDate}
+              viewMode={viewMode}
+              appointments={appointments}
+              timeBlocks={timeBlocks}
+              professionals={professionals}
+              selectedProfessional={selectedProfessional}
+              onAppointmentClick={handleAppointmentClick}
+              onBlockTime={handleBlockTime}
+              onRemoveBlock={handleRemoveBlock}
+            />
+          </CardContent>
+        </Card>
       </div>
 
       {/* Mobile: Professional Filter */}

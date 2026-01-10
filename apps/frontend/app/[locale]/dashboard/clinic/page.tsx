@@ -25,28 +25,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from '@/lib/utils';
 import type { ClinicAddress } from '@/lib/clinic-types';
-
-// Business categories (similar to Google Business Profile)
-const BUSINESS_CATEGORIES = [
-  { value: 'clinica_medica', label: 'Clínica Médica' },
-  { value: 'consultorio_odontologico', label: 'Consultório Odontológico' },
-  { value: 'clinica_estetica', label: 'Clínica de Estética' },
-  { value: 'fisioterapia', label: 'Clínica de Fisioterapia' },
-  { value: 'psicologia', label: 'Consultório de Psicologia' },
-  { value: 'nutricao', label: 'Consultório de Nutrição' },
-  { value: 'oftalmologia', label: 'Clínica de Oftalmologia' },
-  { value: 'dermatologia', label: 'Clínica de Dermatologia' },
-  { value: 'pediatria', label: 'Clínica Pediátrica' },
-  { value: 'ortopedia', label: 'Clínica de Ortopedia' },
-  { value: 'cardiologia', label: 'Clínica de Cardiologia' },
-  { value: 'ginecologia', label: 'Clínica de Ginecologia' },
-  { value: 'urologia', label: 'Clínica de Urologia' },
-  { value: 'laboratorio', label: 'Laboratório de Análises' },
-  { value: 'clinica_imagem', label: 'Clínica de Imagem' },
-  { value: 'hospital', label: 'Hospital' },
-  { value: 'pronto_socorro', label: 'Pronto Socorro' },
-  { value: 'outros', label: 'Outros' },
-];
+import { clinicCategories } from '@/lib/clinic-categories';
 
 // Days of the week
 const DAYS = [
@@ -321,9 +300,9 @@ export default function ClinicSettingsPage() {
                         <SelectValue placeholder="Selecione a categoria" />
                       </SelectTrigger>
                       <SelectContent>
-                        {BUSINESS_CATEGORIES.map((cat) => (
-                          <SelectItem key={cat.value} value={cat.value}>
-                            {cat.label}
+                        {clinicCategories.map((cat) => (
+                          <SelectItem key={cat.id} value={cat.id}>
+                            {cat.name}
                           </SelectItem>
                         ))}
                       </SelectContent>

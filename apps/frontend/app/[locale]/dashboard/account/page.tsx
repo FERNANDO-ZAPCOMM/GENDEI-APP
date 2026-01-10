@@ -4,7 +4,7 @@ import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useTranslations } from 'next-intl';
-import { useCreator } from '@/hooks/use-creator';
+import { useClinic } from '@/hooks/use-clinic';
 import { useAuth } from '@/hooks/use-auth';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
@@ -35,7 +35,7 @@ type CredentialsForm = z.infer<typeof CredentialsSchema>;
 
 export default function AccountPage() {
   const t = useTranslations();
-  const { currentCreator: creator, updateCreator } = useCreator();
+  const { currentClinic: clinic, updateClinic } = useClinic();
   const { currentUser, updateProfile, updateEmail, updatePassword } = useAuth();
   const [showPasswords, setShowPasswords] = useState(false);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
@@ -67,13 +67,13 @@ export default function AccountPage() {
 
   // Update profile form values when data loads
   useEffect(() => {
-    if (currentUser?.displayName || creator?.name) {
+    if (currentUser?.displayName || clinic?.name) {
       profileForm.reset({
         displayName: currentUser?.displayName || '',
-        companyName: creator?.name || '',
+        companyName: clinic?.name || '',
       });
     }
-  }, [currentUser?.displayName, creator?.name, profileForm]);
+  }, [currentUser?.displayName, clinic?.name, profileForm]);
 
   const handleSaveProfile = async (data: ProfileForm) => {
     setIsSavingProfile(true);
@@ -84,8 +84,8 @@ export default function AccountPage() {
       }
 
       // Update company name if changed
-      if (data.companyName !== creator?.name) {
-        await updateCreator.mutateAsync({ name: data.companyName?.trim() || '' });
+      if (data.companyName !== clinic?.name) {
+        await updateClinic.mutateAsync({ name: data.companyName?.trim() || '' });
       }
 
       toast.success(t('settings.user.saved') || 'Salvo com sucesso!');

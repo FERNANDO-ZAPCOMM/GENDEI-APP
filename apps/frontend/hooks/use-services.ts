@@ -16,7 +16,7 @@ export function useServices(clinicId: string) {
       const token = await getIdToken();
       if (!token) throw new Error('Not authenticated');
 
-      return apiClient<Service[]>(`/services/clinic/${clinicId}`, {
+      return apiClient<Service[]>(`/services?clinicId=${clinicId}`, {
         token,
       });
     },
@@ -29,10 +29,10 @@ export function useServices(clinicId: string) {
       const token = await getIdToken();
       if (!token) throw new Error('Not authenticated');
 
-      return apiClient<Service>(`/services/clinic/${clinicId}`, {
+      return apiClient<Service>(`/services`, {
         method: 'POST',
         token,
-        body: JSON.stringify(data),
+        body: JSON.stringify({ ...data, clinicId }),
       });
     },
     onSuccess: () => {
@@ -46,9 +46,9 @@ export function useServices(clinicId: string) {
       if (!token) throw new Error('Not authenticated');
 
       return apiClient<Service>(`/services/${id}`, {
-        method: 'PATCH',
+        method: 'PUT',
         token,
-        body: JSON.stringify(data),
+        body: JSON.stringify({ ...data, clinicId }),
       });
     },
     onSuccess: () => {
@@ -61,7 +61,7 @@ export function useServices(clinicId: string) {
       const token = await getIdToken();
       if (!token) throw new Error('Not authenticated');
 
-      return apiClient<void>(`/services/${id}`, {
+      return apiClient<void>(`/services/${id}?clinicId=${clinicId}`, {
         method: 'DELETE',
         token,
       });
