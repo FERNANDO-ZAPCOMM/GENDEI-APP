@@ -75,6 +75,7 @@ export interface Service {
   duration: number; // Duration in minutes
   price: number;
   active: boolean;
+  modality?: 'presencial' | 'online' | 'ambos'; // Service modality
   professionalIds?: string[]; // Professionals who can perform this service
   requiresDeposit?: boolean;
   depositAmount?: number;

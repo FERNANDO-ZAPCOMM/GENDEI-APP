@@ -1,16 +1,15 @@
 // Gendei Onboarding Types
 
-export type OnboardingStep = 1 | 2 | 3 | 4 | 5;
+export type OnboardingStep = 1 | 2 | 3 | 4;
 
 export interface ClinicSetupStatus {
   clinicInfoComplete: boolean;      // Step 1: Clinic name is set
-  professionalsComplete: boolean;   // Step 2: At least 1 active professional (with schedule)
-  servicesComplete: boolean;        // Step 3: At least 1 active service
-  paymentComplete: boolean;         // Step 4: Payment method configured
-  whatsappComplete: boolean;        // Step 5: WhatsApp status = READY
+  professionalsComplete: boolean;   // Step 2: At least 1 active professional
+  paymentComplete: boolean;         // Step 3: Payment method configured
+  whatsappComplete: boolean;        // Step 4: WhatsApp status = READY
   completionPercentage: number;     // 0-100
   nextStep: OnboardingStep | null;  // First incomplete step, null if all complete
-  completedSteps: number;           // Count of completed steps (0-5)
+  completedSteps: number;           // Count of completed steps (0-4)
 }
 
 export interface OnboardingStepInfo {
@@ -34,26 +33,19 @@ export const ONBOARDING_STEPS: Omit<OnboardingStepInfo, 'isComplete' | 'isActive
   {
     step: 2,
     title: 'Profissionais',
-    description: 'Adicione médicos e configure horários',
+    description: 'Adicione médicos e especialidades',
     icon: 'UserPlus',
     href: '/dashboard/professionals',
   },
   {
     step: 3,
-    title: 'Serviços',
-    description: 'Configure consultas, preços e duração',
-    icon: 'ClipboardList',
-    href: '/dashboard/services',
-  },
-  {
-    step: 4,
     title: 'Pagamentos',
     description: 'Convênios, particular e depósito',
     icon: 'CreditCard',
     href: '/dashboard/payments',
   },
   {
-    step: 5,
+    step: 4,
     title: 'WhatsApp',
     description: 'Conecte sua conta comercial',
     icon: 'MessageCircle',

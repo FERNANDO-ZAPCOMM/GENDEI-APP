@@ -213,23 +213,43 @@ export function AddressAutocomplete({
   );
 }
 
-// Helper component to display address details
-export function AddressDetails({ addressData }: { addressData?: ClinicAddress }) {
+// Helper component to display address details with map preview
+export function AddressDetails({ addressData, showMap = true }: { addressData?: ClinicAddress; showMap?: boolean }) {
   if (!addressData) return null;
 
+  const hasCoordinates = addressData.latitude && addressData.longitude;
+
   return (
-    <div className="text-xs text-muted-foreground space-y-1 mt-2 p-2 bg-muted/50 rounded">
-      {addressData.street && <p><strong>Rua:</strong> {addressData.street}</p>}
-      {addressData.neighborhood && <p><strong>Bairro:</strong> {addressData.neighborhood}</p>}
-      {addressData.city && addressData.state && (
-        <p><strong>Cidade:</strong> {addressData.city} - {addressData.state}</p>
-      )}
-      {addressData.postalCode && <p><strong>CEP:</strong> {addressData.postalCode}</p>}
-      {addressData.latitude && addressData.longitude && (
-        <p className="flex items-center gap-1">
-          <span className="w-2 h-2 bg-green-500 rounded-full inline-block" />
-          <strong>Coordenadas:</strong> {addressData.latitude.toFixed(6)}, {addressData.longitude.toFixed(6)}
-        </p>
+    <div className="space-y-3 mt-2">
+      {/* Address details */}
+      <div className="text-xs text-muted-foreground space-y-1 p-2 bg-muted/50 rounded">
+        {addressData.street && <p><strong>Rua:</strong> {addressData.street}</p>}
+        {addressData.neighborhood && <p><strong>Bairro:</strong> {addressData.neighborhood}</p>}
+        {addressData.city && addressData.state && (
+          <p><strong>Cidade:</strong> {addressData.city} - {addressData.state}</p>
+        )}
+        {addressData.postalCode && <p><strong>CEP:</strong> {addressData.postalCode}</p>}
+        {hasCoordinates && (
+          <p className="flex items-center gap-1">
+            <span className="w-2 h-2 bg-green-500 rounded-full inline-block" />
+            <strong>Coordenadas:</strong> {addressData.latitude!.toFixed(6)}, {addressData.longitude!.toFixed(6)}
+          </p>
+        )}
+      </div>
+
+      {/* Map Preview */}
+      {showMap && hasCoordinates && GOOGLE_MAPS_API_KEY && (
+        <div className="rounded-lg overflow-hidden border">
+          <iframe
+            width="100%"
+            height="200"
+            style={{ border: 0 }}
+            loading="lazy"
+            allowFullScreen
+            referrerPolicy="no-referrer-when-downgrade"
+            src={`https://www.google.com/maps/embed/v1/place?key=${GOOGLE_MAPS_API_KEY}&q=${addressData.latitude},${addressData.longitude}&zoom=16`}
+          />
+        </div>
       )}
     </div>
   );

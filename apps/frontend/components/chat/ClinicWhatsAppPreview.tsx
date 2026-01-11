@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useEffect, useRef } from 'react';
 import { cn } from '@/lib/utils';
 import type { ClinicAddress } from '@/lib/clinic-types';
 
@@ -23,55 +23,196 @@ interface PreviewMessage {
   text: string;
 }
 
+// Determine which scenario to show based on filled data
+type ConversationScenario = 'empty' | 'name-only' | 'location' | 'hours' | 'contact' | 'complete';
+
+function getScenario(data: ClinicPreviewData): ConversationScenario {
+  const hasName = Boolean(data.name?.trim());
+  const hasAddress = Boolean(data.addressData?.formatted || data.address?.trim());
+  const hasHours = Boolean(data.openingHours?.trim());
+  const hasContact = Boolean(data.phone?.trim() || data.email?.trim());
+
+  if (!hasName) return 'empty';
+  if (hasAddress && hasHours && hasContact) return 'complete';
+  if (hasAddress) return 'location';
+  if (hasHours) return 'hours';
+  if (hasContact) return 'contact';
+  return 'name-only';
+}
+
 export function ClinicWhatsAppPreview({ clinicData, className }: ClinicWhatsAppPreviewProps) {
+  const chatContainerRef = useRef<HTMLDivElement>(null);
+
   const previewMessages = useMemo<PreviewMessage[]>(() => {
     const messages: PreviewMessage[] = [];
     const clinicName = clinicData.name || 'Sua Clínica';
+    const scenario = getScenario(clinicData);
 
     // Default conversation if no clinic name
-    if (!clinicData.name) {
+    if (scenario === 'empty') {
       return [
         { who: 'patient', text: 'Olá, gostaria de agendar uma consulta' },
         { who: 'bot', text: 'Olá! Bem-vindo! Sou o assistente virtual. Preencha os dados da clínica para ver a conversa personalizada.' },
       ];
     }
 
-    // Patient initiates
+    // Build address string for display
+    const addressDisplay = clinicData.addressData?.formatted
+      || clinicData.address
+      || '';
+
+    const neighborhoodCity = clinicData.addressData
+      ? [clinicData.addressData.neighborhood, clinicData.addressData.city].filter(Boolean).join(', ')
+      : '';
+
+    // SCENARIO: Location-focused conversation (when address is filled)
+    if (scenario === 'location') {
+      messages.push({
+        who: 'patient',
+        text: 'Olá, onde fica a clínica?',
+      });
+      messages.push({
+        who: 'bot',
+        text: `Olá! Bem-vindo à ${clinicName}! 😊`,
+      });
+      messages.push({
+        who: 'bot',
+        text: `📍 Estamos localizados em:\n${addressDisplay}`,
+      });
+      if (neighborhoodCity) {
+        messages.push({
+          who: 'patient',
+          text: `Ah, conheço a região de ${neighborhoodCity.split(',')[0]}!`,
+        });
+        messages.push({
+          who: 'bot',
+          text: 'Ótimo! Quer que eu verifique os horários disponíveis para você? 🗓️',
+        });
+      }
+      return messages;
+    }
+
+    // SCENARIO: Hours-focused conversation (when hours is filled)
+    if (scenario === 'hours') {
+      messages.push({
+        who: 'patient',
+        text: 'Qual o horário de funcionamento?',
+      });
+      messages.push({
+        who: 'bot',
+        text: `Olá! Bem-vindo à ${clinicName}! 😊`,
+      });
+      messages.push({
+        who: 'bot',
+        text: `🕐 Nosso horário de atendimento é:\n${clinicData.openingHours}`,
+      });
+      messages.push({
+        who: 'patient',
+        text: 'Perfeito, quero agendar!',
+      });
+      messages.push({
+        who: 'bot',
+        text: 'Ótimo! Qual especialidade você procura? 🤔',
+      });
+      return messages;
+    }
+
+    // SCENARIO: Contact-focused conversation (when phone/email is filled)
+    if (scenario === 'contact') {
+      messages.push({
+        who: 'patient',
+        text: 'Preciso de mais informações',
+      });
+      messages.push({
+        who: 'bot',
+        text: `Olá! Bem-vindo à ${clinicName}! 😊 Como posso ajudar?`,
+      });
+      messages.push({
+        who: 'patient',
+        text: 'Vocês têm algum contato direto?',
+      });
+      const contactInfo: string[] = [];
+      if (clinicData.phone) contactInfo.push(`📞 ${clinicData.phone}`);
+      if (clinicData.email) contactInfo.push(`📧 ${clinicData.email}`);
+      messages.push({
+        who: 'bot',
+        text: `Claro! Nossos contatos:\n${contactInfo.join('\n')}`,
+      });
+      messages.push({
+        who: 'bot',
+        text: 'Mas posso agendar sua consulta agora mesmo! 🚀',
+      });
+      return messages;
+    }
+
+    // SCENARIO: Complete setup - show full conversation
+    if (scenario === 'complete') {
+      messages.push({
+        who: 'patient',
+        text: 'Olá, gostaria de agendar uma consulta',
+      });
+      messages.push({
+        who: 'bot',
+        text: `Olá! Bem-vindo à ${clinicName}! 🎉`,
+      });
+      messages.push({
+        who: 'patient',
+        text: 'Onde fica a clínica?',
+      });
+      messages.push({
+        who: 'bot',
+        text: `📍 ${addressDisplay}`,
+      });
+      messages.push({
+        who: 'patient',
+        text: 'E o horário?',
+      });
+      messages.push({
+        who: 'bot',
+        text: `🕐 ${clinicData.openingHours}`,
+      });
+      messages.push({
+        who: 'patient',
+        text: 'Perfeito! Quero agendar',
+      });
+      messages.push({
+        who: 'bot',
+        text: 'Ótimo! Verificando horários disponíveis... ✨',
+      });
+      return messages;
+    }
+
+    // SCENARIO: Name-only (default greeting)
     messages.push({
       who: 'patient',
       text: 'Olá, gostaria de agendar uma consulta',
     });
-
-    // Bot greeting
     messages.push({
       who: 'bot',
-      text: `Olá! Bem-vindo à ${clinicName}! 🎉 Sou o assistente virtual e estou aqui para ajudar você a agendar sua consulta.`,
+      text: `Olá! Bem-vindo à ${clinicName}! 🎉 Sou o assistente virtual e estou aqui para ajudar você.`,
     });
-
-    // Bot follow-up
-    let followUp = 'Me conta, qual especialidade você procura? 🤔';
-    if (clinicData.openingHours) {
-      followUp = `Funcionamos ${clinicData.openingHours}. Qual horário seria melhor para você? 🤔`;
-    }
     messages.push({
       who: 'bot',
-      text: followUp,
+      text: 'Me conta, qual especialidade você procura? 🤔',
     });
-
-    // Patient response
     messages.push({
       who: 'patient',
       text: 'Quero agendar para amanhã',
     });
-
-    // Bot confirms
     messages.push({
       who: 'bot',
-      text: 'Show! Deixa eu verificar os horários disponíveis para você! ✨',
+      text: 'Show! Deixa eu verificar os horários disponíveis! ✨',
     });
 
     return messages;
   }, [clinicData]);
+
+  // Auto-scroll to bottom when messages change
+  useEffect(() => {
+    if (chatContainerRef.current) {
+      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+    }
+  }, [previewMessages]);
 
   const timeStr = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
@@ -133,6 +274,7 @@ export function ClinicWhatsAppPreview({ clinicData, className }: ClinicWhatsAppP
 
           {/* Chat Area */}
           <div
+            ref={chatContainerRef}
             style={{
               flex: 1,
               padding: '12px',

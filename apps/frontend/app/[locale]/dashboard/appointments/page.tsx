@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
+import { useSearchParams } from 'next/navigation';
 import { format, addDays, isToday, parseISO, startOfWeek } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
@@ -74,11 +75,22 @@ const getInitials = (name: string) => {
 
 export default function AppointmentsPage() {
   const t = useTranslations();
+  const searchParams = useSearchParams();
   const { currentClinic: clinic, isLoading: clinicLoading } = useClinic();
   const { data: professionals = [] } = useProfessionals(clinic?.id || '');
 
   const [selectedDate, setSelectedDate] = useState(new Date());
-  const [selectedProfessional, setSelectedProfessional] = useState<string>('all');
+
+  // Get professional from URL query parameter
+  const professionalFromUrl = searchParams.get('professional');
+  const [selectedProfessional, setSelectedProfessional] = useState<string>(professionalFromUrl || 'all');
+
+  // Update selected professional when URL param changes
+  useEffect(() => {
+    if (professionalFromUrl) {
+      setSelectedProfessional(professionalFromUrl);
+    }
+  }, [professionalFromUrl]);
   const [viewMode] = useState<'day' | 'week'>('week'); // Always week view
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);

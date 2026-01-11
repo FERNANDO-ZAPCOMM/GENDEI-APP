@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useRef } from 'react';
-import { useTranslations } from 'next-intl';
-import { Plus, MoreHorizontal, Pencil, Trash2, Clock, Loader2, UserPlus, Camera, User, DollarSign } from 'lucide-react';
+import { useTranslations, useLocale } from 'next-intl';
+import { useRouter } from 'next/navigation';
+import { Plus, MoreHorizontal, Pencil, Trash2, Clock, Loader2, UserPlus, Camera, User, DollarSign, Calendar } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { useClinic } from '@/hooks/use-clinic';
@@ -84,6 +85,8 @@ const formatPrice = (price: number) => {
 
 export default function ProfessionalsPage() {
   const t = useTranslations();
+  const locale = useLocale();
+  const router = useRouter();
   const { currentClinic: clinic, isLoading: clinicLoading } = useClinic();
   const { data: professionals, isLoading, create, update, remove } = useProfessionals(clinic?.id || '');
 
@@ -229,6 +232,10 @@ export default function ProfessionalsPage() {
       .slice(0, 2);
   };
 
+  // Filters state
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  const [selectedSpecialty, setSelectedSpecialty] = useState<string>('all');
+
   if (clinicLoading || !clinic) {
     return (
       <div className="space-y-6 page-transition">
@@ -239,6 +246,20 @@ export default function ProfessionalsPage() {
   }
 
   const hasProfessionals = professionals.length > 0;
+
+  // Filter professionals
+  const filteredProfessionals = professionals.filter((p) => {
+    const matchesStatus = statusFilter === 'all' || (statusFilter === 'active' ? p.active : !p.active);
+    const matchesSpecialty = selectedSpecialty === 'all' || p.specialty === selectedSpecialty;
+    return matchesStatus && matchesSpecialty;
+  });
+
+  // Get unique specialties from professionals
+  const usedSpecialties = [...new Set(professionals.map(p => p.specialty).filter((s): s is string => Boolean(s)))];
+
+  // Stats
+  const activeProfessionals = professionals.filter(p => p.active);
+  const inactiveProfessionals = professionals.filter(p => !p.active);
 
   // Avatar upload component
   const AvatarUpload = ({ photoUrl, name, onFileSelect, isUploading, inputRef }: {
@@ -299,6 +320,64 @@ export default function ProfessionalsPage() {
           </Button>
         )}
       </div>
+
+      {/* Statistics Cards - Only show when professionals exist */}
+      {hasProfessionals && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <Card>
+            <CardContent className="pt-4 pb-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-muted-foreground">Total</p>
+                  <p className="text-2xl font-bold">{professionals.length}</p>
+                </div>
+                <div className="p-2 bg-blue-100 rounded-lg">
+                  <User className="w-5 h-5 text-blue-600" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-4 pb-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-muted-foreground">Ativos</p>
+                  <p className="text-2xl font-bold text-emerald-600">{activeProfessionals.length}</p>
+                </div>
+                <div className="p-2 bg-emerald-100 rounded-lg">
+                  <UserPlus className="w-5 h-5 text-emerald-600" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-4 pb-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-muted-foreground">Inativos</p>
+                  <p className="text-2xl font-bold text-slate-500">{inactiveProfessionals.length}</p>
+                </div>
+                <div className="p-2 bg-slate-100 rounded-lg">
+                  <User className="w-5 h-5 text-slate-500" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-4 pb-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-muted-foreground">Especialidades</p>
+                  <p className="text-2xl font-bold text-purple-600">{usedSpecialties.length}</p>
+                </div>
+                <div className="p-2 bg-purple-100 rounded-lg">
+                  <Clock className="w-5 h-5 text-purple-600" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* Add Professional Card - Show when no professionals */}
       {!hasProfessionals && !isLoading && (
@@ -473,174 +552,162 @@ export default function ProfessionalsPage() {
         </Card>
       )}
 
-      {/* Professionals List - Show when professionals exist */}
+      {/* Professionals List with Horizontal Filters - Show when professionals exist */}
       {hasProfessionals && (
-        <Card className="max-w-4xl">
-          <CardHeader>
-            <CardTitle>Lista de Profissionais</CardTitle>
-            <CardDescription>
-              {`${professionals.length} profissional(is) cadastrado(s)`}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {isLoading ? (
-              <div className="space-y-2">
-                <Skeleton className="h-12 w-full" />
-                <Skeleton className="h-12 w-full" />
-                <Skeleton className="h-12 w-full" />
+        <>
+          {/* Horizontal Filters */}
+          <Card>
+            <CardContent className="py-4">
+              <div className="flex flex-wrap items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <Label className="text-sm text-muted-foreground whitespace-nowrap">Status:</Label>
+                  <Select value={statusFilter} onValueChange={(v: any) => setStatusFilter(v)}>
+                    <SelectTrigger className="w-[150px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos ({professionals.length})</SelectItem>
+                      <SelectItem value="active">Ativos ({activeProfessionals.length})</SelectItem>
+                      <SelectItem value="inactive">Inativos ({inactiveProfessionals.length})</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {usedSpecialties.length > 0 && (
+                  <div className="flex items-center gap-2">
+                    <Label className="text-sm text-muted-foreground whitespace-nowrap">Especialidade:</Label>
+                    <Select value={selectedSpecialty} onValueChange={setSelectedSpecialty}>
+                      <SelectTrigger className="w-[180px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todas</SelectItem>
+                        {usedSpecialties.map((specialty) => (
+                          <SelectItem key={specialty} value={specialty}>
+                            {getSpecialtyName(specialty)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+                {(statusFilter !== 'all' || selectedSpecialty !== 'all') && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setStatusFilter('all');
+                      setSelectedSpecialty('all');
+                    }}
+                  >
+                    Limpar Filtros
+                  </Button>
+                )}
+                <div className="ml-auto text-sm text-muted-foreground">
+                  {filteredProfessionals.length === professionals.length
+                    ? `${professionals.length} profissional(is)`
+                    : `${filteredProfessionals.length} de ${professionals.length}`}
+                </div>
               </div>
-            ) : (
-              <>
-                {/* Mobile Card View */}
-                <div className="sm:hidden space-y-3">
-                  {professionals.map((professional) => (
-                    <div key={professional.id} className="border rounded-lg p-3 bg-white">
-                      <div className="flex items-start gap-3">
-                        <Avatar className="w-12 h-12">
-                          <AvatarImage src={professional.photoUrl} alt={professional.name} />
-                          <AvatarFallback className="text-sm bg-gray-100">
-                            {getInitials(professional.name)}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div className="flex-1 min-w-0">
-                          <h3 className="font-medium text-sm">{professional.name}</h3>
-                          {professional.specialty && (
-                            <p className="text-xs text-muted-foreground">{getSpecialtyName(professional.specialty)}</p>
-                          )}
-                          <div className="flex items-center gap-2 mt-2 flex-wrap">
-                            <Badge className={professional.active
-                              ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border-0 text-xs'
-                              : 'bg-slate-100 text-slate-500 hover:bg-slate-100 border-0 text-xs'
-                            }>
-                              {professional.active ? 'Ativo' : 'Inativo'}
-                            </Badge>
-                            <span className="text-xs text-muted-foreground flex items-center gap-1">
-                              <Clock className="w-3 h-3" />
-                              {professional.appointmentDuration || 30}min
+            </CardContent>
+          </Card>
+
+          {/* Full-width Professionals List */}
+          <Card className="h-[calc(100vh-320px)] flex flex-col">
+            <CardHeader className="pb-3 flex-shrink-0">
+              <CardTitle className="text-base">Lista de Profissionais</CardTitle>
+              <CardDescription>
+                Gerencie sua equipe e visualize a agenda de cada profissional
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex-1 overflow-y-auto">
+              {isLoading ? (
+                <div className="space-y-2">
+                  <Skeleton className="h-16 w-full" />
+                  <Skeleton className="h-16 w-full" />
+                  <Skeleton className="h-16 w-full" />
+                </div>
+              ) : filteredProfessionals.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-8 text-center">
+                  <User className="w-10 h-10 text-muted-foreground mb-3" />
+                  <p className="text-muted-foreground">Nenhum profissional encontrado</p>
+                  <p className="text-xs text-muted-foreground mt-1">Ajuste os filtros para ver mais resultados</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {filteredProfessionals.map((professional) => (
+                    <div
+                      key={professional.id}
+                      className="flex items-center gap-4 p-3 border rounded-lg hover:bg-muted/50 transition-colors"
+                    >
+                      <Avatar className="w-12 h-12">
+                        <AvatarImage src={professional.photoUrl} alt={professional.name} />
+                        <AvatarFallback className="text-sm bg-gray-100">
+                          {getInitials(professional.name)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-medium">{professional.name}</h3>
+                        <p className="text-sm text-muted-foreground">
+                          {professional.specialty ? getSpecialtyName(professional.specialty) : 'Sem especialidade'}
+                        </p>
+                        <div className="flex items-center gap-3 mt-1.5 flex-wrap">
+                          <Badge className={professional.active
+                            ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border-0 text-xs'
+                            : 'bg-slate-100 text-slate-500 hover:bg-slate-100 border-0 text-xs'
+                          }>
+                            {professional.active ? 'Ativo' : 'Inativo'}
+                          </Badge>
+                          <span className="text-xs text-muted-foreground flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            {professional.appointmentDuration || 30}min
+                          </span>
+                          {(professional.consultationPrice ?? 0) > 0 && (
+                            <span className="text-xs font-semibold text-emerald-600">
+                              {formatPrice(professional.consultationPrice ?? 0)}
                             </span>
-                            {(professional.consultationPrice ?? 0) > 0 && (
-                              <span className="text-xs font-medium text-green-600">
-                                {formatPrice(professional.consultationPrice ?? 0)}
-                              </span>
-                            )}
-                          </div>
+                          )}
                         </div>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                              <MoreHorizontal className="w-4 h-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => handleOpenDialog(professional)}>
-                              <Pencil className="w-4 h-4 mr-2" />
-                              Editar
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => handleDelete(professional.id)}
-                              className="text-destructive"
-                            >
-                              <Trash2 className="w-4 h-4 mr-2" />
-                              Excluir
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
                       </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="hidden sm:flex"
+                        onClick={() => router.push(`/${locale}/dashboard/appointments?professional=${professional.id}`)}
+                      >
+                        <Calendar className="w-4 h-4 mr-2" />
+                        Ver Agenda
+                      </Button>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                            <MoreHorizontal className="w-4 h-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => router.push(`/${locale}/dashboard/appointments?professional=${professional.id}`)}>
+                            <Calendar className="w-4 h-4 mr-2" />
+                            Ver Agenda
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleOpenDialog(professional)}>
+                            <Pencil className="w-4 h-4 mr-2" />
+                            Editar
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => handleDelete(professional.id)}
+                            className="text-destructive"
+                          >
+                            <Trash2 className="w-4 h-4 mr-2" />
+                            Excluir
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                   ))}
                 </div>
-
-                {/* Desktop Table View */}
-                <div className="hidden sm:block">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Profissional</TableHead>
-                        <TableHead>Especialidade</TableHead>
-                        <TableHead>Duração</TableHead>
-                        <TableHead>Valor</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead className="text-right">Ações</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {professionals.map((professional) => (
-                        <TableRow key={professional.id}>
-                          <TableCell>
-                            <div className="flex items-center gap-3">
-                              <Avatar className="w-10 h-10">
-                                <AvatarImage src={professional.photoUrl} alt={professional.name} />
-                                <AvatarFallback className="text-sm bg-gray-100">
-                                  {getInitials(professional.name)}
-                                </AvatarFallback>
-                              </Avatar>
-                              <div>
-                                <p className="font-medium">{professional.name}</p>
-                                {professional.bio && (
-                                  <p className="text-xs text-muted-foreground line-clamp-1 max-w-[200px]">
-                                    {professional.bio}
-                                  </p>
-                                )}
-                              </div>
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-muted-foreground">
-                            {professional.specialty ? getSpecialtyName(professional.specialty) : '-'}
-                          </TableCell>
-                          <TableCell>
-                            <span className="flex items-center gap-1 text-sm">
-                              <Clock className="w-3 h-3" />
-                              {professional.appointmentDuration || 30}min
-                            </span>
-                          </TableCell>
-                          <TableCell>
-                            {(professional.consultationPrice ?? 0) > 0 ? (
-                              <span className="font-medium text-green-600">
-                                {formatPrice(professional.consultationPrice ?? 0)}
-                              </span>
-                            ) : (
-                              <span className="text-muted-foreground">-</span>
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            <Badge className={professional.active
-                              ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border-0'
-                              : 'bg-slate-100 text-slate-500 hover:bg-slate-100 border-0'
-                            }>
-                              {professional.active ? 'Ativo' : 'Inativo'}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="sm">
-                                  <MoreHorizontal className="w-4 h-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem onClick={() => handleOpenDialog(professional)}>
-                                  <Pencil className="w-4 h-4 mr-2" />
-                                  Editar
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() => handleDelete(professional.id)}
-                                  className="text-destructive"
-                                >
-                                  <Trash2 className="w-4 h-4 mr-2" />
-                                  Excluir
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
+              )}
+            </CardContent>
+          </Card>
+        </>
       )}
 
       {/* Edit Dialog - Only for editing existing professionals */}

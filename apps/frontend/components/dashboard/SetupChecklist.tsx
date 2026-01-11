@@ -15,7 +15,6 @@ import { ONBOARDING_STEPS, type OnboardingStep } from '@/lib/onboarding-types';
 interface SetupChecklistProps {
   clinicInfoComplete: boolean;
   professionalsComplete: boolean;
-  servicesComplete: boolean;
   paymentComplete: boolean;
   whatsappComplete: boolean;
   nextStep: OnboardingStep | null;
@@ -24,7 +23,6 @@ interface SetupChecklistProps {
 export function SetupChecklist({
   clinicInfoComplete,
   professionalsComplete,
-  servicesComplete,
   paymentComplete,
   whatsappComplete,
   nextStep,
@@ -32,13 +30,12 @@ export function SetupChecklist({
   const completionStatus = [
     clinicInfoComplete,
     professionalsComplete,
-    servicesComplete,
     paymentComplete,
     whatsappComplete,
   ];
 
   const completedCount = completionStatus.filter(Boolean).length;
-  const totalSteps = 5;
+  const totalSteps = 4;
   const progressPercent = (completedCount / totalSteps) * 100;
   const isAllComplete = completedCount === totalSteps;
 

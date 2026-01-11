@@ -8,12 +8,12 @@ import {
   Calendar,
   CheckCircle,
   XCircle,
-  Clock,
   Users,
   UserPlus,
   CalendarDays,
   ArrowRight,
   AlertCircle,
+  Clock,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -102,7 +102,6 @@ export default function DashboardPage() {
         <OnboardingProgressCard
           clinicInfoComplete={onboardingStatus.clinicInfoComplete}
           professionalsComplete={onboardingStatus.professionalsComplete}
-          servicesComplete={onboardingStatus.servicesComplete}
           paymentComplete={onboardingStatus.paymentComplete}
           whatsappComplete={onboardingStatus.whatsappComplete}
           completionPercentage={onboardingStatus.completionPercentage}
@@ -115,7 +114,6 @@ export default function DashboardPage() {
         <SetupChecklist
           clinicInfoComplete={onboardingStatus.clinicInfoComplete}
           professionalsComplete={onboardingStatus.professionalsComplete}
-          servicesComplete={onboardingStatus.servicesComplete}
           paymentComplete={onboardingStatus.paymentComplete}
           whatsappComplete={onboardingStatus.whatsappComplete}
           nextStep={onboardingStatus.nextStep}
@@ -314,10 +312,10 @@ export default function DashboardPage() {
               Adicionar Profissional
             </Button>
           </Link>
-          <Link href={`/${locale}/dashboard/services`}>
+          <Link href={`/${locale}/dashboard/appointments`}>
             <Button variant="outline">
-              <Clock className="w-4 h-4 mr-2" />
-              Novo Servico
+              <Calendar className="w-4 h-4 mr-2" />
+              Ver Agenda
             </Button>
           </Link>
           {!isWhatsAppConnected && (

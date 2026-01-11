@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { Plus, MoreHorizontal, Pencil, Trash2, ClipboardList, Clock } from 'lucide-react';
+import { Plus, MoreHorizontal, Pencil, Trash2, ClipboardList, Clock, Video, MapPin, MonitorSmartphone } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { useClinic } from '@/hooks/use-clinic';
@@ -37,6 +37,22 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+
+// Service modality type
+type ServiceModality = 'presencial' | 'online' | 'ambos';
+
+const modalityConfig: Record<ServiceModality, { label: string; icon: any; color: string }> = {
+  presencial: { label: 'Presencial', icon: MapPin, color: 'bg-blue-100 text-blue-700' },
+  online: { label: 'Online', icon: Video, color: 'bg-purple-100 text-purple-700' },
+  ambos: { label: 'Presencial e Online', icon: MonitorSmartphone, color: 'bg-indigo-100 text-indigo-700' },
+};
 
 interface ServiceFormData {
   name: string;
@@ -45,6 +61,7 @@ interface ServiceFormData {
   price: number;
   requiresDeposit: boolean;
   depositAmount: number;
+  modality: ServiceModality;
   active: boolean;
 }
 
@@ -55,6 +72,7 @@ const defaultFormData: ServiceFormData = {
   price: 0,
   requiresDeposit: false,
   depositAmount: 0,
+  modality: 'presencial',
   active: true,
 };
 
@@ -84,6 +102,7 @@ export default function ServicesPage() {
         price: service.price || 0,
         requiresDeposit: service.requiresDeposit || false,
         depositAmount: service.depositAmount || 0,
+        modality: service.modality || 'presencial',
         active: service.active,
       });
     } else {
@@ -182,7 +201,10 @@ export default function ServicesPage() {
             <>
               {/* Mobile Card View */}
               <div className="sm:hidden space-y-3">
-                {services.map((service) => (
+                {services.map((service) => {
+                  const modality = (service.modality || 'presencial') as ServiceModality;
+                  const ModalityIcon = modalityConfig[modality].icon;
+                  return (
                   <div key={service.id} className="border rounded-lg p-3 bg-white">
                     <div className="flex items-start justify-between">
                       <div>
@@ -196,6 +218,10 @@ export default function ServicesPage() {
                             : 'bg-slate-100 text-slate-500 hover:bg-slate-100 border-0 text-xs'
                           }>
                             {service.active ? 'Ativo' : 'Inativo'}
+                          </Badge>
+                          <Badge className={`${modalityConfig[modality].color} hover:${modalityConfig[modality].color} border-0 text-xs`}>
+                            <ModalityIcon className="w-3 h-3 mr-1" />
+                            {modalityConfig[modality].label}
                           </Badge>
                           <span className="text-xs text-muted-foreground flex items-center gap-1">
                             <Clock className="w-3 h-3" />
@@ -228,7 +254,8 @@ export default function ServicesPage() {
                       </DropdownMenu>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
 
               {/* Desktop Table View */}
@@ -237,15 +264,18 @@ export default function ServicesPage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Nome</TableHead>
+                      <TableHead>Modalidade</TableHead>
                       <TableHead>Duração</TableHead>
                       <TableHead>Preço</TableHead>
-                      <TableHead>Depósito</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead className="text-right">Ações</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {services.map((service) => (
+                    {services.map((service) => {
+                      const modality = (service.modality || 'presencial') as ServiceModality;
+                      const ModalityIcon = modalityConfig[modality].icon;
+                      return (
                       <TableRow key={service.id}>
                         <TableCell>
                           <div>
@@ -256,6 +286,12 @@ export default function ServicesPage() {
                           </div>
                         </TableCell>
                         <TableCell>
+                          <Badge className={`${modalityConfig[modality].color} hover:${modalityConfig[modality].color} border-0`}>
+                            <ModalityIcon className="w-3 h-3 mr-1" />
+                            {modalityConfig[modality].label}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
                           <span className="flex items-center gap-1 text-sm">
                             <Clock className="w-3 h-3" />
                             {service.duration}min
@@ -263,13 +299,6 @@ export default function ServicesPage() {
                         </TableCell>
                         <TableCell className="font-semibold text-emerald-600">
                           {formatCurrency(service.price)}
-                        </TableCell>
-                        <TableCell>
-                          {service.requiresDeposit ? (
-                            <span className="text-sm">{formatCurrency(service.depositAmount || 0)}</span>
-                          ) : (
-                            <span className="text-muted-foreground text-sm">-</span>
-                          )}
                         </TableCell>
                         <TableCell>
                           <Badge className={service.active
@@ -302,7 +331,8 @@ export default function ServicesPage() {
                           </DropdownMenu>
                         </TableCell>
                       </TableRow>
-                    ))}
+                      );
+                    })}
                   </TableBody>
                 </Table>
               </div>
@@ -345,6 +375,41 @@ export default function ServicesPage() {
                 placeholder="Descreva o serviço..."
                 rows={3}
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="modality">Modalidade *</Label>
+              <Select
+                value={formData.modality}
+                onValueChange={(value: ServiceModality) => setFormData({ ...formData, modality: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione a modalidade" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="presencial">
+                    <div className="flex items-center gap-2">
+                      <MapPin className="w-4 h-4 text-blue-600" />
+                      Presencial
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="online">
+                    <div className="flex items-center gap-2">
+                      <Video className="w-4 h-4 text-purple-600" />
+                      Online (Telemedicina)
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="ambos">
+                    <div className="flex items-center gap-2">
+                      <MonitorSmartphone className="w-4 h-4 text-indigo-600" />
+                      Presencial e Online
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Define como o serviço pode ser realizado
+              </p>
             </div>
 
             <div className="grid grid-cols-2 gap-4">

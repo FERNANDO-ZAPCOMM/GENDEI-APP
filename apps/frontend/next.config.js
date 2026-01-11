@@ -87,7 +87,7 @@ const nextConfig = {
       "font-src 'self' https://fonts.gstatic.com",
       "worker-src 'self' blob:",
       "connect-src 'self' https://firebaseauth.googleapis.com https://firebasestorage.googleapis.com https://firestore.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://*.cloudfunctions.net https://api.gendei.com https://graph.facebook.com https://*.facebook.com https://*.facebook.net https://maps.googleapis.com http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:*",
-      "frame-src 'self' https://www.facebook.com https://*.facebook.com https://accounts.google.com https://*.firebaseapp.com",
+      "frame-src 'self' https://www.facebook.com https://*.facebook.com https://accounts.google.com https://*.firebaseapp.com https://www.google.com https://*.google.com",
       "frame-ancestors 'none'",
       "base-uri 'self'",
       "form-action 'self'",

@@ -6,7 +6,6 @@ import Link from 'next/link';
 import {
   Building2,
   UserPlus,
-  ClipboardList,
   CreditCard,
   MessageCircle,
   CheckCircle2,
@@ -21,7 +20,6 @@ import { ONBOARDING_STEPS, type OnboardingStep } from '@/lib/onboarding-types';
 interface OnboardingProgressCardProps {
   clinicInfoComplete: boolean;
   professionalsComplete: boolean;
-  servicesComplete: boolean;
   paymentComplete: boolean;
   whatsappComplete: boolean;
   completionPercentage: number;
@@ -31,7 +29,6 @@ interface OnboardingProgressCardProps {
 const STEP_ICONS = {
   Building2,
   UserPlus,
-  ClipboardList,
   CreditCard,
   MessageCircle,
 };
@@ -39,7 +36,6 @@ const STEP_ICONS = {
 export function OnboardingProgressCard({
   clinicInfoComplete,
   professionalsComplete,
-  servicesComplete,
   paymentComplete,
   whatsappComplete,
   completionPercentage,
@@ -50,13 +46,12 @@ export function OnboardingProgressCard({
   const completionStatus = [
     clinicInfoComplete,
     professionalsComplete,
-    servicesComplete,
     paymentComplete,
     whatsappComplete,
   ];
 
   const completedCount = completionStatus.filter(Boolean).length;
-  const totalSteps = 5;
+  const totalSteps = 4;
   const isAllComplete = completedCount === totalSteps;
 
   // Auto-collapse when all complete
