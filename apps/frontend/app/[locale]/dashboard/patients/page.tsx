@@ -199,7 +199,7 @@ export default function PatientsPage() {
       {/* Two Column Layout - Patient List aligned with Total+Novos, Filter aligned with Com Consultas */}
       <div className="hidden lg:grid grid-cols-3 gap-6">
         {/* Patient List spans 2 columns */}
-        <Card className="col-span-2 h-[420px] flex flex-col">
+        <Card className="col-span-2 h-[calc(100vh-320px)] flex flex-col">
           <CardHeader className="pb-3 flex-shrink-0">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
@@ -297,9 +297,9 @@ export default function PatientsPage() {
         </Card>
 
         {/* Professional Filter - aligned with Com Consultas */}
-        <Card className="h-[420px] flex flex-col">
+        <Card className="h-[calc(100vh-320px)] flex flex-col">
           <CardHeader className="pb-3 flex-shrink-0">
-            <CardTitle className="text-base">Filtrar por Profissional</CardTitle>
+            <CardTitle className="text-base">Por Profissional</CardTitle>
             <CardDescription>
               {selectedProfessionalId
                 ? 'Clique para limpar filtro'
@@ -347,7 +347,7 @@ export default function PatientsPage() {
 
       {/* Mobile: Patient List Card */}
       <div className="lg:hidden">
-        <Card className="h-[420px] flex flex-col">
+        <Card className="h-[calc(100vh-280px)] flex flex-col">
           <CardHeader className="pb-3 flex-shrink-0">
             <div className="flex flex-col gap-3">
               <div>

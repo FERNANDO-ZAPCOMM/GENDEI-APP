@@ -16,7 +16,8 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { specialties, getSpecialtyName } from '@/lib/specialties';
+import { specialties, getSpecialtyName, filterSpecialties } from '@/lib/specialties';
+import { getSpecialtiesForCategories } from '@/lib/clinic-categories';
 import { uploadFile } from '@/lib/upload';
 import {
   Dialog,
@@ -85,6 +86,11 @@ export default function ProfessionalsPage() {
   const t = useTranslations();
   const { currentClinic: clinic, isLoading: clinicLoading } = useClinic();
   const { data: professionals, isLoading, create, update, remove } = useProfessionals(clinic?.id || '');
+
+  // Get available specialties based on clinic categories
+  const clinicCategories = (clinic as any)?.categories || [];
+  const allowedSpecialtyIds = getSpecialtiesForCategories(clinicCategories);
+  const availableSpecialties = filterSpecialties(allowedSpecialtyIds);
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingProfessional, setEditingProfessional] = useState<any>(null);
@@ -339,7 +345,7 @@ export default function ProfessionalsPage() {
                   <SelectValue placeholder="Selecione a especialidade" />
                 </SelectTrigger>
                 <SelectContent>
-                  {specialties.map((specialty) => (
+                  {availableSpecialties.map((specialty) => (
                     <SelectItem key={specialty.id} value={specialty.id}>
                       {specialty.name}
                     </SelectItem>
@@ -348,7 +354,7 @@ export default function ProfessionalsPage() {
               </Select>
               {formData.specialty && (
                 <p className="text-xs text-muted-foreground">
-                  {specialties.find((s) => s.id === formData.specialty)?.description}
+                  {availableSpecialties.find((s) => s.id === formData.specialty)?.description}
                 </p>
               )}
             </div>
@@ -682,7 +688,7 @@ export default function ProfessionalsPage() {
                   <SelectValue placeholder="Selecione a especialidade" />
                 </SelectTrigger>
                 <SelectContent>
-                  {specialties.map((specialty) => (
+                  {availableSpecialties.map((specialty) => (
                     <SelectItem key={specialty.id} value={specialty.id}>
                       {specialty.name}
                     </SelectItem>
@@ -691,7 +697,7 @@ export default function ProfessionalsPage() {
               </Select>
               {formData.specialty && (
                 <p className="text-xs text-muted-foreground">
-                  {specialties.find((s) => s.id === formData.specialty)?.description}
+                  {availableSpecialties.find((s) => s.id === formData.specialty)?.description}
                 </p>
               )}
             </div>

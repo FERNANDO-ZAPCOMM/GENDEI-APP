@@ -1,5 +1,5 @@
-// Medical Specialties for Gendei Clinic Platform
-// MVP: Top 10 medical specialties for Brazilian healthcare clinics
+// Professional Specialties for Gendei Clinic Platform
+// Organized by clinic category type
 
 export interface Specialty {
   id: string;
@@ -8,6 +8,7 @@ export interface Specialty {
 }
 
 export const specialties: Specialty[] = [
+  // === MEDICINA ===
   {
     id: 'clinico_geral',
     name: 'Clínico Geral',
@@ -58,6 +59,59 @@ export const specialties: Specialty[] = [
     name: 'Gastroenterologia',
     description: 'Tratamento do sistema digestivo',
   },
+
+  // === ODONTOLOGIA ===
+  {
+    id: 'odontologia_geral',
+    name: 'Odontologia Geral',
+    description: 'Atendimento odontológico geral e preventivo',
+  },
+  {
+    id: 'ortodontia',
+    name: 'Ortodontia',
+    description: 'Correção de dentes e arcadas dentárias',
+  },
+  {
+    id: 'implantodontia',
+    name: 'Implantodontia',
+    description: 'Implantes dentários e próteses',
+  },
+  {
+    id: 'endodontia',
+    name: 'Endodontia',
+    description: 'Tratamento de canal e polpa dentária',
+  },
+
+  // === SAÚDE MENTAL ===
+  {
+    id: 'psicologia',
+    name: 'Psicologia',
+    description: 'Atendimento psicológico e psicoterapia',
+  },
+
+  // === OUTRAS ÁREAS ===
+  {
+    id: 'fisioterapia',
+    name: 'Fisioterapia',
+    description: 'Reabilitação física e tratamentos musculares',
+  },
+  {
+    id: 'nutricao',
+    name: 'Nutrição',
+    description: 'Acompanhamento nutricional e planejamento alimentar',
+  },
+  {
+    id: 'oftalmologia',
+    name: 'Oftalmologia',
+    description: 'Exames e tratamentos de doenças oculares',
+  },
+  {
+    id: 'estetica',
+    name: 'Estética',
+    description: 'Tratamentos estéticos faciais e corporais',
+  },
+
+  // === CATCH-ALL ===
   {
     id: 'outro',
     name: 'Outra Especialidade',
@@ -74,4 +128,15 @@ export function getSpecialtyById(id: string): Specialty | undefined {
 export function getSpecialtyName(id: string): string {
   const specialty = getSpecialtyById(id);
   return specialty?.name || id;
+}
+
+// Filter specialties by allowed IDs (for clinic category filtering)
+export function filterSpecialties(allowedIds: string[]): Specialty[] {
+  // If no filter, return all specialties
+  if (!allowedIds || allowedIds.length === 0) {
+    return specialties;
+  }
+
+  // Always include "outro" option
+  return specialties.filter((s) => allowedIds.includes(s.id) || s.id === 'outro');
 }

@@ -22,6 +22,7 @@ export interface ConversationDocument {
   aiPaused: boolean;
   takenOverAt?: Date;
   takenOverBy?: string;
+  professionalId?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -30,6 +31,7 @@ export interface ConversationFilters {
   state?: ConversationState;
   isHumanTakeover?: boolean;
   search?: string;
+  professionalId?: string;
 }
 
 export interface ConversationStats {
@@ -75,6 +77,7 @@ export function useConversations(clinicId: string, filters?: ConversationFilters
         params.append('isHumanTakeover', filters.isHumanTakeover.toString());
       }
       if (filters?.search) params.append('search', filters.search);
+      if (filters?.professionalId) params.append('professionalId', filters.professionalId);
 
       const result = await apiClient<{ data: ConversationDocument[] }>(
         `/conversations?${params.toString()}`,

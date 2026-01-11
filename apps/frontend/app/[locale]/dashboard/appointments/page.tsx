@@ -254,7 +254,7 @@ export default function AppointmentsPage() {
       {/* Two Column Layout - Calendar aligned with Hoje+Confirmados, Filter aligned with Pendentes */}
       <div className="hidden lg:grid grid-cols-3 gap-6">
         {/* Calendar spans 2 columns - aligned with Hoje + Confirmados */}
-        <Card className="col-span-2 h-[420px] flex flex-col">
+        <Card className="col-span-2 h-[calc(100vh-320px)] flex flex-col">
           <CardHeader className="pb-3 flex-shrink-0">
             <div className="flex items-center justify-between">
               <div>
@@ -296,9 +296,9 @@ export default function AppointmentsPage() {
         </Card>
 
         {/* Professional Filter - aligned with Pendentes */}
-        <Card className="h-[420px] flex flex-col">
+        <Card className="h-[calc(100vh-320px)] flex flex-col">
           <CardHeader className="pb-3 flex-shrink-0">
-            <CardTitle className="text-base">Filtrar por Profissional</CardTitle>
+            <CardTitle className="text-base">Por Profissional</CardTitle>
             <CardDescription>
               {selectedProfessional === 'all'
                 ? 'Selecione para filtrar'
@@ -361,7 +361,7 @@ export default function AppointmentsPage() {
 
       {/* Mobile: Calendar Card */}
       <div className="lg:hidden">
-        <Card className="h-[420px] flex flex-col">
+        <Card className="h-[calc(100vh-280px)] flex flex-col">
           <CardHeader className="pb-3 flex-shrink-0">
             <div className="flex items-center justify-between">
               <div>
@@ -403,7 +403,7 @@ export default function AppointmentsPage() {
       <div className="lg:hidden">
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">Filtrar por Profissional</CardTitle>
+            <CardTitle className="text-base">Por Profissional</CardTitle>
           </CardHeader>
           <CardContent>
             <Select value={selectedProfessional} onValueChange={setSelectedProfessional}>

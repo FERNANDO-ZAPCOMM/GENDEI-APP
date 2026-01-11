@@ -28,6 +28,7 @@ router.get('/', verifyAuth, async (req: Request, res: Response) => {
     const state = req.query.state as string;
     const isHumanTakeover = req.query.isHumanTakeover as string;
     const search = req.query.search as string;
+    const professionalId = req.query.professionalId as string;
     const limit = parseInt(req.query.limit as string) || 50;
 
     if (!clinicId) {
@@ -52,6 +53,10 @@ router.get('/', verifyAuth, async (req: Request, res: Response) => {
 
     if (isHumanTakeover !== undefined) {
       query = query.where('isHumanTakeover', '==', isHumanTakeover === 'true');
+    }
+
+    if (professionalId) {
+      query = query.where('professionalId', '==', professionalId);
     }
 
     const snapshot = await query.get();

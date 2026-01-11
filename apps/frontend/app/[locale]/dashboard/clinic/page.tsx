@@ -23,9 +23,11 @@ import { AddressAutocomplete, AddressDetails } from '@/components/AddressAutocom
 import { ClinicWhatsAppPreview } from '@/components/chat/ClinicWhatsAppPreview';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import type { ClinicAddress } from '@/lib/clinic-types';
-import { clinicCategories } from '@/lib/clinic-categories';
+import { clinicCategories, getCategoryName } from '@/lib/clinic-categories';
+import { X, ChevronDown, Check } from 'lucide-react';
 
 // Days of the week
 const DAYS = [
@@ -87,7 +89,7 @@ export default function ClinicSettingsPage() {
   const [activeTab, setActiveTab] = useState<TabKey>('basic');
   const [formData, setFormData] = useState({
     name: '',
-    category: '',
+    categories: [] as string[],
     description: '',
     address: '',
     phone: '',
@@ -105,14 +107,23 @@ export default function ClinicSettingsPage() {
 
   useEffect(() => {
     if (currentClinic) {
+      // Handle both old category (string) and new categories (array) formats
+      const clinicData = currentClinic as any;
+      let categories: string[] = [];
+      if (clinicData.categories && Array.isArray(clinicData.categories)) {
+        categories = clinicData.categories;
+      } else if (clinicData.category) {
+        categories = [clinicData.category];
+      }
+
       setFormData({
         name: currentClinic.name || '',
-        category: (currentClinic as any).category || '',
-        description: (currentClinic as any).description || '',
+        categories,
+        description: clinicData.description || '',
         address: currentClinic.address || currentClinic.addressData?.formatted || '',
         phone: currentClinic.phone || '',
         email: currentClinic.email || '',
-        website: (currentClinic as any).website || '',
+        website: clinicData.website || '',
         openingHours: currentClinic.openingHours || '',
       });
       setAddressData(currentClinic.addressData);
@@ -193,7 +204,7 @@ export default function ClinicSettingsPage() {
   };
 
   // Check completion status for each tab
-  const hasBasicInfo = !!(formData.name && formData.category);
+  const hasBasicInfo = !!(formData.name && formData.categories.length > 0);
   const hasContact = !!(formData.phone);
   const hasLocation = !!(formData.address && addressData);
   const hasHours = !!(selectedDays && Object.values(selectedDays).some(Boolean));
@@ -216,38 +227,38 @@ export default function ClinicSettingsPage() {
   }
 
   return (
-    <div className="space-y-6 page-transition">
+    <div className="space-y-4 sm:space-y-6 page-transition">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-semibold text-gray-900">Configurações da Clínica</h1>
-        <p className="text-gray-600 mt-1">Configure as informações do seu negócio</p>
+        <h1 className="text-2xl sm:text-3xl font-semibold text-gray-900">Configurações da Clínica</h1>
+        <p className="text-sm sm:text-base text-gray-600 mt-1">Configure as informações do seu negócio</p>
       </div>
 
-      {/* Main Content - Side by side layout */}
-      <div className="flex gap-6">
+      {/* Main Content - Side by side layout on desktop */}
+      <div className="flex flex-col lg:flex-row gap-4 lg:gap-6">
         {/* Business Profile Card */}
-        <Card className="flex-1 max-w-2xl">
-        <CardHeader>
+        <Card className="flex-1 lg:max-w-2xl">
+        <CardHeader className="pb-3 sm:pb-6">
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle>Perfil do Negócio</CardTitle>
-              <CardDescription>Complete as informações para aparecer corretamente</CardDescription>
+              <CardTitle className="text-base sm:text-lg">Perfil do Negócio</CardTitle>
+              <CardDescription className="text-xs sm:text-sm">Complete as informações para aparecer corretamente</CardDescription>
             </div>
             <div className="text-xs text-muted-foreground">
-              {completedTabs}/4 completos
+              {completedTabs}/4
             </div>
           </div>
         </CardHeader>
-        <CardContent className="space-y-4">
-          {/* Horizontal Tabs */}
-          <div className="flex flex-row gap-1 pb-2 border-b overflow-x-auto">
+        <CardContent className="space-y-4 pt-0">
+          {/* Horizontal Tabs - scrollable on mobile */}
+          <div className="flex flex-row gap-1 pb-2 border-b overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
             {tabs.map((tab) => (
               <button
                 key={tab.key}
                 type="button"
                 onClick={() => setActiveTab(tab.key)}
                 className={cn(
-                  'flex-1 min-w-0 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap',
+                  'flex-shrink-0 sm:flex-1 min-w-0 flex items-center justify-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors whitespace-nowrap',
                   activeTab === tab.key
                     ? tab.completed
                       ? 'border-2 border-green-500 bg-green-50 text-green-700'
@@ -258,18 +269,18 @@ export default function ClinicSettingsPage() {
                 )}
               >
                 {tab.completed && activeTab !== tab.key ? (
-                  <CheckCircle2 className="h-4 w-4 flex-shrink-0" />
+                  <CheckCircle2 className="h-3.5 w-3.5 sm:h-4 sm:w-4 flex-shrink-0" />
                 ) : (
                   <span className="flex-shrink-0">{tab.icon}</span>
                 )}
-                <span className="truncate">{tab.label}</span>
+                <span className="hidden sm:inline truncate">{tab.label}</span>
               </button>
             ))}
           </div>
 
           {/* Tab Content */}
           <form onSubmit={handleSubmit}>
-            <div className="min-h-[280px] py-2">
+            <div className="min-h-[240px] sm:min-h-[280px] py-2">
               {/* Basic Info Tab */}
               {activeTab === 'basic' && (
                 <div className="space-y-4">
@@ -289,24 +300,92 @@ export default function ClinicSettingsPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="category">
-                      Categoria *
+                    <Label>
+                      Categorias * <span className="text-xs text-muted-foreground font-normal">(selecione uma ou mais)</span>
                     </Label>
-                    <Select
-                      value={formData.category}
-                      onValueChange={(v) => setFormData({ ...formData, category: v })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione a categoria" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {clinicCategories.map((cat) => (
-                          <SelectItem key={cat.id} value={cat.id}>
-                            {cat.name}
-                          </SelectItem>
+                    {/* Multi-select dropdown */}
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          role="combobox"
+                          type="button"
+                          className="w-full justify-between font-normal"
+                        >
+                          {formData.categories.length === 0
+                            ? 'Selecione as categorias'
+                            : `${formData.categories.length} categoria(s) selecionada(s)`}
+                          <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start" sideOffset={4}>
+                        <div className="max-h-[250px] overflow-y-auto p-1">
+                          {clinicCategories.map((cat) => {
+                            const isSelected = formData.categories.includes(cat.id);
+                            return (
+                              <div
+                                key={cat.id}
+                                onClick={() => {
+                                  if (isSelected) {
+                                    setFormData({
+                                      ...formData,
+                                      categories: formData.categories.filter((c) => c !== cat.id),
+                                    });
+                                  } else {
+                                    setFormData({
+                                      ...formData,
+                                      categories: [...formData.categories, cat.id],
+                                    });
+                                  }
+                                }}
+                                className={cn(
+                                  'flex items-center gap-2 px-2 py-2 rounded-md cursor-pointer transition-colors text-sm',
+                                  isSelected
+                                    ? 'bg-green-50 text-green-800'
+                                    : 'hover:bg-gray-100'
+                                )}
+                              >
+                                <div className={cn(
+                                  'flex h-4 w-4 items-center justify-center rounded border',
+                                  isSelected
+                                    ? 'bg-green-600 border-green-600'
+                                    : 'border-gray-300'
+                                )}>
+                                  {isSelected && <Check className="h-3 w-3 text-white" />}
+                                </div>
+                                <span>{cat.name}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                    {/* Selected categories tags */}
+                    {formData.categories.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {formData.categories.map((catId) => (
+                          <span
+                            key={catId}
+                            className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-800 rounded-md text-sm"
+                          >
+                            {getCategoryName(catId)}
+                            <button
+                              type="button"
+                              onClick={() => setFormData({
+                                ...formData,
+                                categories: formData.categories.filter((c) => c !== catId)
+                              })}
+                              className="hover:bg-green-200 rounded-full p-0.5"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </span>
                         ))}
-                      </SelectContent>
-                    </Select>
+                      </div>
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      Isso define quais especialidades estarão disponíveis para os profissionais
+                    </p>
                   </div>
 
                   <div className="space-y-2">
@@ -318,9 +397,9 @@ export default function ClinicSettingsPage() {
                       value={formData.description}
                       onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                       placeholder="Descreva os serviços oferecidos..."
-                      rows={4}
+                      rows={3}
                       maxLength={750}
-                      className="resize-none"
+                      className="resize-none min-h-[80px] sm:min-h-[100px]"
                     />
                     <p className="text-xs text-muted-foreground text-right">
                       {formData.description.length}/750
@@ -402,11 +481,11 @@ export default function ClinicSettingsPage() {
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <Label>Dias de Funcionamento</Label>
-                    <div className="flex flex-wrap gap-2">
+                    <div className="grid grid-cols-7 sm:flex sm:flex-wrap gap-1 sm:gap-2">
                       {DAYS.map((day) => (
                         <label
                           key={day.key}
-                          className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition-colors ${
+                          className={`flex items-center justify-center px-2 sm:px-3 py-2 rounded-lg border cursor-pointer transition-colors ${
                             selectedDays[day.key]
                               ? 'bg-green-600 border-green-600 text-white'
                               : 'bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100'
@@ -417,7 +496,7 @@ export default function ClinicSettingsPage() {
                             onCheckedChange={() => handleDayToggle(day.key)}
                             className="sr-only"
                           />
-                          <span className="text-sm font-medium">{day.label}</span>
+                          <span className="text-xs sm:text-sm font-medium">{day.label}</span>
                         </label>
                       ))}
                     </div>
@@ -425,9 +504,9 @@ export default function ClinicSettingsPage() {
 
                   <div className="space-y-2">
                     <Label>Horário</Label>
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2 sm:gap-3">
                       <Select value={openTime} onValueChange={(v) => handleTimeChange('open', v)}>
-                        <SelectTrigger className="w-[120px]">
+                        <SelectTrigger className="w-[100px] sm:w-[120px]">
                           <SelectValue placeholder="Abertura" />
                         </SelectTrigger>
                         <SelectContent>
@@ -436,9 +515,9 @@ export default function ClinicSettingsPage() {
                           ))}
                         </SelectContent>
                       </Select>
-                      <span className="text-muted-foreground">até</span>
+                      <span className="text-muted-foreground text-sm">até</span>
                       <Select value={closeTime} onValueChange={(v) => handleTimeChange('close', v)}>
-                        <SelectTrigger className="w-[120px]">
+                        <SelectTrigger className="w-[100px] sm:w-[120px]">
                           <SelectValue placeholder="Fechamento" />
                         </SelectTrigger>
                         <SelectContent>
@@ -463,7 +542,7 @@ export default function ClinicSettingsPage() {
             </div>
 
             {/* Save Button */}
-            <Button type="submit" disabled={updateClinic.isPending}>
+            <Button type="submit" disabled={updateClinic.isPending} className="w-full sm:w-auto">
               {updateClinic.isPending ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -477,7 +556,7 @@ export default function ClinicSettingsPage() {
         </CardContent>
       </Card>
 
-        {/* WhatsApp Preview - Right side, sticky */}
+        {/* WhatsApp Preview - Hidden on mobile, sticky on desktop */}
         <div className="hidden lg:block w-[360px] flex-shrink-0">
           <div className="sticky top-6">
             <Card>

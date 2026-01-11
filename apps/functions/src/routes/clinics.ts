@@ -37,6 +37,121 @@ router.get('/', verifyAuth, async (req: Request, res: Response) => {
   }
 });
 
+// GET /clinics/me - Alias for getting current user's clinic
+router.get('/me', verifyAuth, async (req: Request, res: Response) => {
+  try {
+    const user = (req as any).user;
+    const clinicId = user?.uid;
+
+    if (!clinicId) {
+      return res.status(401).json({ message: 'Not authenticated' });
+    }
+
+    const clinicDoc = await db.collection(CLINICS).doc(clinicId).get();
+
+    if (!clinicDoc.exists) {
+      return res.status(404).json({ message: 'Clinic not found' });
+    }
+
+    return res.json({
+      id: clinicDoc.id,
+      ...clinicDoc.data()
+    });
+  } catch (error: any) {
+    console.error('Error getting clinic:', error);
+    return res.status(500).json({ message: error.message });
+  }
+});
+
+// PATCH /clinics/me - Update current user's clinic
+router.patch('/me', verifyAuth, async (req: Request, res: Response) => {
+  try {
+    const user = (req as any).user;
+    const clinicId = user?.uid;
+
+    if (!clinicId) {
+      return res.status(401).json({ message: 'Not authenticated' });
+    }
+
+    const clinicDoc = await db.collection(CLINICS).doc(clinicId).get();
+
+    if (!clinicDoc.exists) {
+      // Create new clinic if it doesn't exist
+      const {
+        name,
+        phone,
+        email,
+        address,
+        city,
+        state,
+        zipCode,
+        cnpj,
+        categories,
+        signalPercentage = 15
+      } = req.body;
+
+      const clinicData = {
+        name: name || 'Nova Clínica',
+        ownerId: clinicId,
+        phone: phone || '',
+        email: email || user?.email || '',
+        address: address || '',
+        city: city || '',
+        state: state || '',
+        zipCode: zipCode || '',
+        cnpj: cnpj || null,
+        categories: categories || [],
+        whatsappConnected: false,
+        whatsappPhoneNumberId: null,
+        whatsappWabaId: null,
+        paymentGateway: 'pagseguro',
+        signalPercentage,
+        adminIds: [],
+        timezone: 'America/Sao_Paulo',
+        createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp()
+      };
+
+      await db.collection(CLINICS).doc(clinicId).set(clinicData);
+
+      return res.status(201).json({
+        id: clinicId,
+        ...clinicData,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      });
+    }
+
+    // Update existing clinic
+    const allowedFields = [
+      'name', 'phone', 'email', 'address', 'city', 'state',
+      'zipCode', 'cnpj', 'categories', 'signalPercentage', 'timezone'
+    ];
+
+    const updateData: any = {
+      updatedAt: FieldValue.serverTimestamp()
+    };
+
+    for (const field of allowedFields) {
+      if (req.body[field] !== undefined) {
+        updateData[field] = req.body[field];
+      }
+    }
+
+    await db.collection(CLINICS).doc(clinicId).update(updateData);
+
+    const updatedDoc = await db.collection(CLINICS).doc(clinicId).get();
+
+    return res.json({
+      id: clinicId,
+      ...updatedDoc.data()
+    });
+  } catch (error: any) {
+    console.error('Error updating clinic:', error);
+    return res.status(500).json({ message: error.message });
+  }
+});
+
 // GET /clinics/:clinicId - Get specific clinic
 router.get('/:clinicId', verifyAuth, async (req: Request, res: Response) => {
   try {
