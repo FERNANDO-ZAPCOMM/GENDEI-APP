@@ -55,7 +55,7 @@ export default async function LocaleLayout({ children, params }: LocaleLayoutPro
         <NextIntlClientProvider messages={messages}>
           <AuthProvider>
             <QueryProvider>
-              <FacebookSDK appId="1079223657476124" version="v24.0" />
+              <FacebookSDK appId={process.env.NEXT_PUBLIC_META_APP_ID || '1183114720193365'} version="v24.0" />
               <AuthGuard>
                 {children}
               </AuthGuard>

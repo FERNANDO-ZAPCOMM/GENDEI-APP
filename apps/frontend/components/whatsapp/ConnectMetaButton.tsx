@@ -8,7 +8,7 @@ import { useFacebookSDK } from '@/hooks/use-facebook-sdk';
 import { toast } from 'sonner';
 
 const META_APP_ID = process.env.NEXT_PUBLIC_META_APP_ID || '1183114720193365';
-const META_CONFIG_ID = process.env.NEXT_PUBLIC_META_CONFIG_ID || '1568991217848670';
+const META_CONFIG_ID = process.env.NEXT_PUBLIC_META_CONFIG_ID || '1588166288879632';
 
 interface ConnectMetaButtonProps {
   onSuccess?: () => void;
