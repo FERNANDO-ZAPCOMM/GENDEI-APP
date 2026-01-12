@@ -102,10 +102,10 @@ function Navigation() {
             <a href="#preco" className="nav-link">Preço</a>
           </div>
           <div className="nav-cta">
-            <a href="https://app.gendei.com/pt-BR/signin" className="nav-link">
+            <a href="https://go.gendei.app/pt-BR/signin" className="nav-link">
               Entrar
             </a>
-            <a href="https://app.gendei.com/pt-BR/signup" className="btn btn-primary">
+            <a href="https://go.gendei.app/pt-BR/signup" className="btn btn-primary">
               COMEÇAR AGORA
             </a>
           </div>
@@ -278,7 +278,7 @@ function HeroSection() {
                 <span>IA entende contexto e áudio</span>
               </div>
             </div>
-            <a href="https://app.gendei.com/pt-BR/signup" className="btn btn-primary btn-lg">
+            <a href="https://go.gendei.app/pt-BR/signup" className="btn btn-primary btn-lg">
               Começar Agora
               <Icons.ArrowRight />
             </a>
@@ -604,39 +604,6 @@ function BenefitsSection() {
   )
 }
 
-// Founder Section
-function FounderSection() {
-  return (
-    <section id="founder" className="founder-section">
-      <div className="container">
-        <div className="section-header">
-          <h2 className="section-title">
-            <span className="logo-font">Por Que Criar Gendei</span>
-          </h2>
-        </div>
-
-        <div className="founder-content">
-          <blockquote className="founder-quote">
-            <p>Há pouco mais de um ano, comecei a criar soluções na WhatsApp Business Platform. Hoje, tenho apps em produção que atendem mais de 1.000 pessoas por dia e geram cerca de R$ 150 mil por mês em resultados.</p>
-            <p>Nesse tempo, vi o mesmo problema se repetir: recepções sobrecarregadas e taxas de no-show de 20-30%. Isso significa dinheiro perdido todos os dias.</p>
-            <p>Criei o Gendei para resolver isso: um agente no WhatsApp que agenda, cobra sinal via PIX e envia lembretes. O resultado é menos faltas e mais receita recuperada.</p>
-            <p>Gendei é a solução que toda clínica precisa, mas não sabia que existia.</p>
-          </blockquote>
-          <div className="founder-author">
-            <div className="founder-photo">
-              <img src="/founder.jpeg" alt="Fernando Maximo" />
-            </div>
-            <div className="founder-info">
-              <h4>Fernando Maximo</h4>
-              <span>Fundador</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-  )
-}
-
 // Stats Section
 function StatsSection() {
   const stats = [
@@ -717,7 +684,7 @@ function PricingSection() {
         </div>
 
         <div style={{ textAlign: 'center', marginTop: '48px' }}>
-          <a href="https://app.gendei.com/pt-BR/signup" className="btn btn-primary btn-lg">
+          <a href="https://go.gendei.app/pt-BR/signup" className="btn btn-primary btn-lg">
             Começar Agora
             <Icons.ArrowRight />
           </a>
@@ -800,7 +767,6 @@ function App() {
       <AppScreenshotsSection />
       <BenefitsSection />
       <PricingSection />
-      <FounderSection />
       <StatsSection />
       <Footer />
     </div>

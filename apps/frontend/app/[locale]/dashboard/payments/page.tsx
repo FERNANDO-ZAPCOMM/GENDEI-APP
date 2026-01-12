@@ -50,6 +50,8 @@ export default function PaymentsPage() {
     depositPercentage: 30,
     pixKey: '',
   });
+  const [confirmPixKey, setConfirmPixKey] = useState('');
+  const [pixKeyError, setPixKeyError] = useState('');
   const [newConvenio, setNewConvenio] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
@@ -59,6 +61,10 @@ export default function PaymentsPage() {
       const existingSettings = (currentClinic as unknown as { paymentSettings?: PaymentSettings }).paymentSettings;
       if (existingSettings) {
         setSettings(existingSettings);
+        // Pre-fill confirm field if pixKey already exists
+        if (existingSettings.pixKey) {
+          setConfirmPixKey(existingSettings.pixKey);
+        }
       } else if (currentClinic.depositPercentage !== undefined) {
         setSettings((prev) => ({
           ...prev,
@@ -96,10 +102,19 @@ export default function PaymentsPage() {
   };
 
   const handleSave = async () => {
+    // Validate PIX key confirmation
+    if (settings.pixKey && settings.pixKey !== confirmPixKey) {
+      setPixKeyError('As chaves PIX não coincidem');
+      toast.error('As chaves PIX não coincidem. Por favor, verifique.');
+      return;
+    }
+    setPixKeyError('');
+
     setIsSaving(true);
     try {
       await updateClinic.mutateAsync({
         paymentSettings: settings,
+        pixKey: settings.pixKey, // Also save at root level for easier access
         depositPercentage: settings.requiresDeposit ? settings.depositPercentage : 0,
       } as Record<string, unknown>);
       toast.success('Configurações de pagamento salvas!');
@@ -318,20 +333,41 @@ export default function PaymentsPage() {
           </CardTitle>
           <CardDescription>Informe a chave PIX para recebimento de pagamentos</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="pixKey">Chave PIX</Label>
             <Input
               id="pixKey"
               placeholder="CPF, CNPJ, e-mail, telefone ou chave aleatória"
               value={settings.pixKey || ''}
-              onChange={(e) => updateSettings({ pixKey: e.target.value })}
+              onChange={(e) => {
+                updateSettings({ pixKey: e.target.value });
+                setPixKeyError('');
+              }}
               disabled={isSaving}
+              className={pixKeyError ? 'border-red-500' : ''}
             />
-            <p className="text-xs text-muted-foreground">
-              Esta chave será usada para gerar QR codes de pagamento
-            </p>
           </div>
+          <div className="space-y-2">
+            <Label htmlFor="confirmPixKey">Confirme a Chave PIX</Label>
+            <Input
+              id="confirmPixKey"
+              placeholder="Digite a chave PIX novamente"
+              value={confirmPixKey}
+              onChange={(e) => {
+                setConfirmPixKey(e.target.value);
+                setPixKeyError('');
+              }}
+              disabled={isSaving}
+              className={pixKeyError ? 'border-red-500' : ''}
+            />
+            {pixKeyError && (
+              <p className="text-sm text-red-500">{pixKeyError}</p>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Esta chave será usada para gerar QR codes de pagamento. Digite duas vezes para confirmar.
+          </p>
         </CardContent>
       </Card>
 

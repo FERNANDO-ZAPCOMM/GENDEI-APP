@@ -7,9 +7,9 @@ function Privacy() {
       <nav className="nav">
         <div className="container">
           <div className="nav-inner">
-            <Link to="/" className="nav-logo logo-font">GENDEI</Link>
+            <Link to="/" className="nav-logo logo-font">gendei</Link>
             <div className="nav-cta">
-              <a href="https://app.gendei.com/pt-BR/signup" className="btn btn-primary">
+              <a href="https://go.gendei.app/pt-BR/signup" className="btn btn-primary">
                 COMECAR AGORA
               </a>
             </div>

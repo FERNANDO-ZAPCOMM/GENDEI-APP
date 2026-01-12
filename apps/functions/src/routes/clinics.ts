@@ -125,7 +125,8 @@ router.patch('/me', verifyAuth, async (req: Request, res: Response) => {
     // Update existing clinic
     const allowedFields = [
       'name', 'phone', 'email', 'address', 'city', 'state',
-      'zipCode', 'cnpj', 'categories', 'signalPercentage', 'timezone'
+      'zipCode', 'cnpj', 'categories', 'signalPercentage', 'timezone',
+      'paymentSettings', 'pixKey', 'depositPercentage', 'requiresDeposit'
     ];
 
     const updateData: any = {
@@ -259,7 +260,8 @@ router.put('/:clinicId', verifyAuth, async (req: Request, res: Response) => {
 
     const allowedFields = [
       'name', 'phone', 'email', 'address', 'city', 'state',
-      'zipCode', 'cnpj', 'signalPercentage', 'timezone'
+      'zipCode', 'cnpj', 'signalPercentage', 'timezone',
+      'paymentSettings', 'pixKey', 'depositPercentage', 'requiresDeposit'
     ];
 
     const updateData: any = {
