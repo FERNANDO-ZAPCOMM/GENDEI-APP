@@ -634,8 +634,3 @@ export interface ScheduledTask {
 // -----------------------------------------------------------------------------
 /** @deprecated Use Product instead */
 export type DigitalProduct = Product;
-
-// -----------------------------------------------------------------------------
-// Workflow Types (re-export from workflows.ts)
-// -----------------------------------------------------------------------------
-export * from './workflows';
