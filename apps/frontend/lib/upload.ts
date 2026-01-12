@@ -189,14 +189,14 @@ export async function uploadFile(options: UploadFileOptions): Promise<string> {
   // Validate the file using shared validation logic
   validateFile(file);
 
-  // Generate unique filename with timestamp in creator-specific folder
-  // If productId is provided, organize files by product: products/{creatorId}/{productId}/{filename}
-  // Otherwise, use flat structure: products/{creatorId}/{timestamp}_{filename}
+  // Generate unique filename with timestamp in clinic-specific folder
+  // If productId is provided, organize files by entity: gendei_files/{creatorId}/{productId}/{filename}
+  // Otherwise, use flat structure: gendei_files/{creatorId}/{timestamp}_{filename}
   const timestamp = Date.now();
   const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
   const filename = productId
-    ? `products/${creatorId}/${productId}/${timestamp}_${sanitizedName}`
-    : `products/${creatorId}/${timestamp}_${sanitizedName}`;
+    ? `gendei_files/${creatorId}/${productId}/${timestamp}_${sanitizedName}`
+    : `gendei_files/${creatorId}/${timestamp}_${sanitizedName}`;
 
   // Create storage reference - use dynamic import
   const storage = await getFirebaseStorage();

@@ -206,7 +206,7 @@ export default function ClinicSettingsPage() {
   // Check completion status for each tab
   const hasBasicInfo = !!(formData.name && formData.categories.length > 0);
   const hasContact = !!(formData.phone);
-  const hasLocation = !!(formData.address && addressData);
+  const hasLocation = !!(formData.address);
   const hasHours = !!(selectedDays && Object.values(selectedDays).some(Boolean));
 
   const completedTabs = [hasBasicInfo, hasContact, hasLocation, hasHours].filter(Boolean).length;
@@ -249,7 +249,7 @@ export default function ClinicSettingsPage() {
             </div>
           </div>
         </CardHeader>
-        <CardContent className="space-y-4 pt-0">
+        <CardContent className="space-y-4 pt-0 relative pb-24">
           {/* Horizontal Tabs - scrollable on mobile */}
           <div className="flex flex-row gap-1 pb-2 border-b overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
             {tabs.map((tab) => (
@@ -279,8 +279,8 @@ export default function ClinicSettingsPage() {
           </div>
 
           {/* Tab Content */}
-          <form onSubmit={handleSubmit}>
-            <div className="min-h-[240px] sm:min-h-[280px] py-2">
+          <form id="clinic-form" onSubmit={handleSubmit}>
+            <div className="h-[380px] sm:h-[400px] py-2 overflow-y-auto pr-1">
               {/* Basic Info Tab */}
               {activeTab === 'basic' && (
                 <div className="space-y-4">
@@ -310,7 +310,7 @@ export default function ClinicSettingsPage() {
                           variant="outline"
                           role="combobox"
                           type="button"
-                          className="w-full justify-between font-normal"
+                          className="w-full justify-between font-normal rounded-none"
                         >
                           {formData.categories.length === 0
                             ? 'Selecione as categorias'
@@ -318,7 +318,7 @@ export default function ClinicSettingsPage() {
                           <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                         </Button>
                       </PopoverTrigger>
-                      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start" sideOffset={4}>
+                      <PopoverContent className="w-[--radix-popover-trigger-width] p-0 rounded-none" align="start" sideOffset={4}>
                         <div className="max-h-[250px] overflow-y-auto p-1">
                           {clinicCategories.map((cat) => {
                             const isSelected = formData.categories.includes(cat.id);
@@ -339,14 +339,14 @@ export default function ClinicSettingsPage() {
                                   }
                                 }}
                                 className={cn(
-                                  'flex items-center gap-2 px-2 py-2 rounded-md cursor-pointer transition-colors text-sm',
+                                  'flex items-center gap-2 px-2 py-2 cursor-pointer transition-colors text-sm',
                                   isSelected
                                     ? 'bg-green-50 text-green-800'
                                     : 'hover:bg-gray-100'
                                 )}
                               >
                                 <div className={cn(
-                                  'flex h-4 w-4 items-center justify-center rounded border',
+                                  'flex h-4 w-4 items-center justify-center border',
                                   isSelected
                                     ? 'bg-green-600 border-green-600'
                                     : 'border-gray-300'
@@ -366,7 +366,7 @@ export default function ClinicSettingsPage() {
                         {formData.categories.map((catId) => (
                           <span
                             key={catId}
-                            className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-800 rounded-md text-sm"
+                            className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-800 text-sm"
                           >
                             {getCategoryName(catId)}
                             <button
@@ -375,7 +375,7 @@ export default function ClinicSettingsPage() {
                                 ...formData,
                                 categories: formData.categories.filter((c) => c !== catId)
                               })}
-                              className="hover:bg-green-200 rounded-full p-0.5"
+                              className="hover:bg-green-200 p-0.5"
                             >
                               <X className="h-3 w-3" />
                             </button>
@@ -541,8 +541,11 @@ export default function ClinicSettingsPage() {
               )}
             </div>
 
-            {/* Save Button */}
-            <Button type="submit" disabled={updateClinic.isPending} className="w-full sm:w-auto">
+          </form>
+
+          {/* Save Button - Fixed position at bottom */}
+          <div className="absolute bottom-6 left-6 right-6 pt-4 bg-white">
+            <Button type="submit" form="clinic-form" disabled={updateClinic.isPending} className="w-full sm:w-auto">
               {updateClinic.isPending ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -552,7 +555,7 @@ export default function ClinicSettingsPage() {
                 t('common.save') || 'Salvar'
               )}
             </Button>
-          </form>
+          </div>
         </CardContent>
       </Card>
 

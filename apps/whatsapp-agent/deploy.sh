@@ -109,7 +109,7 @@ echo "Using default Brazilian phone for PagSeguro API: ${DEFAULT_BRAZILIAN_PHONE
 # Set it only for testing with a specific creator
 TEST_CREATOR_ID="${TEST_CREATOR_ID:-}"
 DEFAULT_CREATOR_ID="${DEFAULT_CREATOR_ID:-default_creator}"
-DOMAIN="${DOMAIN:-https://${SERVICE_NAME}.${REGION}.run.app}"
+DOMAIN="${DOMAIN:-https://gendei-whatsapp-agent-647402645066.us-central1.run.app}"
 
 echo "Configuration loaded:"
 echo "  Mode: ${TEST_CREATOR_ID:+Testing (TEST_CREATOR_ID=$TEST_CREATOR_ID)}${TEST_CREATOR_ID:-Multi-clinic (Firestore lookup)}"

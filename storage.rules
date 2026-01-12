@@ -44,6 +44,15 @@ service firebase.storage {
     }
 
     // =========================================================================
+    // GENERAL FILE UPLOADS (gendei_files)
+    // =========================================================================
+    match /gendei_files/{clinicId}/{allPaths=**} {
+      // Clinic owner can upload any files
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && request.auth.uid == clinicId;
+    }
+
+    // =========================================================================
     // DEFAULT: Deny all
     // =========================================================================
     match /{allPaths=**} {

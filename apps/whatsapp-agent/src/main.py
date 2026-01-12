@@ -183,6 +183,61 @@ async def send_whatsapp_buttons(
             return False
 
 
+async def send_pix_payment_cta(
+    phone_number_id: str,
+    to: str,
+    payment_url: str,
+    amount_formatted: str,
+    description: str,
+    access_token: str
+) -> bool:
+    """Send WhatsApp CTA URL button for PIX payment."""
+    url = f"https://graph.facebook.com/{META_API_VERSION}/{phone_number_id}/messages"
+
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": to,
+        "type": "interactive",
+        "interactive": {
+            "type": "cta_url",
+            "header": {
+                "type": "text",
+                "text": "💳 Pagamento PIX"
+            },
+            "body": {
+                "text": f"*{description}*\n\nValor: *{amount_formatted}*\n\nClique no botão abaixo para abrir a página de pagamento PIX.\n\n⏰ O pagamento expira em 24 horas."
+            },
+            "footer": {
+                "text": "Pagamento seguro via PagSeguro"
+            },
+            "action": {
+                "name": "cta_url",
+                "parameters": {
+                    "display_text": "Pagar com PIX",
+                    "url": payment_url
+                }
+            }
+        }
+    }
+
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            url,
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "application/json",
+            },
+            json=payload
+        )
+
+        if response.status_code == 200:
+            logger.info(f"✅ PIX payment CTA sent to {to}")
+            return True
+        else:
+            logger.error(f"❌ Failed to send PIX CTA: {response.text}")
+            return False
+
+
 async def mark_message_as_read(
     phone_number_id: str,
     message_id: str,
@@ -507,6 +562,29 @@ async def process_message(
         # Get clinic and professional info
         clinic = db.get_clinic(clinic_id)
 
+        # Get service price if available (for signal calculation)
+        professional = db.get_professional(clinic_id, state["professional_id"])
+        service_price_cents = 0
+        if professional and hasattr(professional, 'default_price_cents'):
+            service_price_cents = professional.default_price_cents or 0
+
+        # Get deposit percentage from clinic payment settings
+        deposit_percentage = clinic.signal_percentage if clinic else 0
+
+        # Check if clinic requires deposit via payment settings
+        requires_deposit = False
+        if clinic:
+            # Check paymentSettings if available
+            payment_settings = getattr(clinic, 'payment_settings', None)
+            if payment_settings:
+                requires_deposit = payment_settings.get('requiresDeposit', False)
+                deposit_percentage = payment_settings.get('depositPercentage', deposit_percentage)
+            elif deposit_percentage > 0:
+                requires_deposit = True
+
+        # Calculate signal amount
+        signal_cents = int(service_price_cents * deposit_percentage / 100) if requires_deposit else 0
+
         # Create the appointment
         appointment = create_appointment(
             db,
@@ -518,8 +596,8 @@ async def process_message(
             patient_name=patient_name,
             professional_name=state["professional_name"],
             payment_type="particular",
-            total_cents=0,
-            signal_percentage=clinic.signal_percentage if clinic else 15,
+            total_cents=service_price_cents,
+            signal_percentage=deposit_percentage,
         )
 
         if appointment:
@@ -529,17 +607,138 @@ async def process_message(
             day_name = day_names[dt.weekday()]
             formatted_date = dt.strftime("%d/%m/%Y")
 
-            await send_whatsapp_message(
-                phone_number_id, phone,
-                f"✅ *Consulta agendada com sucesso!*\n\n"
-                f"📅 *{day_name}, {formatted_date}*\n"
-                f"🕐 *{state['time']}*\n"
-                f"👨‍⚕️ *{state['professional_name']}*\n"
-                f"📍 *{clinic.address if clinic else ''}*\n\n"
-                f"Você receberá um lembrete 24h e 2h antes da consulta.\n"
-                f"Chegue 15 minutos antes do horário marcado!",
-                access_token
-            )
+            # Check if we need to send PIX payment
+            if requires_deposit and signal_cents >= 100:  # Minimum R$ 1.00
+                # Generate PIX payment
+                import uuid
+                import urllib.parse
+                from src.utils.payment import (
+                    create_pagseguro_pix_order,
+                    format_payment_amount,
+                    is_pagseguro_configured,
+                    DOMAIN
+                )
+
+                if is_pagseguro_configured():
+                    order_id = str(uuid.uuid4())[:12]
+
+                    # Create PIX order
+                    payment_info = await create_pagseguro_pix_order(
+                        order_id=order_id,
+                        amount=signal_cents,
+                        customer_name=patient_name,
+                        customer_phone=phone,
+                        product_name=f"Sinal - Consulta {state['professional_name']}"
+                    )
+
+                    if payment_info:
+                        # Save order to database
+                        db.create_order(order_id, {
+                            "clinicId": clinic_id,
+                            "appointmentId": appointment.id,
+                            "patientPhone": phone,
+                            "patientName": patient_name,
+                            "description": f"Sinal - Consulta {state['professional_name']}",
+                            "amountCents": signal_cents,
+                            "paymentStatus": "pending",
+                            "status": "pending",
+                            "paymentId": payment_info.get("payment_id"),
+                            "pixCopiaCola": payment_info.get("qr_code_text"),
+                            "qrCodeUrl": payment_info.get("qr_code"),
+                            "professionalId": state["professional_id"],
+                            "professionalName": state["professional_name"],
+                            "appointmentDate": state["date"],
+                            "appointmentTime": state["time"],
+                        })
+
+                        # Send appointment info first
+                        await send_whatsapp_message(
+                            phone_number_id, phone,
+                            f"📋 *Consulta pré-agendada!*\n\n"
+                            f"📅 *{day_name}, {formatted_date}*\n"
+                            f"🕐 *{state['time']}*\n"
+                            f"👨‍⚕️ *{state['professional_name']}*\n"
+                            f"📍 *{clinic.address if clinic else ''}*\n\n"
+                            f"⚠️ Para confirmar, é necessário pagar o *sinal* de *{format_payment_amount(signal_cents)}*.",
+                            access_token
+                        )
+
+                        # Send PIX payment button
+                        phone_encoded = urllib.parse.quote(phone, safe='')
+                        pix_page_url = f"{DOMAIN}/pix/{phone_encoded}/{order_id}"
+
+                        await send_pix_payment_cta(
+                            phone_number_id,
+                            phone.replace("+", ""),
+                            pix_page_url,
+                            format_payment_amount(signal_cents),
+                            f"Sinal - Consulta {state['professional_name']}",
+                            access_token
+                        )
+
+                        logger.info(f"✅ PIX payment sent for appointment {appointment.id}")
+                    else:
+                        # PIX creation failed, but appointment is created
+                        logger.error("Failed to create PIX payment")
+                        await send_whatsapp_message(
+                            phone_number_id, phone,
+                            f"✅ *Consulta agendada!*\n\n"
+                            f"📅 *{day_name}, {formatted_date}*\n"
+                            f"🕐 *{state['time']}*\n"
+                            f"👨‍⚕️ *{state['professional_name']}*\n\n"
+                            f"⚠️ O pagamento do sinal será solicitado em breve.",
+                            access_token
+                        )
+                else:
+                    # PagSeguro not configured - check if clinic has PIX key for manual payment
+                    pix_key = None
+                    if clinic:
+                        payment_settings = getattr(clinic, 'payment_settings', None)
+                        if payment_settings:
+                            pix_key = payment_settings.get('pixKey')
+                        if not pix_key:
+                            pix_key = getattr(clinic, 'pix_key', None)
+
+                    if pix_key:
+                        from src.utils.payment import format_payment_amount
+                        await send_whatsapp_message(
+                            phone_number_id, phone,
+                            f"📋 *Consulta pré-agendada!*\n\n"
+                            f"📅 *{day_name}, {formatted_date}*\n"
+                            f"🕐 *{state['time']}*\n"
+                            f"👨‍⚕️ *{state['professional_name']}*\n\n"
+                            f"💳 *Para confirmar, pague o sinal via PIX:*\n"
+                            f"Valor: *{format_payment_amount(signal_cents)}*\n"
+                            f"Chave PIX: `{pix_key}`\n\n"
+                            f"Envie o comprovante aqui após o pagamento!",
+                            access_token
+                        )
+                    else:
+                        # No PIX key configured - just confirm
+                        await send_whatsapp_message(
+                            phone_number_id, phone,
+                            f"✅ *Consulta agendada com sucesso!*\n\n"
+                            f"📅 *{day_name}, {formatted_date}*\n"
+                            f"🕐 *{state['time']}*\n"
+                            f"👨‍⚕️ *{state['professional_name']}*\n"
+                            f"📍 *{clinic.address if clinic else ''}*\n\n"
+                            f"Você receberá um lembrete 24h e 2h antes da consulta.\n"
+                            f"Chegue 15 minutos antes do horário marcado!",
+                            access_token
+                        )
+            else:
+                # No deposit required or amount too low - just confirm
+                await send_whatsapp_message(
+                    phone_number_id, phone,
+                    f"✅ *Consulta agendada com sucesso!*\n\n"
+                    f"📅 *{day_name}, {formatted_date}*\n"
+                    f"🕐 *{state['time']}*\n"
+                    f"👨‍⚕️ *{state['professional_name']}*\n"
+                    f"📍 *{clinic.address if clinic else ''}*\n\n"
+                    f"Você receberá um lembrete 24h e 2h antes da consulta.\n"
+                    f"Chegue 15 minutos antes do horário marcado!",
+                    access_token
+                )
 
             # Clear conversation state
             del conversation_state[phone]
@@ -790,6 +989,210 @@ async def send_confirmation(request: Request):
     except Exception as e:
         logger.error(f"❌ Error sending confirmation: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================
+# PIX PAYMENT ENDPOINTS
+# ============================================
+
+@app.post("/pagseguro-webhook")
+async def pagseguro_webhook(request: Request, background_tasks: BackgroundTasks):
+    """
+    PagSeguro payment webhook endpoint.
+    Receives payment notifications and updates appointment status.
+    """
+    try:
+        body = await request.body()
+        signature = request.headers.get('X-PagSeguro-Signature', '')
+
+        logger.info(f"📨 PagSeguro webhook received: {body.decode()[:500]}")
+
+        data = json.loads(body.decode())
+
+        # Parse webhook
+        from src.utils.payment import parse_pagseguro_webhook, process_payment_confirmation
+
+        reference_id, payment_status, transaction_id = parse_pagseguro_webhook(data)
+
+        if not reference_id or not payment_status:
+            logger.warning("Invalid webhook payload - missing reference_id or status")
+            return {"status": "ignored", "reason": "missing_data"}
+
+        logger.info(f"💳 Payment webhook: ref={reference_id}, status={payment_status}, txn={transaction_id}")
+
+        # Process payment confirmation in background
+        background_tasks.add_task(
+            process_payment_confirmation,
+            reference_id,
+            payment_status,
+            transaction_id,
+            db
+        )
+
+        return {"status": "ok", "reference_id": reference_id}
+
+    except json.JSONDecodeError as e:
+        logger.error(f"❌ Invalid JSON in webhook: {e}")
+        return {"status": "error", "message": "Invalid JSON"}
+
+    except Exception as e:
+        logger.error(f"❌ Error processing PagSeguro webhook: {e}")
+        return {"status": "error", "message": str(e)}
+
+
+@app.get("/pix/{phone}/{order_id}")
+async def pix_payment_page(phone: str, order_id: str):
+    """
+    PIX payment HTML page with copy button.
+    Renders a mobile-friendly page for PIX copia e cola.
+    """
+    try:
+        import urllib.parse
+        from jinja2 import Environment, FileSystemLoader
+
+        # Decode phone from URL
+        phone = urllib.parse.unquote(phone)
+        logger.info(f"📱 PIX page requested: phone={phone}, order={order_id}")
+
+        # Find order
+        order = db.get_order(order_id) if db else None
+
+        if not order:
+            # Try to find by searching recent orders
+            from google.cloud import firestore as gcloud_firestore
+            firestore_client = gcloud_firestore.Client()
+            orders_ref = firestore_client.collection("gendei_orders")
+
+            # Search by order ID prefix
+            for order_doc in orders_ref.order_by("createdAt", direction=gcloud_firestore.Query.DESCENDING).limit(100).stream():
+                if order_doc.id == order_id or order_doc.id.startswith(order_id[:12]):
+                    order = order_doc.to_dict()
+                    order["id"] = order_doc.id
+                    break
+
+        if not order:
+            logger.warning(f"Order not found: {order_id}")
+            # Return not found page
+            return HTMLResponse(content="""
+                <!DOCTYPE html>
+                <html lang="pt-BR">
+                <head>
+                    <meta charset="UTF-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                    <title>PIX não encontrado</title>
+                    <style>
+                        body { font-family: sans-serif; padding: 40px 20px; text-align: center; }
+                        h1 { color: #dc2626; }
+                        p { color: #666; }
+                    </style>
+                </head>
+                <body>
+                    <h1>❌ PIX não encontrado</h1>
+                    <p>Este código PIX expirou ou não foi encontrado.</p>
+                    <p>Volte ao WhatsApp e solicite um novo link de pagamento.</p>
+                </body>
+                </html>
+            """, status_code=404)
+
+        # Get PIX code and QR code URL
+        pix_code = order.get("pixCopiaCola") or order.get("qr_code_text")
+        qr_code_url = order.get("qrCodeUrl") or order.get("qr_code")
+        amount_cents = order.get("amountCents") or order.get("amount", 0)
+        description = order.get("description", "Sinal de Consulta")
+
+        if not pix_code:
+            logger.warning(f"No PIX code in order: {order_id}")
+            return HTMLResponse(content="""
+                <!DOCTYPE html>
+                <html lang="pt-BR">
+                <head>
+                    <meta charset="UTF-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                    <title>PIX não disponível</title>
+                    <style>
+                        body { font-family: sans-serif; padding: 40px 20px; text-align: center; }
+                        h1 { color: #dc2626; }
+                        p { color: #666; }
+                    </style>
+                </head>
+                <body>
+                    <h1>❌ PIX não disponível</h1>
+                    <p>O código PIX deste pedido expirou.</p>
+                    <p>Volte ao WhatsApp e solicite um novo link de pagamento.</p>
+                </body>
+                </html>
+            """, status_code=410)
+
+        # Format amount
+        from src.utils.payment import format_payment_amount
+        amount_formatted = format_payment_amount(amount_cents)
+
+        # Setup Jinja2 templates
+        import os
+        template_dir = os.path.join(os.path.dirname(__file__), "templates")
+        jinja_env = Environment(loader=FileSystemLoader(template_dir))
+
+        try:
+            template = jinja_env.get_template("pix_payment.html")
+            html_content = template.render(
+                product_name=description,
+                qr_code_url=qr_code_url,
+                pix_code=pix_code,
+                pix_code_preview=pix_code[:40] if len(pix_code) > 40 else pix_code,
+                amount_formatted=amount_formatted
+            )
+            return HTMLResponse(content=html_content)
+        except Exception as template_error:
+            logger.error(f"Template error: {template_error}")
+            # Fallback: simple HTML page
+            return HTMLResponse(content=f"""
+                <!DOCTYPE html>
+                <html lang="pt-BR">
+                <head>
+                    <meta charset="UTF-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                    <title>PIX - {amount_formatted}</title>
+                    <style>
+                        body {{ font-family: sans-serif; padding: 20px; }}
+                        .amount {{ font-size: 24px; font-weight: bold; }}
+                        .code {{ background: #f0f0f0; padding: 10px; word-break: break-all; font-family: monospace; }}
+                        button {{ background: #00a650; color: white; padding: 15px 30px; border: none; font-size: 16px; cursor: pointer; }}
+                    </style>
+                </head>
+                <body>
+                    <h2>{description}</h2>
+                    <p class="amount">{amount_formatted}</p>
+                    <p>Copie o código PIX abaixo:</p>
+                    <div class="code" id="pixCode">{pix_code}</div>
+                    <br>
+                    <button onclick="navigator.clipboard.writeText(document.getElementById('pixCode').textContent).then(() => this.textContent = 'Copiado!')">
+                        Copiar código
+                    </button>
+                </body>
+                </html>
+            """)
+
+    except Exception as e:
+        logger.error(f"❌ Error rendering PIX page: {e}")
+        return HTMLResponse(content="""
+            <!DOCTYPE html>
+            <html lang="pt-BR">
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>Erro</title>
+                <style>
+                    body { font-family: sans-serif; padding: 40px 20px; text-align: center; }
+                    h1 { color: #dc2626; }
+                </style>
+            </head>
+            <body>
+                <h1>❌ Erro</h1>
+                <p>Ocorreu um erro ao carregar a página de pagamento.</p>
+                <p>Por favor, tente novamente pelo WhatsApp.</p>
+            </body>
+            </html>
+        """, status_code=500)
 
 
 # ============================================

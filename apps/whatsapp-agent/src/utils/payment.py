@@ -19,7 +19,7 @@ PAGSEGURO_TOKEN = os.getenv("PAGSEGURO_TOKEN")
 PAGSEGURO_EMAIL = os.getenv("PAGSEGURO_EMAIL")
 PAGSEGURO_ENVIRONMENT = os.getenv("PAGSEGURO_ENVIRONMENT", "production")
 PAGSEGURO_WEBHOOK_SECRET = os.getenv("PAGSEGURO_WEBHOOK_SECRET")
-DOMAIN = os.getenv("DOMAIN", "https://zapcomm-whatsapp-agent-818713106542.us-central1.run.app")
+DOMAIN = os.getenv("DOMAIN", "https://gendei-whatsapp-agent-647402645066.us-central1.run.app")
 
 # default Brazilian phone for PagSeguro API (avoids validation issues)
 DEFAULT_BRAZILIAN_PHONE = os.getenv("DEFAULT_BRAZILIAN_PHONE", "+5511999999999")
@@ -128,14 +128,12 @@ async def create_pagseguro_checkout(
         tax_id = generate_valid_cpf()
 
         # ensure customer name is long enough
-        safe_customer_name = customer_name if len(customer_name) > 10 else "Cliente ZapComm"
+        safe_customer_name = customer_name if len(customer_name) > 10 else "Cliente Gendei"
 
-        # Include creator_id in reference_id so webhook can find correct creator
-        # Format: ZC-{creator_id[:8]}-{order_id[:12]} (max 30 chars for PagSeguro)
-        from src.runtime.context import get_runtime_safe
-        runtime = get_runtime_safe()
-        creator_id = runtime.creator_id if runtime else "default"
-        reference_id = f"ZC-{creator_id[:8]}-{order_id[:12]}"
+        # Include clinic_id in reference_id so webhook can find correct clinic
+        # Format: GD-{clinic_id[:8]}-{order_id[:12]} (max 30 chars for PagSeguro)
+        clinic_id = os.getenv("CLINIC_ID", "default")
+        reference_id = f"GD-{clinic_id[:8]}-{order_id[:12]}"
 
         # Checkout API payload with pre-filled customer data
         payload = {
@@ -162,7 +160,7 @@ async def create_pagseguro_checkout(
             "metadata": {
                 "whatsapp_phone": customer_phone,
                 "order_id": order_id,
-                "creator_id": creator_id
+                "clinic_id": clinic_id
             }
         }
 
@@ -272,14 +270,12 @@ async def create_pagseguro_pix_order(
         tax_id = generate_valid_cpf()
 
         # ensure customer name is long enough
-        safe_customer_name = customer_name if len(customer_name) > 10 else "Cliente Zapcomm"
+        safe_customer_name = customer_name if len(customer_name) > 10 else "Cliente Gendei"
 
-        # Include creator_id in reference_id so webhook can find correct creator
-        # Format: ZC-{creator_id[:8]}-{order_id[:12]} (max 30 chars for PagSeguro)
-        from src.runtime.context import get_runtime_safe
-        runtime = get_runtime_safe()
-        creator_id = runtime.creator_id if runtime else "default"
-        reference_id = f"ZC-{creator_id[:8]}-{order_id[:12]}"
+        # Include clinic_id in reference_id so webhook can find correct clinic
+        # Format: GD-{clinic_id[:8]}-{order_id[:12]} (max 30 chars for PagSeguro)
+        clinic_id = os.getenv("CLINIC_ID", "default")
+        reference_id = f"GD-{clinic_id[:8]}-{order_id[:12]}"
 
         # Orders API payload with PIX QR Code
         payload = {
@@ -296,7 +292,7 @@ async def create_pagseguro_pix_order(
                 }]
             },
             "items": [{
-                "reference_id": "PRODUCT_01",
+                "reference_id": "APPOINTMENT_01",
                 "name": product_name,
                 "quantity": 1,
                 "unit_amount": amount
@@ -310,7 +306,7 @@ async def create_pagseguro_pix_order(
             "metadata": {
                 "whatsapp_phone": customer_phone,
                 "order_id": order_id,
-                "creator_id": creator_id
+                "clinic_id": clinic_id
             }
         }
 
@@ -594,44 +590,58 @@ def parse_pagseguro_webhook(data: Dict[str, Any]) -> Tuple[Optional[str], Option
 async def process_payment_confirmation(
     order_id: str,
     payment_status: str,
-    transaction_id: str
+    transaction_id: str,
+    db=None
 ) -> bool:
     """
-    process payment confirmation and deliver product
-    args:
+    Process payment confirmation for appointment deposit (signal/sinal).
+
+    Args:
         order_id: Order/reference ID from webhook
         payment_status: Payment status (PAID, CANCELED, etc.)
         transaction_id: Transaction ID
-    returns:
+        db: Database instance (optional, will be created if not provided)
+    Returns:
         True if successful
     """
     try:
-        from src.runtime.context import get_runtime_safe
-        from src.utils.messaging import send_whatsapp_text, send_whatsapp_document
+        # Import database if not provided
+        if db is None:
+            from src.database.firestore import GendeiDatabase
+            db = GendeiDatabase()
 
-        runtime = get_runtime_safe()
-        if not runtime:
-            logger.error("No runtime available for payment processing")
-            return False
-
-        db = runtime.db
-
-        # try to find order by payment ID or reference ID
-        order = db.get_order_by_payment_id(transaction_id)
+        # Try to find order by payment ID
+        order = db.get_order(transaction_id)
         if not order:
-            # try by reference_id
-            order = db.get_order_by_payment_id(order_id)
+            # Try by order_id directly
+            order = db.get_order(order_id)
 
-        # If still not found and using new format (ZC-xxx-yyy), extract order_id part
-        if not order and order_id and order_id.startswith("ZC-"):
+        # If not found with direct IDs, try searching by payment_id field
+        if not order:
+            from google.cloud import firestore as gcloud_firestore
+            firestore_client = gcloud_firestore.Client()
+            orders_ref = firestore_client.collection("gendei_orders")
+
+            # Search by paymentId field
+            docs = orders_ref.where("paymentId", "==", transaction_id).limit(1).get()
+            for doc in docs:
+                order = doc.to_dict()
+                order["id"] = doc.id
+                break
+
+        # If still not found and using GD- format, extract order_id part
+        if not order and order_id and order_id.startswith("GD-"):
             parts = order_id.split("-")
             if len(parts) >= 3:
                 order_id_prefix = parts[2]  # Last part is the truncated order_id
                 logger.info(f"🔍 Searching for order with prefix: {order_id_prefix}")
-                # Search orders by ID prefix - iterate through recent orders
-                orders_ref = db.get_creator_ref().collection("orders")
+
+                from google.cloud import firestore as gcloud_firestore
+                firestore_client = gcloud_firestore.Client()
+                orders_ref = firestore_client.collection("gendei_orders")
+
                 # Get recent orders and find one matching the prefix
-                for order_doc in orders_ref.order_by("createdAt", direction="DESCENDING").limit(50).stream():
+                for order_doc in orders_ref.order_by("createdAt", direction=gcloud_firestore.Query.DESCENDING).limit(50).stream():
                     if order_doc.id.startswith(order_id_prefix):
                         order = order_doc.to_dict()
                         order["id"] = order_doc.id
@@ -642,88 +652,121 @@ async def process_payment_confirmation(
             logger.warning(f"Order not found for payment {transaction_id} / ref {order_id}")
             return False
 
-        wa_user_id = order.get("waUserId") or order.get("phone")
+        patient_phone = order.get("patientPhone") or order.get("phone")
         order_doc_id = order.get("id")
+        appointment_id = order.get("appointmentId")
+        clinic_id = order.get("clinicId")
 
         if payment_status == "PAID":
-            # update order status
+            # Update order status
             db.update_order(order_doc_id, {
                 "paymentStatus": "completed",
-                "status": "confirmed",
+                "status": "paid",
                 "paymentId": transaction_id,
                 "paidAt": datetime.now().isoformat()
             })
 
-            # send confirmation to customer
-            product_title = order.get("productTitle", order.get("product_title", "seu produto"))
+            # Update appointment - mark deposit as paid
+            if appointment_id:
+                db.update_appointment(appointment_id, {
+                    "signalPaid": True,
+                    "signalPaidAt": datetime.now().isoformat(),
+                    "status": "confirmed"
+                })
 
-            confirmation_message = (
-                "🎉 *Pagamento Confirmado!*\n\n"
-                "Seu pagamento PIX foi aprovado com sucesso!\n\n"
-                f"Você já pode acessar *{product_title}*.\n\n"
-                "Obrigado pela compra! 💚"
-            )
+            # Get appointment details for confirmation message
+            appointment = db.get_appointment(appointment_id) if appointment_id else None
 
-            await send_whatsapp_text(wa_user_id, confirmation_message)
+            if appointment:
+                # Format date for display
+                apt_date = datetime.strptime(appointment.date, "%Y-%m-%d")
+                formatted_date = apt_date.strftime("%d/%m/%Y")
 
-            # deliver the product
-            delivery = order.get("delivery", {})
-            delivery_url = delivery.get("url", "")
+                confirmation_message = (
+                    "✅ *Sinal Confirmado!*\n\n"
+                    "Seu pagamento PIX foi aprovado com sucesso!\n\n"
+                    f"📅 *{formatted_date}*\n"
+                    f"🕐 *{appointment.time}*\n"
+                    f"👨‍⚕️ *{appointment.professional_name}*\n\n"
+                    "Sua consulta está *confirmada*!\n"
+                    "Lembre-se de chegar 15 minutos antes. 💚"
+                )
+            else:
+                confirmation_message = (
+                    "✅ *Sinal Confirmado!*\n\n"
+                    "Seu pagamento PIX foi aprovado com sucesso!\n\n"
+                    "Sua consulta está *confirmada*!\n"
+                    "Lembre-se de chegar 15 minutos antes. 💚"
+                )
 
-            if delivery_url:
-                # check if it's a document (PDF, DOC, etc.)
-                doc_extensions = ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.zip', '.rar']
-                is_document = any(ext in delivery_url.lower() for ext in doc_extensions)
+            # Send confirmation to patient via WhatsApp
+            if patient_phone and clinic_id:
+                clinic = db.get_clinic(clinic_id)
+                if clinic and clinic.whatsapp_phone_number_id:
+                    access_token = db.get_access_token(clinic_id)
+                    if access_token:
+                        import httpx
+                        META_API_VERSION = os.getenv("META_API_VERSION", "v24.0")
+                        url = f"https://graph.facebook.com/{META_API_VERSION}/{clinic.whatsapp_phone_number_id}/messages"
 
-                if is_document:
-                    # detect file extension
-                    file_ext = ".pdf"  # default
-                    for ext in doc_extensions:
-                        if ext in delivery_url.lower():
-                            file_ext = ext
-                            break
+                        async with httpx.AsyncClient() as client:
+                            await client.post(
+                                url,
+                                headers={
+                                    "Authorization": f"Bearer {access_token}",
+                                    "Content-Type": "application/json",
+                                },
+                                json={
+                                    "messaging_product": "whatsapp",
+                                    "to": patient_phone.replace("+", ""),
+                                    "type": "text",
+                                    "text": {"body": confirmation_message}
+                                }
+                            )
 
-                    # send as document with nice preview
-                    await send_whatsapp_document(
-                        phone=wa_user_id,
-                        document_url=delivery_url,
-                        caption=f"📚 {product_title}",
-                        filename=f"{product_title}{file_ext}"
-                    )
-                    logger.info(f"📄 Document delivered to {wa_user_id}: {delivery_url[:50]}...")
-                else:
-                    # send as text link for other URLs (videos, websites, etc.)
-                    await send_whatsapp_text(wa_user_id, f"📎 Acesse aqui: {delivery_url}")
-                    logger.info(f"🔗 Link delivered to {wa_user_id}: {delivery_url[:50]}...")
-
-            # update conversation state
-            state = await db.load_conversation_state(wa_user_id)
-            state["state"] = "fechado"
-            state["context"] = state.get("context", {})
-            state["context"]["payment_confirmed"] = True
-            state["context"]["last_payment_id"] = transaction_id
-            await db.save_conversation_state(wa_user_id, state)
-
-            logger.info(f"✅ Payment confirmed for order {order_doc_id}, customer {wa_user_id}")
+            logger.info(f"✅ Payment confirmed for order {order_doc_id}, appointment {appointment_id}")
             return True
 
         elif payment_status in ["CANCELED", "CANCELLED", "DECLINED", "EXPIRED"]:
-            # update order status
+            # Update order status
             db.update_order(order_doc_id, {
                 "paymentStatus": "failed",
                 "status": "cancelled",
                 "failedAt": datetime.now().isoformat()
             })
 
-            # optionally notify customer
-            if wa_user_id:
+            # Notify patient
+            if patient_phone and clinic_id:
                 cancel_message = (
                     "❌ *Pagamento não confirmado*\n\n"
                     "Infelizmente seu pagamento PIX não foi concluído.\n\n"
-                    "Se ainda deseja comprar, posso gerar um novo código PIX para você. "
+                    "Sua consulta ainda não está confirmada.\n"
+                    "Se ainda deseja confirmar, posso gerar um novo código PIX. "
                     "Basta me avisar! 😊"
                 )
-                await send_whatsapp_text(wa_user_id, cancel_message)
+
+                clinic = db.get_clinic(clinic_id)
+                if clinic and clinic.whatsapp_phone_number_id:
+                    access_token = db.get_access_token(clinic_id)
+                    if access_token:
+                        import httpx
+                        META_API_VERSION = os.getenv("META_API_VERSION", "v24.0")
+                        url = f"https://graph.facebook.com/{META_API_VERSION}/{clinic.whatsapp_phone_number_id}/messages"
+
+                        async with httpx.AsyncClient() as client:
+                            await client.post(
+                                url,
+                                headers={
+                                    "Authorization": f"Bearer {access_token}",
+                                    "Content-Type": "application/json",
+                                },
+                                json={
+                                    "messaging_product": "whatsapp",
+                                    "to": patient_phone.replace("+", ""),
+                                    "type": "text",
+                                    "text": {"body": cancel_message}
+                                }
+                            )
 
             logger.info(f"❌ Payment canceled for order {order_doc_id}")
             return True

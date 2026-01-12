@@ -54,6 +54,8 @@ class Clinic:
     payment_gateway: str = "pagseguro"
     pagseguro_token: Optional[str] = None
     signal_percentage: int = 15     # Default 15% deposit
+    pix_key: Optional[str] = None   # PIX key for manual payments
+    payment_settings: Dict[str, Any] = field(default_factory=dict)  # Full payment settings
 
     # Settings
     admin_ids: List[str] = field(default_factory=list)
@@ -78,6 +80,8 @@ class Clinic:
             "whatsappConnected": self.whatsapp_connected,
             "paymentGateway": self.payment_gateway,
             "signalPercentage": self.signal_percentage,
+            "pixKey": self.pix_key,
+            "paymentSettings": self.payment_settings,
             "adminIds": self.admin_ids,
             "timezone": self.timezone,
             "createdAt": self.created_at.isoformat() if self.created_at else None,
@@ -104,6 +108,8 @@ class Clinic:
             payment_gateway=data.get("paymentGateway", "pagseguro"),
             pagseguro_token=data.get("pagseguroToken"),
             signal_percentage=data.get("signalPercentage", 15),
+            pix_key=data.get("pixKey"),
+            payment_settings=data.get("paymentSettings", {}),
             admin_ids=data.get("adminIds", []),
             timezone=data.get("timezone", "America/Sao_Paulo")
         )
