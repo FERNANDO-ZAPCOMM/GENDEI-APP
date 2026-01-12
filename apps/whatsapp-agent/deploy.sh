@@ -29,18 +29,32 @@ REGION="us-central1"
 STORAGE_BUCKET="gendei-storage-${PROJECT_ID}"
 
 # PERFORMANCE TUNING (override via env vars)
-# Notes:
-# - Lower concurrency reduces tail latency for LLM calls (one slow request won't starve others on the same instance).
-# - Higher min instances reduces cold starts.
-# - no-cpu-throttling keeps CPU allocated between requests (faster for background processing after webhook ACK).
-CLOUD_RUN_CPU="${CLOUD_RUN_CPU:-2}"
-CLOUD_RUN_MEMORY="${CLOUD_RUN_MEMORY:-4Gi}"
-CLOUD_RUN_TIMEOUT="${CLOUD_RUN_TIMEOUT:-300}"
-CLOUD_RUN_MIN_INSTANCES="${CLOUD_RUN_MIN_INSTANCES:-1}"
-CLOUD_RUN_MAX_INSTANCES="${CLOUD_RUN_MAX_INSTANCES:-20}"
-CLOUD_RUN_CONCURRENCY="${CLOUD_RUN_CONCURRENCY:-2}"
-CLOUD_RUN_CPU_BOOST="${CLOUD_RUN_CPU_BOOST:-true}"          # true/false
-CLOUD_RUN_NO_CPU_THROTTLING="${CLOUD_RUN_NO_CPU_THROTTLING:-true}"  # true/false
+# LIGHT MODE (default) - optimized for dev/staging, saves costs
+# Set PRODUCTION_MODE=true for full production resources
+PRODUCTION_MODE="${PRODUCTION_MODE:-false}"
+
+if [ "${PRODUCTION_MODE}" = "true" ]; then
+    echo "🚀 Production mode enabled - using full resources"
+    CLOUD_RUN_CPU="${CLOUD_RUN_CPU:-2}"
+    CLOUD_RUN_MEMORY="${CLOUD_RUN_MEMORY:-4Gi}"
+    CLOUD_RUN_TIMEOUT="${CLOUD_RUN_TIMEOUT:-300}"
+    CLOUD_RUN_MIN_INSTANCES="${CLOUD_RUN_MIN_INSTANCES:-1}"
+    CLOUD_RUN_MAX_INSTANCES="${CLOUD_RUN_MAX_INSTANCES:-20}"
+    CLOUD_RUN_CONCURRENCY="${CLOUD_RUN_CONCURRENCY:-2}"
+    CLOUD_RUN_CPU_BOOST="${CLOUD_RUN_CPU_BOOST:-true}"
+    CLOUD_RUN_NO_CPU_THROTTLING="${CLOUD_RUN_NO_CPU_THROTTLING:-true}"
+else
+    echo "💡 Light mode (dev/staging) - using minimal resources"
+    echo "   Set PRODUCTION_MODE=true for full production resources"
+    CLOUD_RUN_CPU="${CLOUD_RUN_CPU:-1}"
+    CLOUD_RUN_MEMORY="${CLOUD_RUN_MEMORY:-512Mi}"
+    CLOUD_RUN_TIMEOUT="${CLOUD_RUN_TIMEOUT:-120}"
+    CLOUD_RUN_MIN_INSTANCES="${CLOUD_RUN_MIN_INSTANCES:-0}"
+    CLOUD_RUN_MAX_INSTANCES="${CLOUD_RUN_MAX_INSTANCES:-3}"
+    CLOUD_RUN_CONCURRENCY="${CLOUD_RUN_CONCURRENCY:-4}"
+    CLOUD_RUN_CPU_BOOST="${CLOUD_RUN_CPU_BOOST:-false}"
+    CLOUD_RUN_NO_CPU_THROTTLING="${CLOUD_RUN_NO_CPU_THROTTLING:-false}"
+fi
 
 # Note: WhatsApp Business Numbers now come from Firestore in multi-tenant mode
 
@@ -98,7 +112,7 @@ DEFAULT_CREATOR_ID="${DEFAULT_CREATOR_ID:-default_creator}"
 DOMAIN="${DOMAIN:-https://${SERVICE_NAME}.${REGION}.run.app}"
 
 echo "Configuration loaded:"
-echo "  Mode: ${TEST_CREATOR_ID:+Testing (TEST_CREATOR_ID=$TEST_CREATOR_ID)}${TEST_CREATOR_ID:-Multi-creator (Firestore lookup)}"
+echo "  Mode: ${TEST_CREATOR_ID:+Testing (TEST_CREATOR_ID=$TEST_CREATOR_ID)}${TEST_CREATOR_ID:-Multi-clinic (Firestore lookup)}"
 echo "  Default Creator ID: ${DEFAULT_CREATOR_ID}"
 echo "  Domain: ${DOMAIN}"
 
@@ -189,10 +203,10 @@ docker buildx build \
     --push
 
 echo "Deploying WhatsApp Agent Service to Cloud Run..."
-# NOTE: Multi-creator mode - tokens come from Firestore channels, not env vars
-# - TEST_CREATOR_ID is empty to enable multi-creator lookup
-# - WHATSAPP_TOKEN is BISU token (fallback only)
-# - Creator is looked up from Firestore by phone_number_id
+# NOTE: Multi-clinic mode - tokens come from Firestore channels, not env vars
+# - TEST_CREATOR_ID is empty to enable multi-clinic lookup
+# - WHATSAPP_TOKEN is fallback only
+# - Clinic is looked up from Firestore by phone_number_id
 gcloud run deploy "${SERVICE_NAME}" \
     --image "${REGION}-docker.pkg.dev/${PROJECT_ID}/docker-repo/${SERVICE_NAME}" \
     --platform managed \
@@ -230,17 +244,23 @@ echo "Use the URL below as your WhatsApp webhook:"
 gcloud run services describe "${SERVICE_NAME}" --platform managed --region "${REGION}" --format 'value(status.url)'
 
 echo ""
-echo "Gendei WhatsApp Agent deployed successfully!"
-echo "Service: ${SERVICE_NAME}"
-echo "AI Provider: ${AI_PROVIDER^^}"
-echo "Mode: Multi-clinic (clinics looked up from Firestore by phone_number_id)"
-echo "Storage: ${STORAGE_BUCKET}"
+echo "🎉 Gendei WhatsApp Agent deployed successfully!"
+echo "🤖 Service: ${SERVICE_NAME}"
+echo "🧠 AI Provider: ${AI_PROVIDER^^}"
+if [ "${PRODUCTION_MODE}" = "true" ]; then
+    echo "⚡ Resources: PRODUCTION (${CLOUD_RUN_CPU} CPU, ${CLOUD_RUN_MEMORY}, min ${CLOUD_RUN_MIN_INSTANCES} instances)"
+else
+    echo "💡 Resources: LIGHT MODE (${CLOUD_RUN_CPU} CPU, ${CLOUD_RUN_MEMORY}, min ${CLOUD_RUN_MIN_INSTANCES} instances)"
+    echo "   → To enable production: PRODUCTION_MODE=true ./deploy.sh"
+fi
+echo "📡 Mode: Multi-clinic (clinics looked up from Firestore by phone_number_id)"
+echo "🪣 Storage: ${STORAGE_BUCKET}"
 echo ""
 echo "Next steps:"
 echo "1. Ensure Meta App webhook is configured with: <service-url>/whatsapp"
 echo "2. Connect WhatsApp via Embedded Signup in Gendei dashboard"
 echo "3. The agent will auto-route messages to the correct clinic"
-echo "3. Check the logs with: gcloud logs tail --follow --project=${PROJECT_ID} --resource.labels.service_name=${SERVICE_NAME}"
+echo "4. Check the logs with: gcloud logs tail --follow --project=${PROJECT_ID} --resource.labels.service_name=${SERVICE_NAME}"
 echo ""
 echo "Appointment Scheduling Agent Active:"
 echo "  - Greeting Agent (Fast Path)"
