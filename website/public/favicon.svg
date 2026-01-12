@@ -1,4 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-  <circle cx="50" cy="50" r="45" fill="#0284c7"/>
-  <text x="50" y="62" font-family="Arial, sans-serif" font-size="40" font-weight="bold" fill="white" text-anchor="middle">G</text>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Borel&amp;display=swap');
+  </style>
+  <text x="50" y="65" font-family="Borel, cursive" font-size="80" fill="black" text-anchor="middle">G</text>
 </svg>
