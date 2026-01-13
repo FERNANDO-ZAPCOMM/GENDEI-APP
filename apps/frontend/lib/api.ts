@@ -1,5 +1,4 @@
-// Use /api prefix to route through Next.js rewrite proxy (avoids CORS)
-const API_URL = '/api';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
 type ApiClientOptions = RequestInit & {
   token?: string;

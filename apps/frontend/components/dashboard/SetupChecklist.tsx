@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import {
   CheckCircle2,
   ChevronDown,
@@ -27,11 +27,12 @@ export function SetupChecklist({
   whatsappComplete,
   nextStep,
 }: SetupChecklistProps) {
+  // Order: Clinic -> Payment -> WhatsApp -> Professionals
   const completionStatus = [
     clinicInfoComplete,
-    professionalsComplete,
     paymentComplete,
     whatsappComplete,
+    professionalsComplete,
   ];
 
   const completedCount = completionStatus.filter(Boolean).length;
@@ -39,58 +40,27 @@ export function SetupChecklist({
   const progressPercent = (completedCount / totalSteps) * 100;
   const isAllComplete = completedCount === totalSteps;
 
-  // Auto-collapse when all complete
-  const [isExpanded, setIsExpanded] = useState(!isAllComplete);
-
-  // Update expansion state when completion changes
-  useEffect(() => {
-    if (isAllComplete) {
-      // Collapse after a short delay to show the completion animation
-      const timer = setTimeout(() => {
-        setIsExpanded(false);
-      }, 1500);
-      return () => clearTimeout(timer);
-    } else {
-      setIsExpanded(true);
-    }
-  }, [isAllComplete]);
-
-  // If all complete and collapsed, show minimal view
-  if (isAllComplete && !isExpanded) {
-    return (
-      <Card>
-        <CardContent className="py-3">
-          <button
-            onClick={() => setIsExpanded(true)}
-            className="w-full flex items-center justify-between"
-          >
-            <div className="flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4 text-green-600" />
-              <div className="text-left">
-                <p className="text-sm font-medium text-gray-900">Configuração Completa</p>
-                <p className="text-xs text-gray-600">Sua clínica está pronta para atendimentos</p>
-              </div>
-            </div>
-            <ChevronDown className="h-4 w-4 text-gray-500" />
-          </button>
-        </CardContent>
-      </Card>
-    );
-  }
+  // Always start expanded, user can collapse
+  const [isExpanded, setIsExpanded] = useState(true);
 
   return (
-    <Card>
+    <Card className={isAllComplete ? 'border-green-200 bg-green-50/30' : ''}>
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
-          <div>
-            <span className="text-sm font-medium">
-              {isAllComplete ? 'Configuração Completa' : 'Configure sua Clínica'}
-            </span>
-            <p className="text-xs text-gray-500">
-              {isAllComplete
-                ? 'Sua clínica está pronta para atendimentos'
-                : `${completedCount} de ${totalSteps} passos concluídos`}
-            </p>
+          <div className="flex items-center gap-2">
+            {isAllComplete && (
+              <CheckCircle2 className="h-5 w-5 text-green-600" />
+            )}
+            <div>
+              <span className="text-sm font-medium">
+                {isAllComplete ? 'Configuração Completa' : 'Configure sua Clínica'}
+              </span>
+              <p className="text-xs text-gray-500">
+                {isAllComplete
+                  ? 'Sua clínica está pronta para atendimentos'
+                  : `${completedCount} de ${totalSteps} passos concluídos`}
+              </p>
+            </div>
           </div>
           <button
             onClick={() => setIsExpanded(!isExpanded)}
@@ -102,7 +72,10 @@ export function SetupChecklist({
 
         {/* Progress bar */}
         <div className="mt-3">
-          <Progress value={progressPercent} className="h-1.5" />
+          <Progress
+            value={progressPercent}
+            className={`h-1.5 ${isAllComplete ? '[&>div]:bg-green-500' : ''}`}
+          />
         </div>
       </CardHeader>
 

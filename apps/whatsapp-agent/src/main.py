@@ -56,12 +56,8 @@ DOMAIN = os.getenv("GENDEI_DOMAIN", "https://gendei.com")
 # Database instance
 db: Optional[GendeiDatabase] = None
 
-# Message deduplication
-processed_messages: Dict[str, datetime] = {}
-MESSAGE_CACHE_TTL_SECONDS = 3600
-
-# Conversation state per phone number
-conversation_state: Dict[str, Dict[str, Any]] = {}
+# Note: Message deduplication and conversation state are now Firestore-backed
+# See db.is_message_processed() and db.load_conversation_state()
 
 
 @asynccontextmanager
@@ -95,17 +91,16 @@ def ensure_phone_has_plus(phone: str) -> str:
 
 
 def is_message_processed(message_id: str) -> bool:
-    """Check if message was already processed."""
-    if message_id in processed_messages:
+    """Check if message was already processed (Firestore-backed)."""
+    if not db:
+        return False
+
+    # Check Firestore
+    if db.is_message_processed(message_id):
         return True
 
-    # Cleanup old entries
-    cutoff = datetime.now() - timedelta(seconds=MESSAGE_CACHE_TTL_SECONDS)
-    to_remove = [mid for mid, ts in processed_messages.items() if ts < cutoff]
-    for mid in to_remove:
-        del processed_messages[mid]
-
-    processed_messages[message_id] = datetime.now()
+    # Mark as processed
+    db.mark_message_processed(message_id)
     return False
 
 
@@ -289,12 +284,14 @@ async def handle_reminder_response(
 
     elif button_id == "confirm_reschedule":
         # Start rescheduling flow
-        conversation_state[phone] = {
+        new_state = {
             "state": "rescheduling",
             "clinic_id": clinic_id,
             "appointment_id": appointment.id,
             "professional_id": appointment.professional_id,
         }
+        if db:
+            db.save_conversation_state(clinic_id, phone, new_state)
 
         # Get available slots
         slots = get_available_slots(
@@ -364,12 +361,14 @@ async def handle_scheduling_intent(
 
         if slots:
             slots_text = format_slots_for_display(slots[:15], prof.full_name)
-            conversation_state[phone] = {
+            new_state = {
                 "state": "selecting_slot",
                 "clinic_id": clinic_id,
                 "professional_id": prof.id,
                 "professional_name": prof.full_name,
             }
+            if db:
+                db.save_conversation_state(clinic_id, phone, new_state)
             await send_whatsapp_message(
                 phone_number_id, phone,
                 f"Olá! Aqui está a agenda de {prof.full_name}:\n\n{slots_text}\n\nQual horário você prefere? (ex: '15/01 às 14:00')",
@@ -384,11 +383,13 @@ async def handle_scheduling_intent(
     else:
         # Multiple professionals - ask which one
         prof_list = "\n".join([f"• {p.full_name} - {p.specialty}" for p in professionals])
-        conversation_state[phone] = {
+        new_state = {
             "state": "selecting_professional",
             "clinic_id": clinic_id,
             "professionals": {p.name.lower(): p for p in professionals},
         }
+        if db:
+            db.save_conversation_state(clinic_id, phone, new_state)
         await send_whatsapp_message(
             phone_number_id, phone,
             f"Olá! Temos os seguintes profissionais disponíveis:\n\n{prof_list}\n\nCom qual você gostaria de agendar?",
@@ -403,13 +404,25 @@ async def process_message(
     message_id: str,
     phone_number_id: str,
     access_token: str,
-    button_payload: Optional[str] = None
+    button_payload: Optional[str] = None,
+    contact_name: Optional[str] = None
 ) -> None:
     """Process incoming WhatsApp message."""
     phone = ensure_phone_has_plus(phone)
 
     # Mark as read
     await mark_message_as_read(phone_number_id, message_id, access_token)
+
+    # Upsert contact (like Zapcomm)
+    if db:
+        db.upsert_contact(clinic_id, phone, name=contact_name)
+
+    # Check human takeover - skip AI processing if human has taken over
+    if db and db.is_human_takeover_enabled(clinic_id, phone):
+        logger.info(f"🙋 Human takeover active for {phone}, skipping AI processing")
+        # Log message but don't respond
+        db.log_conversation_message(clinic_id, phone, "text", message, source="patient")
+        return
 
     # Check for button response (reminder confirmation)
     if button_payload:
@@ -427,8 +440,8 @@ async def process_message(
             )
             return
 
-    # Check conversation state
-    state = conversation_state.get(phone, {})
+    # Check conversation state (Firestore-backed)
+    state = db.load_conversation_state(clinic_id, phone) if db else {}
     current_state = state.get("state")
 
     msg_lower = message.lower().strip()
@@ -448,12 +461,14 @@ async def process_message(
             slots = get_available_slots(db, clinic_id, professional_id=selected.id, days_ahead=7)
             if slots:
                 slots_text = format_slots_for_display(slots[:15], selected.full_name)
-                conversation_state[phone] = {
+                new_state = {
                     "state": "selecting_slot",
                     "clinic_id": clinic_id,
                     "professional_id": selected.id,
                     "professional_name": selected.full_name,
                 }
+                if db:
+                    db.save_conversation_state(clinic_id, phone, new_state)
                 await send_whatsapp_message(
                     phone_number_id, phone,
                     f"Ótimo! Aqui está a agenda de {selected.full_name}:\n\n{slots_text}\n\nQual horário você prefere?",
@@ -512,7 +527,7 @@ async def process_message(
                         )
                     else:
                         # Create new appointment
-                        conversation_state[phone] = {
+                        new_state = {
                             "state": "collecting_name",
                             "clinic_id": clinic_id,
                             "professional_id": state["professional_id"],
@@ -520,6 +535,8 @@ async def process_message(
                             "date": date_str,
                             "time": time_str,
                         }
+                        if db:
+                            db.save_conversation_state(clinic_id, phone, new_state)
                         await send_whatsapp_message(
                             phone_number_id, phone,
                             f"Perfeito! Horário {day:02d}/{month:02d} às {time_str} selecionado.\n\nPor favor, me diga seu *nome completo*:",
@@ -527,7 +544,9 @@ async def process_message(
                         )
 
                     if current_state == "rescheduling":
-                        del conversation_state[phone]
+                        # Clear conversation state
+                        if db:
+                            db.save_conversation_state(clinic_id, phone, {"state": "new", "context": {}})
                 else:
                     await send_whatsapp_message(
                         phone_number_id, phone,
@@ -741,7 +760,8 @@ async def process_message(
                 )
 
             # Clear conversation state
-            del conversation_state[phone]
+            if db:
+                db.save_conversation_state(clinic_id, phone, {"state": "new", "context": {}})
         else:
             await send_whatsapp_message(
                 phone_number_id, phone,
@@ -988,6 +1008,117 @@ async def send_confirmation(request: Request):
 
     except Exception as e:
         logger.error(f"❌ Error sending confirmation: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/process-reminders")
+async def process_reminders(request: Request):
+    """
+    Process and send appointment reminders.
+    Called by Cloud Scheduler every 15 minutes.
+    """
+    try:
+        body = await request.json() if request.headers.get("content-type") == "application/json" else {}
+        clinic_id = body.get("clinicId")  # Optional - process all clinics if not specified
+
+        logger.info(f"⏰ Processing reminders for clinic: {clinic_id or 'all'}")
+
+        if not db:
+            raise HTTPException(status_code=500, detail="Database not initialized")
+
+        results = {
+            "reminder_24h": {"sent": 0, "failed": 0},
+            "reminder_2h": {"sent": 0, "failed": 0}
+        }
+
+        # Process 24h reminders
+        for reminder_type in ["reminder_24h", "reminder_2h"]:
+            appointments = db.get_appointments_needing_reminder(reminder_type, clinic_id)
+
+            for apt in appointments:
+                try:
+                    # Get clinic info
+                    clinic = db.get_clinic(apt.clinic_id)
+                    if not clinic:
+                        continue
+
+                    # Get access token
+                    access_token = db.get_clinic_access_token(apt.clinic_id)
+                    if not access_token:
+                        logger.warning(f"No access token for clinic {apt.clinic_id}")
+                        continue
+
+                    phone_number_id = clinic.whatsapp_phone_number_id
+                    if not phone_number_id:
+                        logger.warning(f"No phone_number_id for clinic {apt.clinic_id}")
+                        continue
+
+                    # Format reminder message
+                    message = format_reminder_message(
+                        apt,
+                        reminder_type,
+                        clinic.name,
+                        clinic.address or ""
+                    )
+
+                    patient_phone = ensure_phone_has_plus(apt.patient_phone)
+
+                    # Send reminder
+                    if reminder_type == "reminder_24h":
+                        buttons = [
+                            {"id": "confirm_yes", "title": "Confirmar"},
+                            {"id": "confirm_reschedule", "title": "Reagendar"},
+                            {"id": "confirm_cancel", "title": "Cancelar"},
+                        ]
+                        success = await send_whatsapp_buttons(
+                            phone_number_id, patient_phone, message, buttons, access_token
+                        )
+                    else:
+                        success = await send_whatsapp_message(
+                            phone_number_id, patient_phone, message, access_token
+                        )
+
+                    if success:
+                        # Mark reminder as sent
+                        mark_reminder_sent(db, apt.id, reminder_type)
+                        results[reminder_type]["sent"] += 1
+                        logger.info(f"✅ Sent {reminder_type} reminder for appointment {apt.id}")
+                    else:
+                        results[reminder_type]["failed"] += 1
+                        logger.error(f"❌ Failed to send {reminder_type} for {apt.id}")
+
+                except Exception as e:
+                    results[reminder_type]["failed"] += 1
+                    logger.error(f"❌ Error processing reminder for {apt.id}: {e}")
+
+        logger.info(f"📊 Reminder processing complete: {results}")
+        return {"success": True, "results": results}
+
+    except Exception as e:
+        logger.error(f"❌ Error processing reminders: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/set-human-takeover")
+async def set_human_takeover_endpoint(request: Request):
+    """Set human takeover status for a conversation."""
+    try:
+        body = await request.json()
+        clinic_id = body.get("clinicId")
+        phone = body.get("phone")
+        enabled = body.get("enabled", True)
+        reason = body.get("reason")
+
+        if not clinic_id or not phone:
+            raise HTTPException(status_code=400, detail="clinicId and phone are required")
+
+        phone = ensure_phone_has_plus(phone)
+        success = db.set_human_takeover(clinic_id, phone, enabled, reason)
+
+        return {"success": success}
+
+    except Exception as e:
+        logger.error(f"❌ Error setting human takeover: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

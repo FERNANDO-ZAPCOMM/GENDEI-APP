@@ -2,7 +2,7 @@
 # Handles time slot generation, availability checking, and booking
 
 import logging
-from datetime import datetime, timedelta, date, time
+from datetime import datetime, timedelta, date
 from typing import List, Dict, Any, Optional
 from .models import TimeSlot, Professional, Service
 
@@ -222,90 +222,6 @@ def book_time_slot(
     except Exception as e:
         logger.error(f"Error booking slot: {e}")
         return False
-
-
-def release_time_slot(
-    db,
-    clinic_id: str,
-    professional_id: str,
-    date_str: str,
-    time_str: str
-) -> bool:
-    """
-    Release a previously booked time slot (e.g., when appointment is cancelled).
-
-    Returns:
-        True if successful
-    """
-    try:
-        # Slot is automatically released when appointment status changes to cancelled
-        logger.info(f"Slot {date_str} {time_str} released for {professional_id}")
-        return True
-
-    except Exception as e:
-        logger.error(f"Error releasing slot: {e}")
-        return False
-
-
-def generate_weekly_slots(
-    professional: Professional,
-    clinic_id: str,
-    weeks_ahead: int = 4
-) -> List[Dict[str, Any]]:
-    """
-    Generate a preview of available slots for the next N weeks.
-    Useful for displaying availability in the admin dashboard.
-
-    Returns:
-        List of dicts with date, day, and slots
-    """
-    result = []
-    current_date = date.today()
-    end_date = current_date + timedelta(weeks=weeks_ahead)
-
-    while current_date <= end_date:
-        day_of_week = current_date.weekday()
-        working_hours = professional.working_hours.get(str(day_of_week), [])
-
-        if working_hours:
-            slots = []
-            for period in working_hours:
-                start_time = period.get("start", "09:00")
-                end_time = period.get("end", "18:00")
-
-                start_hour, start_min = map(int, start_time.split(":"))
-                end_hour, end_min = map(int, end_time.split(":"))
-                duration = professional.appointment_duration
-
-                current_hour = start_hour
-                current_min = start_min
-
-                while True:
-                    slot_end_min = current_min + duration
-                    slot_end_hour = current_hour + slot_end_min // 60
-                    slot_end_min = slot_end_min % 60
-
-                    if (slot_end_hour < end_hour) or (slot_end_hour == end_hour and slot_end_min <= end_min):
-                        slots.append(f"{current_hour:02d}:{current_min:02d}")
-
-                    current_min += duration
-                    if current_min >= 60:
-                        current_hour += current_min // 60
-                        current_min = current_min % 60
-
-                    if (current_hour > end_hour) or (current_hour == end_hour and current_min >= end_min):
-                        break
-
-            day_names = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"]
-            result.append({
-                "date": current_date.isoformat(),
-                "day": day_names[day_of_week],
-                "slots": slots
-            })
-
-        current_date += timedelta(days=1)
-
-    return result
 
 
 def format_slots_for_display(slots: List[TimeSlot], professional_name: str) -> str:

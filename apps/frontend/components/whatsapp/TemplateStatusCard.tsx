@@ -19,47 +19,49 @@ import {
   Clock,
   AlertCircle,
   FileText,
-  LayoutGrid,
+  Bell,
+  CreditCard,
+  CalendarCheck,
 } from 'lucide-react';
 
 interface TemplateStatusCardProps {
   wabaId?: string;
 }
 
-function getStatusBadge(status: string, t: ReturnType<typeof useTranslations>) {
+function getStatusBadge(status: string) {
   switch (status?.toUpperCase()) {
     case 'APPROVED':
       return (
         <Badge variant="default" className="bg-green-100 text-green-800 hover:bg-green-100">
           <CheckCircle2 className="w-3 h-3 mr-1" />
-          {t('whatsapp.templates.status.approved')}
+          Aprovado
         </Badge>
       );
     case 'PENDING':
       return (
         <Badge variant="default" className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">
           <Clock className="w-3 h-3 mr-1" />
-          {t('whatsapp.templates.status.pending')}
+          Pendente
         </Badge>
       );
     case 'REJECTED':
       return (
         <Badge variant="default" className="bg-red-100 text-red-800 hover:bg-red-100">
           <XCircle className="w-3 h-3 mr-1" />
-          {t('whatsapp.templates.status.rejected')}
+          Rejeitado
         </Badge>
       );
     default:
       return (
         <Badge variant="secondary">
           <AlertCircle className="w-3 h-3 mr-1" />
-          {status || t('whatsapp.templates.status.unknown')}
+          {status || 'Desconhecido'}
         </Badge>
       );
   }
 }
 
-function TemplateRow({ template, icon: Icon, t }: { template: MessageTemplate; icon: React.ElementType; t: ReturnType<typeof useTranslations> }) {
+function TemplateRow({ template, icon: Icon, description }: { template: MessageTemplate; icon: React.ElementType; description: string }) {
   return (
     <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
       <div className="flex items-center gap-3">
@@ -69,16 +71,16 @@ function TemplateRow({ template, icon: Icon, t }: { template: MessageTemplate; i
         <div>
           <p className="font-medium text-sm">{template.name}</p>
           <p className="text-xs text-muted-foreground">
-            {template.category} • {template.language}
+            {description}
           </p>
         </div>
       </div>
-      {getStatusBadge(template.status, t)}
+      {getStatusBadge(template.status)}
     </div>
   );
 }
 
-function MissingTemplateRow({ name, description, icon: Icon, t }: { name: string; description: string; icon: React.ElementType; t: ReturnType<typeof useTranslations> }) {
+function MissingTemplateRow({ name, description, icon: Icon }: { name: string; description: string; icon: React.ElementType }) {
   return (
     <div className="flex items-center justify-between p-3 bg-slate-50/50 rounded-lg border border-dashed border-slate-200">
       <div className="flex items-center gap-3">
@@ -91,11 +93,40 @@ function MissingTemplateRow({ name, description, icon: Icon, t }: { name: string
         </div>
       </div>
       <Badge variant="outline" className="text-slate-400">
-        {t('whatsapp.templates.notCreated')}
+        Não criado
       </Badge>
     </div>
   );
 }
+
+// Gendei template definitions
+const GENDEI_TEMPLATES = [
+  {
+    name: 'lembrete_consulta_24h',
+    description: 'Lembrete 24h antes (com reagendamento)',
+    icon: Bell,
+  },
+  {
+    name: 'lembrete_consulta_24h_simples',
+    description: 'Lembrete 24h antes (simples)',
+    icon: Bell,
+  },
+  {
+    name: 'lembrete_consulta_2h',
+    description: 'Lembrete 2h antes da consulta',
+    icon: Clock,
+  },
+  {
+    name: 'confirmacao_agendamento',
+    description: 'Confirmação de agendamento',
+    icon: CalendarCheck,
+  },
+  {
+    name: 'link_pagamento_sinal',
+    description: 'Link para pagamento do sinal',
+    icon: CreditCard,
+  },
+];
 
 export function TemplateStatusCard({ wabaId }: TemplateStatusCardProps) {
   const t = useTranslations();
@@ -103,8 +134,6 @@ export function TemplateStatusCard({ wabaId }: TemplateStatusCardProps) {
 
   const {
     templates,
-    spmTemplate,
-    carouselTemplate,
     isLoading,
     error,
     refetch,
@@ -118,18 +147,25 @@ export function TemplateStatusCard({ wabaId }: TemplateStatusCardProps) {
     return null;
   }
 
-  const hasBothTemplates = spmTemplate && carouselTemplate;
-  const hasAnyTemplate = spmTemplate || carouselTemplate;
+  // Check which templates exist
+  const existingTemplateNames = new Set(templates.map(t => t.name));
+  const hasAllTemplates = GENDEI_TEMPLATES.every(t => existingTemplateNames.has(t.name));
+  const hasAnyTemplate = GENDEI_TEMPLATES.some(t => existingTemplateNames.has(t.name));
+
+  // Check if all existing templates are approved
+  const allApproved = templates.length > 0 &&
+    templates.filter(t => GENDEI_TEMPLATES.some(gt => gt.name === t.name))
+      .every(t => t.status?.toUpperCase() === 'APPROVED');
 
   return (
     <Card>
       <CardHeader className="pb-3">
         <CardTitle className="text-base flex items-center gap-2">
           <FileText className="w-4 h-4" />
-          {t('whatsapp.templates.title')}
+          Templates de Mensagem
         </CardTitle>
         <CardDescription className="text-sm mt-1">
-          {t('whatsapp.templates.description')}
+          Templates para lembretes e confirmações de consultas
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -146,7 +182,7 @@ export function TemplateStatusCard({ wabaId }: TemplateStatusCardProps) {
             <AlertCircle className="w-8 h-8 text-red-400 mx-auto mb-2" />
             <p className="text-sm text-red-600">{error.message}</p>
             <Button variant="outline" size="sm" className="mt-2" onClick={() => refetch()}>
-              {t('whatsapp.templates.tryAgain')}
+              Tentar novamente
             </Button>
           </div>
         )}
@@ -154,37 +190,37 @@ export function TemplateStatusCard({ wabaId }: TemplateStatusCardProps) {
         {/* Templates list */}
         {!isLoading && !error && (
           <div className="space-y-3">
-            {/* SPM Template */}
-            {spmTemplate ? (
-              <TemplateRow template={spmTemplate} icon={FileText} t={t} />
-            ) : (
-              <MissingTemplateRow
-                name="zapcomm_produto"
-                description={t('whatsapp.templates.singleProduct')}
-                icon={FileText}
-                t={t}
-              />
-            )}
+            {GENDEI_TEMPLATES.map((templateDef) => {
+              const existingTemplate = templates.find(t => t.name === templateDef.name);
 
-            {/* Carousel Template */}
-            {carouselTemplate ? (
-              <TemplateRow template={carouselTemplate} icon={LayoutGrid} t={t} />
-            ) : (
-              <MissingTemplateRow
-                name="zapcomm_produtos_v2"
-                description={t('whatsapp.templates.productCarousel')}
-                icon={LayoutGrid}
-                t={t}
-              />
-            )}
+              if (existingTemplate) {
+                return (
+                  <TemplateRow
+                    key={templateDef.name}
+                    template={existingTemplate}
+                    icon={templateDef.icon}
+                    description={templateDef.description}
+                  />
+                );
+              } else {
+                return (
+                  <MissingTemplateRow
+                    key={templateDef.name}
+                    name={templateDef.name}
+                    description={templateDef.description}
+                    icon={templateDef.icon}
+                  />
+                );
+              }
+            })}
           </div>
         )}
 
         {/* Create templates button */}
-        {!isLoading && !error && !hasBothTemplates && (
+        {!isLoading && !error && !hasAllTemplates && (
           <div className="flex items-center justify-between pt-2">
             <p className="text-xs text-muted-foreground">
-              {t('whatsapp.templates.notFound')}
+              Templates não encontrados
             </p>
             <Button
               onClick={() => createTemplates()}
@@ -195,10 +231,10 @@ export function TemplateStatusCard({ wabaId }: TemplateStatusCardProps) {
               {isCreating ? (
                 <>
                   <Loader2 className="w-3 h-3 mr-1.5 animate-spin" />
-                  {t('whatsapp.templates.updating')}
+                  Atualizando...
                 </>
               ) : (
-                t('whatsapp.templates.update')
+                'Atualizar'
               )}
             </Button>
             {createError && (
@@ -210,20 +246,20 @@ export function TemplateStatusCard({ wabaId }: TemplateStatusCardProps) {
         )}
 
         {/* Info about template approval */}
-        {!isLoading && !error && hasAnyTemplate && (
+        {!isLoading && !error && hasAnyTemplate && !allApproved && (
           <div className="bg-blue-50 rounded-lg p-3 mt-2">
             <p className="text-xs text-blue-700">
-              {t('whatsapp.templates.note')}
+              Templates precisam ser aprovados pelo Meta antes de poderem ser usados. Isso pode levar até 24 horas.
             </p>
           </div>
         )}
 
         {/* Success state */}
-        {hasBothTemplates && spmTemplate?.status === 'APPROVED' && carouselTemplate?.status === 'APPROVED' && (
+        {hasAllTemplates && allApproved && (
           <div className="bg-green-50 rounded-lg p-3 flex items-center gap-2">
             <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0" />
             <p className="text-xs text-green-700">
-              {t('whatsapp.templates.allApproved')}
+              Todos os templates estão aprovados e prontos para uso!
             </p>
           </div>
         )}

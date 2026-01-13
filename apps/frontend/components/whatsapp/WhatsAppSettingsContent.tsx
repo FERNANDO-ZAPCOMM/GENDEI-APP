@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useRef } from 'react';
 import { useTranslations } from 'next-intl';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
@@ -15,13 +16,16 @@ import { DisconnectButton } from './DisconnectButton';
 import { BusinessProfileCard } from './BusinessProfileCard';
 import { QRCodesCard } from './QRCodesCard';
 import { TemplateStatusCard } from './TemplateStatusCard';
-import { WhatsAppPreviewCard } from './WhatsAppPreviewCard';
+
+interface WhatsAppSettingsContentProps {
+  onConnected?: () => void;
+}
 
 /**
  * Shared WhatsApp settings content component
  * Used across dashboard/whatsapp, settings/whatsapp, and onboarding/whatsapp pages
  */
-export function WhatsAppSettingsContent() {
+export function WhatsAppSettingsContent({ onConnected }: WhatsAppSettingsContentProps) {
   const t = useTranslations();
   const router = useRouter();
   const params = useParams();
@@ -29,6 +33,7 @@ export function WhatsAppSettingsContent() {
   const { currentUser } = useAuth();
   const { currentClinic: clinic } = useClinic();
   const { data: services } = useServices(clinic?.id || '');
+  const hasCalledOnConnected = useRef(false);
 
   const {
     status,
@@ -40,6 +45,18 @@ export function WhatsAppSettingsContent() {
     isSyncing,
     isDisconnecting,
   } = useMetaStatus(currentUser?.uid || '');
+
+  // Call onConnected when WhatsApp becomes ready
+  useEffect(() => {
+    if (
+      onConnected &&
+      status?.whatsappStatus === 'READY' &&
+      !hasCalledOnConnected.current
+    ) {
+      hasCalledOnConnected.current = true;
+      onConnected();
+    }
+  }, [status?.whatsappStatus, onConnected]);
 
   const hasServices = services && services.length > 0;
 
@@ -133,9 +150,6 @@ export function WhatsAppSettingsContent() {
               </CardContent>
             </Card>
           )}
-
-          {/* WhatsApp Preview - Show when connected */}
-          {isReady && <WhatsAppPreviewCard />}
 
           <ConnectionStatusCard
             status={status}

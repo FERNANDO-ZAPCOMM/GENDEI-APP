@@ -28,7 +28,6 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ConnectionAlerts } from '@/components/dashboard/ConnectionAlerts';
-import { OnboardingProgressCard } from '@/components/dashboard/OnboardingProgressCard';
 import { SetupChecklist } from '@/components/dashboard/SetupChecklist';
 import { useParams } from 'next/navigation';
 import type { AppointmentStatus } from '@/lib/clinic-types';
@@ -56,7 +55,6 @@ export default function DashboardPage() {
 
   // Onboarding status
   const onboardingStatus = useOnboardingStatus();
-  const showOnboarding = !onboardingStatus.isLoading && !onboardingStatus.isSetupComplete;
 
   const isWhatsAppConnected = clinic?.whatsappConnected || false;
 
@@ -97,20 +95,8 @@ export default function DashboardPage() {
       {/* Connection Alerts - Only show if we have valid meta status */}
       {metaStatus && !metaError && <ConnectionAlerts status={metaStatus} locale={locale} />}
 
-      {/* Onboarding Progress Card - Show prominently for new users */}
-      {showOnboarding && (
-        <OnboardingProgressCard
-          clinicInfoComplete={onboardingStatus.clinicInfoComplete}
-          professionalsComplete={onboardingStatus.professionalsComplete}
-          paymentComplete={onboardingStatus.paymentComplete}
-          whatsappComplete={onboardingStatus.whatsappComplete}
-          completionPercentage={onboardingStatus.completionPercentage}
-          nextStep={onboardingStatus.nextStep}
-        />
-      )}
-
-      {/* Setup Checklist - Show for users who have started but not completed setup */}
-      {!showOnboarding && !onboardingStatus.isSetupComplete && (
+      {/* Setup Checklist - Always show, with green styling when complete */}
+      {!onboardingStatus.isLoading && (
         <SetupChecklist
           clinicInfoComplete={onboardingStatus.clinicInfoComplete}
           professionalsComplete={onboardingStatus.professionalsComplete}

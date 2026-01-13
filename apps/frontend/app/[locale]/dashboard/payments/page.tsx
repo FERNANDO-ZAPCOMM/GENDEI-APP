@@ -1,7 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter, useParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
+import { getNextStepUrl } from '@/hooks/use-onboarding';
 import {
   CreditCard,
   Percent,
@@ -39,6 +41,9 @@ const COMMON_CONVENIOS = [
 
 export default function PaymentsPage() {
   const t = useTranslations();
+  const router = useRouter();
+  const params = useParams();
+  const locale = (params?.locale as string) || 'pt-BR';
 
   const { currentClinic, isLoading: clinicLoading, updateClinic } = useClinic();
 
@@ -118,6 +123,9 @@ export default function PaymentsPage() {
         depositPercentage: settings.requiresDeposit ? settings.depositPercentage : 0,
       } as Record<string, unknown>);
       toast.success('Configurações de pagamento salvas!');
+
+      // Redirect to WhatsApp page after saving
+      router.push(getNextStepUrl('payments', locale));
     } catch {
       toast.error('Erro ao salvar configurações');
     } finally {

@@ -1,11 +1,21 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
+import { useRouter, useParams } from 'next/navigation';
 import { PermissionGuard } from '@/components/auth/PermissionGuard';
 import { WhatsAppSettingsContent } from '@/components/whatsapp/WhatsAppSettingsContent';
+import { getNextStepUrl } from '@/hooks/use-onboarding';
 
 function WhatsAppSettingsPageContent() {
   const t = useTranslations();
+  const router = useRouter();
+  const params = useParams();
+  const locale = (params?.locale as string) || 'pt-BR';
+
+  const handleWhatsAppConnected = () => {
+    // Redirect to dashboard when WhatsApp is connected
+    router.push(getNextStepUrl('whatsapp', locale));
+  };
 
   return (
     <div className="space-y-6">
@@ -21,7 +31,7 @@ function WhatsAppSettingsPageContent() {
       </div>
 
       {/* Shared WhatsApp Settings Content */}
-      <WhatsAppSettingsContent />
+      <WhatsAppSettingsContent onConnected={handleWhatsAppConnected} />
     </div>
   );
 }

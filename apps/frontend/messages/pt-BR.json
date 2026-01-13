@@ -759,6 +759,8 @@
       },
       "addProductAlert": "WhatsApp conectado! Agora adicione seu primeiro produto para começar a vender.",
       "addProductButton": "Adicionar Produto",
+      "addServiceAlert": "WhatsApp conectado! Agora adicione seu primeiro serviço para começar a agendar.",
+      "addServiceButton": "Adicionar Serviço",
       "danger": {
         "title": "Zona de Perigo",
         "description": "Desconectar permanentemente sua conta do WhatsApp Business"

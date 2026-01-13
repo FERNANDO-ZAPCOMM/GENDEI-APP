@@ -41,22 +41,23 @@ export function useOnboardingStatus() {
     );
 
     // Calculate completion (4 steps total)
+    // New order: Clinic -> Payment -> WhatsApp -> Professionals
     const steps = [
       clinicInfoComplete,
-      professionalsComplete,
       paymentComplete,
       whatsappComplete,
+      professionalsComplete,
     ];
 
     const completedSteps = steps.filter(Boolean).length;
     const completionPercentage = Math.round((completedSteps / 4) * 100);
 
-    // Find next incomplete step
+    // Find next incomplete step (following new order)
     let nextStep: OnboardingStep | null = null;
     if (!clinicInfoComplete) nextStep = 1;
-    else if (!professionalsComplete) nextStep = 2;
-    else if (!paymentComplete) nextStep = 3;
-    else if (!whatsappComplete) nextStep = 4;
+    else if (!paymentComplete) nextStep = 2;
+    else if (!whatsappComplete) nextStep = 3;
+    else if (!professionalsComplete) nextStep = 4;
 
     return {
       clinicInfoComplete,

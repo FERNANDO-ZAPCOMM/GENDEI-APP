@@ -392,11 +392,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const locale = pathname.split('/')[1];
   const todayCount = stats?.todayAppointments || 0;
 
-  // Mock notifications (replace with real data)
-  const notifications = [
-    { id: 1, title: 'Nova consulta agendada', time: '5 min atrás' },
-    { id: 2, title: 'Paciente confirmou presença', time: '15 min atrás' },
-  ];
+  // TODO: Replace with real notifications from Firebase
+  const notifications: { id: number; title: string; time: string }[] = [];
 
   useEffect(() => {
     if (!authLoading && !currentUser) {

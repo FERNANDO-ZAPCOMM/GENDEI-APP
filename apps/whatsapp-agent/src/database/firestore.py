@@ -3,7 +3,7 @@
 
 import os
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
 from google.cloud import firestore
 
@@ -31,7 +31,7 @@ class GendeiDatabase:
     def __init__(self, project_id: Optional[str] = None):
         """Initialize Firestore client"""
         try:
-            self.project_id = project_id or os.getenv("GCP_PROJECT", "zapcomm-fb-dev")
+            self.project_id = project_id or os.getenv("GOOGLE_CLOUD_PROJECT") or os.getenv("GCP_PROJECT", "gendei-prod")
             self.db = firestore.Client(project=self.project_id)
             logger.info(f"✅ Gendei Firestore connected to project: {self.project_id}")
         except Exception as e:
@@ -481,16 +481,41 @@ class GendeiDatabase:
             return False
 
     def get_access_token(self, clinic_id: str) -> Optional[str]:
-        """Get access token for clinic"""
+        """Get access token for clinic - checks multiple locations like Zapcomm"""
         try:
-            doc = self.db.collection(TOKENS).document(clinic_id).get()
-            if doc.exists:
-                data = doc.to_dict()
-                return data.get("accessToken")
+            # 1. First try whatsappAccessToken directly in clinic document (Zapcomm pattern)
+            clinic_doc = self.db.collection(CLINICS).document(clinic_id).get()
+            if clinic_doc.exists:
+                clinic_data = clinic_doc.to_dict()
+                clinic_token = clinic_data.get("whatsappAccessToken")
+                if clinic_token:
+                    logger.info(f"✅ Using whatsappAccessToken from clinic doc for {clinic_id}")
+                    return clinic_token
+
+            # 2. Fall back to tokens collection
+            token_doc = self.db.collection(TOKENS).document(clinic_id).get()
+            if token_doc.exists:
+                token_data = token_doc.to_dict()
+                stored_token = token_data.get("accessToken")
+                if stored_token:
+                    logger.info(f"✅ Using accessToken from tokens collection for {clinic_id}")
+                    return stored_token
+
+            # 3. Fall back to BISU token from environment
+            bisu_token = os.getenv("META_BISU_ACCESS_TOKEN")
+            if bisu_token:
+                logger.info(f"⚠️ Using BISU token from environment for {clinic_id}")
+                return bisu_token
+
+            logger.warning(f"❌ No access token found for clinic {clinic_id}")
             return None
         except Exception as e:
-            logger.error(f"Error getting access token: {e}")
+            logger.error(f"Error getting access token for {clinic_id}: {e}")
             return None
+
+    def get_clinic_access_token(self, clinic_id: str) -> Optional[str]:
+        """Alias for get_access_token - Get WhatsApp access token for clinic"""
+        return self.get_access_token(clinic_id)
 
     # ============================================
     # CONVERSATION/CHAT OPERATIONS
@@ -614,3 +639,393 @@ class GendeiDatabase:
         except Exception as e:
             logger.error(f"Error marking reminder sent: {e}")
             return False
+
+    # ============================================
+    # CONTACT MANAGEMENT (Like Zapcomm)
+    # ============================================
+
+    def upsert_contact(
+        self,
+        clinic_id: str,
+        phone: str,
+        name: Optional[str] = None,
+        profile_picture_url: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> Optional[str]:
+        """
+        Create or update a contact in the contacts collection.
+        Args:
+            clinic_id: Clinic ID
+            phone: WhatsApp phone number (used as document ID)
+            name: Contact name from WhatsApp profile
+            profile_picture_url: URL to profile picture
+            metadata: Additional metadata
+        Returns:
+            Contact ID if successful
+        """
+        try:
+            # Use phone number as document ID
+            contact_id = phone.replace(' ', '')
+            contact_ref = self.db.collection(CLINICS).document(clinic_id).collection(
+                "contacts"
+            ).document(contact_id)
+
+            doc = contact_ref.get()
+            now = datetime.now().isoformat()
+
+            if doc.exists:
+                # Update existing contact
+                updates = {
+                    "updatedAt": now,
+                    "lastMessageAt": now,
+                }
+                if name:
+                    updates["name"] = name
+                if profile_picture_url:
+                    updates["profilePictureUrl"] = profile_picture_url
+
+                # Increment message count
+                current_data = doc.to_dict()
+                updates["messageCount"] = current_data.get("messageCount", 0) + 1
+
+                contact_ref.update(updates)
+                logger.debug(f"👤 Updated contact {contact_id}: {name}")
+            else:
+                # Create new contact
+                contact_data = {
+                    "id": contact_id,
+                    "phone": phone,
+                    "name": name,
+                    "profilePictureUrl": profile_picture_url,
+                    "clinicId": clinic_id,
+                    "source": "whatsapp",
+                    "messageCount": 1,
+                    "tags": [],
+                    "metadata": metadata or {},
+                    "createdAt": now,
+                    "updatedAt": now,
+                    "lastMessageAt": now,
+                }
+                contact_ref.set(contact_data)
+                logger.info(f"👤 Created new contact {contact_id}: {name}")
+
+            return contact_id
+
+        except Exception as e:
+            logger.error(f"Error upserting contact: {e}")
+            return None
+
+    def get_contact(self, clinic_id: str, phone: str) -> Optional[Dict[str, Any]]:
+        """
+        Get a contact by phone number.
+        Args:
+            clinic_id: Clinic ID
+            phone: WhatsApp phone number
+        Returns:
+            Contact data if found
+        """
+        try:
+            contact_id = phone.replace(' ', '')
+            contact_ref = self.db.collection(CLINICS).document(clinic_id).collection(
+                "contacts"
+            ).document(contact_id)
+            doc = contact_ref.get()
+
+            if doc.exists:
+                contact = doc.to_dict()
+                contact["id"] = doc.id
+                return contact
+
+            return None
+
+        except Exception as e:
+            logger.error(f"Error getting contact: {e}")
+            return None
+
+    # ============================================
+    # HUMAN TAKEOVER (Like Zapcomm)
+    # ============================================
+
+    def is_human_takeover_enabled(self, clinic_id: str, phone: str) -> bool:
+        """
+        Check if human takeover is enabled for this conversation.
+        Checks both 'isHumanTakeover' (dashboard) and 'humanTakeover' (agent) fields.
+        Also checks 'aiPaused' for additional safety.
+        """
+        try:
+            conv_ref = self.db.collection(CLINICS).document(clinic_id).collection(
+                "conversations"
+            ).document(phone)
+            doc = conv_ref.get()
+
+            if doc.exists:
+                data = doc.to_dict()
+                # Check all possible takeover flags
+                is_takeover = data.get("isHumanTakeover", False) or data.get("humanTakeover", False)
+                ai_paused = data.get("aiPaused", False)
+                return is_takeover or ai_paused
+
+            return False
+
+        except Exception as e:
+            logger.error(f"Error checking human takeover: {e}")
+            return False
+
+    def set_human_takeover(
+        self,
+        clinic_id: str,
+        phone: str,
+        enabled: bool,
+        reason: Optional[str] = None
+    ) -> bool:
+        """
+        Set human takeover status for a conversation.
+        Args:
+            clinic_id: Clinic ID
+            phone: WhatsApp phone number
+            enabled: Whether to enable human takeover
+            reason: Optional reason for handoff
+        Returns:
+            True if successful
+        """
+        try:
+            conv_ref = self.db.collection(CLINICS).document(clinic_id).collection(
+                "conversations"
+            ).document(phone)
+
+            now = datetime.now().isoformat()
+            updates = {
+                "humanTakeover": enabled,
+                "isHumanTakeover": enabled,  # Dashboard uses this field
+                "handledBy": "human" if enabled else "ai",
+                "aiPaused": enabled,
+                "updatedAt": now
+            }
+
+            if enabled:
+                updates["humanTakeoverAt"] = now
+                updates["takenOverAt"] = now  # Dashboard uses this field
+                if reason:
+                    updates["humanTakeoverReason"] = reason
+
+            conv_ref.set(updates, merge=True)
+
+            logger.info(f"{'🙋' if enabled else '🤖'} Human takeover {'enabled' if enabled else 'disabled'} for {phone}")
+            return True
+
+        except Exception as e:
+            logger.error(f"Error setting human takeover: {e}")
+            return False
+
+    # ============================================
+    # CONVERSATION STATE PERSISTENCE (Like Zapcomm)
+    # ============================================
+
+    def load_conversation_state(self, clinic_id: str, phone: str) -> Dict[str, Any]:
+        """
+        Load conversation state for a WhatsApp user.
+        Args:
+            clinic_id: Clinic ID
+            phone: WhatsApp user ID (phone number)
+        Returns:
+            Conversation state dict
+        """
+        try:
+            conv_ref = self.db.collection(CLINICS).document(clinic_id).collection(
+                "conversations"
+            ).document(phone)
+            doc = conv_ref.get()
+
+            if doc.exists:
+                state = doc.to_dict()
+                logger.debug(f"📋 Loaded conversation state for {phone}")
+                return state
+            else:
+                # Create new conversation state
+                now = datetime.now().isoformat()
+                new_state = {
+                    "id": phone,
+                    "clinicId": clinic_id,
+                    "phone": phone,
+                    "state": "new",
+                    "context": {},
+                    "lastMessageAt": now,
+                    "isSessionActive": True,
+                    "createdAt": now,
+                    "updatedAt": now
+                }
+                conv_ref.set(new_state)
+                logger.info(f"📋 Created new conversation state for {phone}")
+                return new_state
+
+        except Exception as e:
+            logger.error(f"Error loading conversation state: {e}")
+            # Return minimal state
+            return {
+                "phone": phone,
+                "clinicId": clinic_id,
+                "state": "new",
+                "context": {},
+                "isSessionActive": True
+            }
+
+    def save_conversation_state(self, clinic_id: str, phone: str, state: Dict[str, Any]) -> bool:
+        """
+        Save conversation state.
+        Args:
+            clinic_id: Clinic ID
+            phone: WhatsApp user ID
+            state: Conversation state to save
+        Returns:
+            True if successful
+        """
+        try:
+            conv_ref = self.db.collection(CLINICS).document(clinic_id).collection(
+                "conversations"
+            ).document(phone)
+
+            # Update timestamps
+            now = datetime.now().isoformat()
+            state["updatedAt"] = now
+            state["lastMessageAt"] = now
+
+            # Merge with existing data
+            conv_ref.set(state, merge=True)
+
+            logger.debug(f"💾 Saved conversation state for {phone}")
+            return True
+
+        except Exception as e:
+            logger.error(f"Error saving conversation state: {e}")
+            return False
+
+    # ============================================
+    # MESSAGE DEDUPLICATION (Like Zapcomm - Firestore-backed)
+    # ============================================
+
+    def is_message_processed(self, message_id: str, ttl_hours: int = 24) -> bool:
+        """
+        Check if a message has already been processed (Firestore-backed).
+        Args:
+            message_id: WhatsApp message ID
+            ttl_hours: Hours to keep message IDs
+        Returns:
+            True if message was already processed
+        """
+        try:
+            doc_ref = self.db.collection("gendei_processed_messages").document(message_id)
+            doc = doc_ref.get()
+
+            if doc.exists:
+                # Check if within TTL
+                data = doc.to_dict()
+                processed_at = data.get("processedAt", "")
+                if processed_at:
+                    processed_time = datetime.fromisoformat(processed_at)
+                    if datetime.now() - processed_time < timedelta(hours=ttl_hours):
+                        return True
+                    # Expired, will be re-processed
+                    doc_ref.delete()
+                    return False
+                return True
+
+            return False
+
+        except Exception as e:
+            logger.error(f"Error checking message processed: {e}")
+            return False
+
+    def mark_message_processed(self, message_id: str) -> bool:
+        """
+        Mark a message as processed.
+        Args:
+            message_id: WhatsApp message ID
+        Returns:
+            True if successful
+        """
+        try:
+            self.db.collection("gendei_processed_messages").document(message_id).set({
+                "messageId": message_id,
+                "processedAt": datetime.now().isoformat()
+            })
+            return True
+        except Exception as e:
+            logger.error(f"Error marking message processed: {e}")
+            return False
+
+    # ============================================
+    # APPOINTMENTS NEEDING REMINDERS
+    # ============================================
+
+    def get_appointments_needing_reminder(
+        self,
+        reminder_type: str,
+        clinic_id: Optional[str] = None
+    ) -> List[Appointment]:
+        """
+        Get appointments that need a specific reminder sent.
+        Args:
+            reminder_type: "reminder_24h" or "reminder_2h"
+            clinic_id: Optional filter by clinic
+        Returns:
+            List of appointments needing reminders
+        """
+        try:
+            now = datetime.now()
+
+            if reminder_type == "reminder_24h":
+                # Get appointments 23-25 hours from now
+                window_start = now + timedelta(hours=23)
+                window_end = now + timedelta(hours=25)
+            elif reminder_type == "reminder_2h":
+                # Get appointments 1.5-2.5 hours from now
+                window_start = now + timedelta(hours=1, minutes=30)
+                window_end = now + timedelta(hours=2, minutes=30)
+            else:
+                logger.error(f"Unknown reminder type: {reminder_type}")
+                return []
+
+            # Query appointments in the window
+            start_date = window_start.date().isoformat()
+            end_date = window_end.date().isoformat()
+
+            query = self.db.collection(APPOINTMENTS).where("date", ">=", start_date).where("date", "<=", end_date)
+
+            if clinic_id:
+                query = query.where("clinicId", "==", clinic_id)
+
+            docs = query.get()
+
+            # Filter to confirmed appointments that haven't received this reminder
+            needs_reminder = []
+            for doc in docs:
+                data = doc.to_dict()
+                data["id"] = doc.id
+
+                # Check status
+                status = data.get("status", "")
+                if status not in ["confirmed", "confirmed_presence"]:
+                    continue
+
+                # Check if already sent
+                if reminder_type == "reminder_24h" and data.get("reminder24hSent"):
+                    continue
+                if reminder_type == "reminder_2h" and data.get("reminder2hSent"):
+                    continue
+
+                # Check if in time window
+                apt_date = data.get("date", "")
+                apt_time = data.get("time", "00:00")
+                try:
+                    apt_dt = datetime.strptime(f"{apt_date} {apt_time}", "%Y-%m-%d %H:%M")
+                    if window_start <= apt_dt <= window_end:
+                        needs_reminder.append(Appointment.from_dict(data))
+                except ValueError:
+                    continue
+
+            logger.info(f"Found {len(needs_reminder)} appointments needing {reminder_type}")
+            return needs_reminder
+
+        except Exception as e:
+            logger.error(f"Error getting appointments needing reminder: {e}")
+            return []

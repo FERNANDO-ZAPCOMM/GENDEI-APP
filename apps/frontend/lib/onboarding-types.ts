@@ -22,6 +22,7 @@ export interface OnboardingStepInfo {
   isActive: boolean;  // Currently working on this step
 }
 
+// New order: Clinic -> Payment -> WhatsApp -> Professionals
 export const ONBOARDING_STEPS: Omit<OnboardingStepInfo, 'isComplete' | 'isActive'>[] = [
   {
     step: 1,
@@ -32,23 +33,23 @@ export const ONBOARDING_STEPS: Omit<OnboardingStepInfo, 'isComplete' | 'isActive
   },
   {
     step: 2,
-    title: 'Profissionais',
-    description: 'Adicione médicos e especialidades',
-    icon: 'UserPlus',
-    href: '/dashboard/professionals',
-  },
-  {
-    step: 3,
     title: 'Pagamentos',
     description: 'Convênios, particular e depósito',
     icon: 'CreditCard',
     href: '/dashboard/payments',
   },
   {
-    step: 4,
+    step: 3,
     title: 'WhatsApp',
     description: 'Conecte sua conta comercial',
     icon: 'MessageCircle',
     href: '/dashboard/whatsapp',
+  },
+  {
+    step: 4,
+    title: 'Profissionais',
+    description: 'Adicione médicos e especialidades',
+    icon: 'UserPlus',
+    href: '/dashboard/professionals',
   },
 ];

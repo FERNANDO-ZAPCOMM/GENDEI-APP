@@ -23,6 +23,7 @@ import appointmentsRouter from './routes/appointments';
 import patientsRouter from './routes/patients';
 import conversationsRouter from './routes/conversations';
 import metaRouter from './routes/meta';
+import whatsappRouter from './routes/whatsapp';
 import remindersRouter from './routes/reminders';
 import teamRouter from './routes/team';
 
@@ -53,6 +54,7 @@ app.use('/appointments', appointmentsRouter);
 app.use('/patients', patientsRouter);
 app.use('/conversations', conversationsRouter);
 app.use('/meta', metaRouter);
+app.use('/whatsapp', whatsappRouter);
 app.use('/reminders', remindersRouter);
 app.use('/team', teamRouter);
 

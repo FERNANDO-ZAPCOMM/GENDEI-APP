@@ -102,15 +102,21 @@ export function useWhatsAppTemplates(creatorId: string) {
     },
   });
 
-  // Find ZapComm templates
+  // Find Gendei clinic templates
   const templates = query.data?.templates || [];
-  const spmTemplate = templates.find(t => t.name === 'zapcomm_produto');
-  const carouselTemplate = templates.find(t => t.name === 'zapcomm_produtos_v2');
+  const reminder24hTemplate = templates.find(t => t.name === 'lembrete_consulta_24h');
+  const reminder24hSimpleTemplate = templates.find(t => t.name === 'lembrete_consulta_24h_simples');
+  const reminder2hTemplate = templates.find(t => t.name === 'lembrete_consulta_2h');
+  const confirmationTemplate = templates.find(t => t.name === 'confirmacao_agendamento');
+  const paymentLinkTemplate = templates.find(t => t.name === 'link_pagamento_sinal');
 
   return {
     templates,
-    spmTemplate,
-    carouselTemplate,
+    reminder24hTemplate,
+    reminder24hSimpleTemplate,
+    reminder2hTemplate,
+    confirmationTemplate,
+    paymentLinkTemplate,
     wabaId: query.data?.wabaId,
     isLoading: query.isLoading,
     error: query.error,

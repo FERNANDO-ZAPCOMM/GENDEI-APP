@@ -18,7 +18,9 @@ import {
   Loader2
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
+import { useRouter, useParams } from 'next/navigation';
 import { toast } from 'sonner';
+import { getNextStepUrl } from '@/hooks/use-onboarding';
 import { AddressAutocomplete, AddressDetails } from '@/components/AddressAutocomplete';
 import { ClinicWhatsAppPreview } from '@/components/chat/ClinicWhatsAppPreview';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -84,6 +86,9 @@ const timeOptions = Array.from({ length: 48 }, (_, i) => {
 
 export default function ClinicSettingsPage() {
   const t = useTranslations();
+  const router = useRouter();
+  const params = useParams();
+  const locale = (params?.locale as string) || 'pt-BR';
   const { currentClinic, isLoading, updateClinic } = useClinic();
 
   const [activeTab, setActiveTab] = useState<TabKey>('basic');
@@ -100,8 +105,9 @@ export default function ClinicSettingsPage() {
   const [openTime, setOpenTime] = useState('08:00');
   const [closeTime, setCloseTime] = useState('18:00');
   const [selectedDays, setSelectedDays] = useState<Record<DayKey, boolean>>({
-    seg: true, ter: true, qua: true, qui: true, sex: true, sab: false, dom: false,
+    seg: false, ter: false, qua: false, qui: false, sex: false, sab: false, dom: false,
   });
+  const [hoursConfigured, setHoursConfigured] = useState(false);
   const [addressData, setAddressData] = useState<ClinicAddress | undefined>();
   const [emailError, setEmailError] = useState('');
 
@@ -134,6 +140,19 @@ export default function ClinicSettingsPage() {
           setOpenTime(match[1]);
           setCloseTime(match[2]);
         }
+        // Parse selected days from openingHours string
+        const hoursStr = currentClinic.openingHours;
+        const newDays = {
+          seg: hoursStr.includes('Seg') || hoursStr.includes('Todos'),
+          ter: hoursStr.includes('Ter') || hoursStr.includes('Todos'),
+          qua: hoursStr.includes('Qua') || hoursStr.includes('Todos'),
+          qui: hoursStr.includes('Qui') || hoursStr.includes('Todos'),
+          sex: hoursStr.includes('Sex') || hoursStr.includes('Todos'),
+          sab: hoursStr.includes('Sáb') || hoursStr.includes('Sab') || hoursStr.includes('Todos'),
+          dom: hoursStr.includes('Dom') || hoursStr.includes('Todos'),
+        };
+        setSelectedDays(newDays);
+        setHoursConfigured(true);
       }
     }
   }, [currentClinic]);
@@ -161,10 +180,12 @@ export default function ClinicSettingsPage() {
     const daysStr = formatDaysString(days);
     if (!daysStr) {
       setFormData((prev) => ({ ...prev, openingHours: '' }));
+      setHoursConfigured(false);
       return;
     }
     const newOpeningHours = `${daysStr}: ${open}-${close}`;
     setFormData((prev) => ({ ...prev, openingHours: newOpeningHours }));
+    setHoursConfigured(true);
   };
 
   const handleTimeChange = (type: 'open' | 'close', value: string) => {
@@ -198,6 +219,17 @@ export default function ClinicSettingsPage() {
         addressData,
       });
       toast.success('Configurações salvas com sucesso');
+
+      // Check if all tabs will be complete after this save
+      const willHaveBasicInfo = !!(formData.name && formData.categories.length > 0);
+      const willHaveContact = !!formData.phone;
+      const willHaveLocation = !!(formData.address || addressData?.formatted);
+      const willHaveHours = hoursConfigured && Object.values(selectedDays).some(Boolean);
+
+      // If all tabs complete, redirect to payments page
+      if (willHaveBasicInfo && willHaveContact && willHaveLocation && willHaveHours) {
+        router.push(getNextStepUrl('clinic', locale));
+      }
     } catch (error) {
       toast.error('Erro ao salvar configurações');
     }
@@ -207,7 +239,7 @@ export default function ClinicSettingsPage() {
   const hasBasicInfo = !!(formData.name && formData.categories.length > 0);
   const hasContact = !!(formData.phone);
   const hasLocation = !!(formData.address);
-  const hasHours = !!(selectedDays && Object.values(selectedDays).some(Boolean));
+  const hasHours = hoursConfigured && Object.values(selectedDays).some(Boolean);
 
   const completedTabs = [hasBasicInfo, hasContact, hasLocation, hasHours].filter(Boolean).length;
 

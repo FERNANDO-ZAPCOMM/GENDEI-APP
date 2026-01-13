@@ -37,32 +37,6 @@ router.get('/', verifyAuth, async (req: Request, res: Response) => {
   }
 });
 
-// GET /clinics/me - Alias for getting current user's clinic
-router.get('/me', verifyAuth, async (req: Request, res: Response) => {
-  try {
-    const user = (req as any).user;
-    const clinicId = user?.uid;
-
-    if (!clinicId) {
-      return res.status(401).json({ message: 'Not authenticated' });
-    }
-
-    const clinicDoc = await db.collection(CLINICS).doc(clinicId).get();
-
-    if (!clinicDoc.exists) {
-      return res.status(404).json({ message: 'Clinic not found' });
-    }
-
-    return res.json({
-      id: clinicDoc.id,
-      ...clinicDoc.data()
-    });
-  } catch (error: any) {
-    console.error('Error getting clinic:', error);
-    return res.status(500).json({ message: error.message });
-  }
-});
-
 // PATCH /clinics/me - Update current user's clinic
 router.patch('/me', verifyAuth, async (req: Request, res: Response) => {
   try {

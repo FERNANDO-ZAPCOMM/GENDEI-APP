@@ -10,6 +10,7 @@ const router = Router();
 const db = getFirestore();
 
 const CLINICS = 'gendei_clinics';
+const TOKENS = 'gendei_tokens';
 
 // ============================================
 // EMBEDDED SIGNUP ENDPOINTS
@@ -452,7 +453,42 @@ router.post(
       // Fix verification status if needed
       await metaService.fixVerificationStatus(clinicId);
 
+      // Sync missing business manager ID from Meta API
+      await metaService.syncBusinessManagerId(clinicId);
+
+      // Copy access token from tokens collection to clinic document (Zapcomm pattern)
+      // This enables the WhatsApp agent to find the token when querying by phone number ID
+      try {
+        const tokenDoc = await db.collection(TOKENS).doc(clinicId).get();
+        if (tokenDoc.exists) {
+          const tokenData = tokenDoc.data();
+          if (tokenData?.accessToken) {
+            const clinicDoc = await db.collection(CLINICS).doc(clinicId).get();
+            const clinicData = clinicDoc.data();
+            if (!clinicData?.whatsappAccessToken) {
+              await db.collection(CLINICS).doc(clinicId).update({
+                whatsappAccessToken: tokenData.accessToken,
+              });
+              console.log(`✅ Migrated access token to clinic document for ${clinicId}`);
+            }
+          }
+        }
+      } catch (tokenError) {
+        console.warn('Could not migrate access token:', tokenError);
+      }
+
+      // Get current status to check if webhook needs configuration
       const status = await metaService.getConnectionStatus(clinicId);
+
+      // Ensure app is subscribed to WABA webhooks
+      if (status.meta?.wabaId) {
+        try {
+          await metaService.configureWebhook(clinicId, status.meta.wabaId);
+        } catch (webhookError) {
+          console.warn('Could not configure webhook:', webhookError);
+        }
+      }
+
       res.json({
         success: true,
         data: status,
@@ -506,6 +542,36 @@ router.post(
     } catch (error: any) {
       console.error('Error configuring webhook:', error);
       return res.status(500).json({ error: error.message || 'Failed to configure webhook' });
+    }
+  }
+);
+
+// GET /meta/webhook-status/:clinicId - Get webhook subscription status (diagnostic)
+router.get(
+  '/webhook-status/:clinicId',
+  verifyAuth,
+  verifyClinicAccess,
+  async (req: Request, res: Response) => {
+    try {
+      const { clinicId } = req.params;
+
+      const status = await metaService.getConnectionStatus(clinicId);
+
+      if (!status.meta?.wabaId) {
+        return res.status(400).json({ error: 'No WhatsApp Business Account connected' });
+      }
+
+      const webhookStatus = await metaService.getWebhookStatus(status.meta.wabaId);
+
+      return res.json({
+        success: true,
+        wabaId: status.meta.wabaId,
+        webhook: webhookStatus,
+        note: 'The actual webhook URL is configured in Meta Developer Console under App Settings > WhatsApp > Configuration',
+      });
+    } catch (error: any) {
+      console.error('Error getting webhook status:', error);
+      return res.status(500).json({ error: error.message || 'Failed to get webhook status' });
     }
   }
 );

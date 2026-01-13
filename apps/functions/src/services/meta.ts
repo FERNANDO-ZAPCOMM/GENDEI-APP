@@ -22,6 +22,7 @@ const getJwtSecret = () => process.env.JWT_SECRET || 'gendei-jwt-secret-change-i
 const getFrontendUrl = () => process.env.GENDEI_FRONTEND_URL || 'https://gendei.com';
 const getMetaRedirectUri = () => process.env.GENDEI_REDIRECT_URI || `${getFrontendUrl()}/meta/callback`;
 const getWhatsAppAgentUrl = () => process.env.GENDEI_WHATSAPP_AGENT_URL || '';
+const getMetaWebhookVerifyToken = () => process.env.META_WEBHOOK_VERIFY_TOKEN || 'gendei_verify_token';
 
 export interface WhatsAppConnectionStatus {
   meta?: {
@@ -361,26 +362,49 @@ export async function saveConnectionWithIds(options: {
 
   console.log(`Saving WhatsApp connection for clinic ${clinicId}:`, { wabaId, phoneNumberId });
 
-  // Get phone number details if we have phoneNumberId
+  // Get additional details
   let phoneNumber: string | undefined;
   let verifiedName: string | undefined;
+  let businessManagerId: string | undefined;
+  let wabaName: string | undefined;
 
-  if (phoneNumberId) {
+  const bisuToken = getMetaBisuToken();
+
+  // Fetch WABA details to get business manager ID and WABA name
+  if (bisuToken) {
     try {
-      const bisuToken = getMetaBisuToken();
-      if (bisuToken) {
-        const response = await fetch(
-          `https://graph.facebook.com/v24.0/${phoneNumberId}?fields=display_phone_number,verified_name,quality_rating`,
-          {
-            headers: { Authorization: `Bearer ${bisuToken}` },
-          }
-        );
-
-        if (response.ok) {
-          const data = await response.json();
-          phoneNumber = data.display_phone_number;
-          verifiedName = data.verified_name;
+      const wabaResponse = await fetch(
+        `https://graph.facebook.com/v24.0/${wabaId}?fields=name,owner_business_info`,
+        {
+          headers: { Authorization: `Bearer ${bisuToken}` },
         }
+      );
+
+      if (wabaResponse.ok) {
+        const wabaData = await wabaResponse.json();
+        wabaName = wabaData.name;
+        businessManagerId = wabaData.owner_business_info?.id;
+        console.log(`Fetched WABA details: name=${wabaName}, businessManagerId=${businessManagerId}`);
+      }
+    } catch (error) {
+      console.warn('Could not fetch WABA details:', error);
+    }
+  }
+
+  // Get phone number details if we have phoneNumberId
+  if (phoneNumberId && bisuToken) {
+    try {
+      const response = await fetch(
+        `https://graph.facebook.com/v24.0/${phoneNumberId}?fields=display_phone_number,verified_name,quality_rating`,
+        {
+          headers: { Authorization: `Bearer ${bisuToken}` },
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        phoneNumber = data.display_phone_number;
+        verifiedName = data.verified_name;
       }
     } catch (error) {
       console.warn('Could not fetch phone details:', error);
@@ -396,6 +420,12 @@ export async function saveConnectionWithIds(options: {
     updatedAt: FieldValue.serverTimestamp(),
   };
 
+  if (businessManagerId) {
+    updateData.whatsappBusinessManagerId = businessManagerId;
+  }
+  if (wabaName) {
+    updateData.whatsappWabaName = wabaName;
+  }
   if (phoneNumberId) {
     updateData.whatsappPhoneNumberId = phoneNumberId;
   }
@@ -415,6 +445,32 @@ export async function saveConnectionWithIds(options: {
   await db.collection(CLINICS).doc(clinicId).update(updateData);
 
   console.log(`✅ WhatsApp connected for clinic ${clinicId}`);
+
+  // Subscribe app to receive webhook events from this WABA
+  try {
+    const bisuToken = getMetaBisuToken();
+    if (bisuToken) {
+      const webhookResponse = await fetch(
+        `https://graph.facebook.com/v24.0/${wabaId}/subscribed_apps`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${bisuToken}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+
+      if (webhookResponse.ok) {
+        console.log(`✅ App subscribed to WABA ${wabaId} webhooks`);
+      } else {
+        const error = await webhookResponse.json();
+        console.warn(`⚠️ Failed to subscribe to webhooks: ${error.error?.message}`);
+      }
+    }
+  } catch (error) {
+    console.warn('⚠️ Could not subscribe to webhooks:', error);
+  }
 
   return {
     success: true,
@@ -437,8 +493,16 @@ export async function completeEmbeddedSignup(options: {
 
   console.log(`Completing embedded signup for clinic: ${clinicId}`);
 
-  // Store access token
+  // Store access token in both places (tokens collection and clinic document)
   await storeAccessToken(clinicId, accessToken);
+
+  // Also store accessToken directly in clinic document (like Zapcomm stores in channels)
+  // This allows the WhatsApp agent to find the token when querying by phone number ID
+  await db.collection(CLINICS).doc(clinicId).update({
+    whatsappAccessToken: accessToken,
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+  console.log(`✅ Access token stored in clinic document for ${clinicId}`);
 
   // If WABA ID was provided directly, save it
   if (wabaId) {
@@ -565,12 +629,110 @@ export async function fixVerificationStatus(clinicId: string): Promise<void> {
   }
 }
 
+/**
+ * Sync missing business manager ID for existing connections
+ */
+export async function syncBusinessManagerId(clinicId: string): Promise<void> {
+  const doc = await db.collection(CLINICS).doc(clinicId).get();
+  const data = doc.data();
+
+  // Only sync if we have WABA but missing business manager ID
+  if (!data?.whatsappWabaId || data?.whatsappBusinessManagerId) {
+    return;
+  }
+
+  const bisuToken = getMetaBisuToken();
+  if (!bisuToken) {
+    console.warn('BISU token not available for syncing business manager ID');
+    return;
+  }
+
+  try {
+    const wabaResponse = await fetch(
+      `https://graph.facebook.com/v24.0/${data.whatsappWabaId}?fields=name,owner_business_info`,
+      {
+        headers: { Authorization: `Bearer ${bisuToken}` },
+      }
+    );
+
+    if (wabaResponse.ok) {
+      const wabaData = await wabaResponse.json();
+      const updateData: Record<string, unknown> = {
+        updatedAt: FieldValue.serverTimestamp(),
+      };
+
+      if (wabaData.owner_business_info?.id) {
+        updateData.whatsappBusinessManagerId = wabaData.owner_business_info.id;
+        console.log(`Synced business manager ID: ${wabaData.owner_business_info.id}`);
+      }
+
+      if (wabaData.name && !data.whatsappWabaName) {
+        updateData.whatsappWabaName = wabaData.name;
+        console.log(`Synced WABA name: ${wabaData.name}`);
+      }
+
+      if (Object.keys(updateData).length > 1) {
+        await db.collection(CLINICS).doc(clinicId).update(updateData);
+        console.log(`Updated clinic ${clinicId} with synced data`);
+      }
+    } else {
+      const error = await wabaResponse.json();
+      console.warn('Failed to fetch WABA details for sync:', error);
+    }
+  } catch (error) {
+    console.warn('Error syncing business manager ID:', error);
+  }
+}
+
 // ============================================
 // WEBHOOK CONFIGURATION
 // ============================================
 
 /**
+ * Get webhook subscription status for WABA
+ */
+export async function getWebhookStatus(wabaId: string): Promise<{
+  subscribed: boolean;
+  subscribedFields: string[];
+  appId?: string;
+}> {
+  const bisuToken = getMetaBisuToken();
+  if (!bisuToken) {
+    throw new Error('BISU token required');
+  }
+
+  const response = await fetch(
+    `https://graph.facebook.com/v24.0/${wabaId}/subscribed_apps`,
+    {
+      headers: { Authorization: `Bearer ${bisuToken}` },
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error?.message || 'Failed to get webhook status');
+  }
+
+  const data = await response.json();
+  const apps = data.data || [];
+
+  if (apps.length === 0) {
+    return { subscribed: false, subscribedFields: [] };
+  }
+
+  // Return info about the first subscribed app
+  const app = apps[0];
+  return {
+    subscribed: true,
+    subscribedFields: app.whatsapp_business_api_data?.fields || [],
+    appId: app.id,
+  };
+}
+
+/**
  * Configure webhook for WABA
+ * This subscribes the app to receive webhook events from the WABA
+ * and optionally overrides the callback URL for this specific WABA
  */
 export async function configureWebhook(clinicId: string, wabaId: string): Promise<void> {
   const bisuToken = getMetaBisuToken();
@@ -579,28 +741,37 @@ export async function configureWebhook(clinicId: string, wabaId: string): Promis
   }
 
   const webhookUrl = getWhatsAppAgentUrl();
+  const verifyToken = getMetaWebhookVerifyToken();
+
   if (!webhookUrl) {
-    throw new Error('WhatsApp Agent URL not configured');
+    console.warn('Webhook URL not configured, subscribing without override');
   }
 
-  // Subscribe to WABA webhooks
-  const response = await fetch(
-    `https://graph.facebook.com/v24.0/${wabaId}/subscribed_apps`,
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${bisuToken}`,
-        'Content-Type': 'application/json',
-      },
-    }
-  );
+  const apiVersion = getMetaApiVersion();
+  const url = `https://graph.facebook.com/${apiVersion}/${wabaId}/subscribed_apps`;
+
+  // Build request body - include override_callback_uri if webhook URL is configured
+  const body: Record<string, string> = {};
+  if (webhookUrl && verifyToken) {
+    body.override_callback_uri = `${webhookUrl}/webhook`;
+    body.verify_token = verifyToken;
+  }
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${bisuToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: Object.keys(body).length > 0 ? JSON.stringify(body) : undefined,
+  });
 
   if (!response.ok) {
     const error = await response.json();
     throw new Error(error.error?.message || 'Failed to subscribe to webhooks');
   }
 
-  console.log(`✅ Webhook configured for WABA ${wabaId}`);
+  console.log(`✅ Webhook configured for WABA ${wabaId}${webhookUrl ? ` with override URL: ${webhookUrl}/webhook` : ''}`);
 }
 
 // ============================================
@@ -1603,4 +1774,358 @@ export async function sendFlowMessage(
 
   const result = await response.json();
   return { messageId: result.messages?.[0]?.id };
+}
+
+// ============================================
+// WHATSAPP BUSINESS PROFILE FUNCTIONS
+// ============================================
+
+export interface WhatsAppBusinessProfile {
+  about?: string;
+  address?: string;
+  description?: string;
+  email?: string;
+  profile_picture_url?: string;
+  vertical?: string;
+  websites?: string[];
+}
+
+/**
+ * Get WhatsApp Business Profile for a phone number
+ * @see https://developers.facebook.com/docs/whatsapp/cloud-api/reference/business-profiles
+ */
+export async function getBusinessProfile(
+  phoneNumberId: string,
+  clinicId: string
+): Promise<WhatsAppBusinessProfile> {
+  const accessToken = await getAccessToken(clinicId);
+  const apiVersion = getMetaApiVersion();
+
+  const fields = 'about,address,description,email,profile_picture_url,vertical,websites';
+  const url = `https://graph.facebook.com/${apiVersion}/${phoneNumberId}/whatsapp_business_profile?fields=${fields}`;
+
+  console.log(`Fetching business profile for phone ${phoneNumberId}`);
+
+  const response = await fetch(url, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    console.error('Failed to fetch business profile:', error);
+    throw new Error(error?.error?.message || 'Failed to fetch business profile');
+  }
+
+  const data = await response.json();
+
+  // The response has a data array with one item
+  const profile = data.data?.[0] || {};
+
+  return {
+    about: profile.about,
+    address: profile.address,
+    description: profile.description,
+    email: profile.email,
+    profile_picture_url: profile.profile_picture_url,
+    vertical: profile.vertical,
+    websites: profile.websites,
+  };
+}
+
+/**
+ * Update WhatsApp Business Profile for a phone number
+ * @see https://developers.facebook.com/docs/whatsapp/cloud-api/reference/business-profiles
+ */
+export async function updateBusinessProfile(
+  phoneNumberId: string,
+  clinicId: string,
+  profile: Partial<WhatsAppBusinessProfile>
+): Promise<boolean> {
+  const accessToken = await getAccessToken(clinicId);
+  const apiVersion = getMetaApiVersion();
+
+  const url = `https://graph.facebook.com/${apiVersion}/${phoneNumberId}/whatsapp_business_profile`;
+
+  // Build the update payload - only include fields that are provided
+  const payload: Record<string, unknown> = {
+    messaging_product: 'whatsapp',
+  };
+
+  if (profile.about !== undefined) {
+    payload.about = profile.about.substring(0, 139); // Max 139 chars
+  }
+  if (profile.address !== undefined) {
+    payload.address = profile.address.substring(0, 256); // Max 256 chars
+  }
+  if (profile.description !== undefined) {
+    payload.description = profile.description.substring(0, 512); // Max 512 chars
+  }
+  if (profile.email !== undefined) {
+    payload.email = profile.email.substring(0, 128); // Max 128 chars
+  }
+  if (profile.vertical !== undefined) {
+    payload.vertical = profile.vertical;
+  }
+  if (profile.websites !== undefined) {
+    // Max 2 websites, each max 256 chars
+    payload.websites = profile.websites.slice(0, 2).map(w => w.substring(0, 256));
+  }
+
+  console.log(`Updating business profile for phone ${phoneNumberId}:`, payload);
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    console.error('Failed to update business profile:', error);
+    throw new Error(error?.error?.message || 'Failed to update business profile');
+  }
+
+  console.log(`Successfully updated business profile for phone ${phoneNumberId}`);
+  return true;
+}
+
+/**
+ * Upload a profile picture and get a handle for use in business profile update
+ * The image must be uploaded to Meta's servers first, then the handle is used to set it
+ * @see https://developers.facebook.com/docs/whatsapp/cloud-api/reference/media
+ */
+export async function uploadBusinessProfilePicture(
+  phoneNumberId: string,
+  clinicId: string,
+  imageBuffer: Buffer,
+  mimeType: string
+): Promise<string> {
+  const accessToken = await getAccessToken(clinicId);
+  const apiVersion = getMetaApiVersion();
+  const appId = getMetaAppId();
+
+  if (!appId) {
+    throw new Error('META_APP_ID is not configured');
+  }
+
+  // Step 1: Create a resumable upload session using App ID (not phone number ID)
+  // See: https://developers.facebook.com/docs/graph-api/resumable-upload-api
+  const createSessionUrl = `https://graph.facebook.com/${apiVersion}/${appId}/uploads`;
+
+  const sessionParams = new URLSearchParams({
+    file_type: mimeType,
+    file_length: imageBuffer.length.toString(),
+  });
+
+  console.log(`Creating upload session for profile picture with app ${appId}...`);
+
+  const sessionResponse = await fetch(`${createSessionUrl}?${sessionParams.toString()}`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+
+  if (!sessionResponse.ok) {
+    const error = await sessionResponse.json().catch(() => ({}));
+    console.error('Failed to create upload session:', error);
+    throw new Error(error?.error?.message || 'Failed to create upload session');
+  }
+
+  const sessionData = await sessionResponse.json();
+  const uploadSessionId = sessionData.id;
+
+  console.log(`Upload session created: ${uploadSessionId}`);
+
+  // Step 2: Upload the file to the session
+  const uploadUrl = `https://graph.facebook.com/${apiVersion}/${uploadSessionId}`;
+
+  // Convert Buffer to Uint8Array for Blob compatibility
+  const uint8Array = new Uint8Array(imageBuffer);
+  const blob = new Blob([uint8Array], { type: 'application/octet-stream' });
+
+  console.log(`Uploading profile picture to session ${uploadSessionId}...`);
+
+  const uploadResponse = await fetch(uploadUrl, {
+    method: 'POST',
+    headers: {
+      Authorization: `OAuth ${accessToken}`,
+      file_offset: '0',
+    },
+    body: blob,
+  });
+
+  if (!uploadResponse.ok) {
+    const error = await uploadResponse.json().catch(() => ({}));
+    console.error('Failed to upload profile picture:', error);
+    throw new Error(error?.error?.message || 'Failed to upload profile picture');
+  }
+
+  const uploadData = await uploadResponse.json();
+  const handle = uploadData.h;
+
+  console.log(`Successfully uploaded profile picture, handle: ${handle}`);
+  return handle;
+}
+
+/**
+ * Set the business profile picture using a previously uploaded handle
+ */
+export async function setBusinessProfilePicture(
+  phoneNumberId: string,
+  clinicId: string,
+  pictureHandle: string
+): Promise<boolean> {
+  const accessToken = await getAccessToken(clinicId);
+  const apiVersion = getMetaApiVersion();
+
+  const url = `https://graph.facebook.com/${apiVersion}/${phoneNumberId}/whatsapp_business_profile`;
+
+  const payload = {
+    messaging_product: 'whatsapp',
+    profile_picture_handle: pictureHandle,
+  };
+
+  console.log(`Setting business profile picture for phone ${phoneNumberId}`);
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    console.error('Failed to set profile picture:', error);
+    throw new Error(error?.error?.message || 'Failed to set profile picture');
+  }
+
+  console.log(`Successfully set business profile picture for phone ${phoneNumberId}`);
+  return true;
+}
+
+// ============================================
+// QR CODE / SHORT LINK FUNCTIONS
+// ============================================
+
+export interface QRCode {
+  code: string;
+  prefilled_message: string;
+  deep_link_url: string;
+  qr_image_url?: string;
+}
+
+/**
+ * Get all QR codes for a phone number
+ * @see https://developers.facebook.com/docs/whatsapp/business-management-api/qr-codes
+ */
+export async function getQRCodes(
+  phoneNumberId: string,
+  clinicId: string
+): Promise<QRCode[]> {
+  const accessToken = await getAccessToken(clinicId);
+  const apiVersion = getMetaApiVersion();
+
+  // Include generate_qr_image to get the QR code image URL
+  const params = new URLSearchParams({
+    generate_qr_image: 'PNG',
+  });
+
+  const url = `https://graph.facebook.com/${apiVersion}/${phoneNumberId}/message_qrdls?${params.toString()}`;
+
+  console.log(`Fetching QR codes for phone ${phoneNumberId}`);
+
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    console.error('Failed to fetch QR codes:', error);
+    throw new Error(error?.error?.message || 'Failed to fetch QR codes');
+  }
+
+  const data = await response.json();
+  return data.data || [];
+}
+
+/**
+ * Create a new QR code with a prefilled message
+ * @see https://developers.facebook.com/docs/whatsapp/business-management-api/qr-codes
+ */
+export async function createQRCode(
+  phoneNumberId: string,
+  clinicId: string,
+  prefilledMessage: string
+): Promise<QRCode> {
+  const accessToken = await getAccessToken(clinicId);
+  const apiVersion = getMetaApiVersion();
+
+  const url = `https://graph.facebook.com/${apiVersion}/${phoneNumberId}/message_qrdls`;
+
+  const params = new URLSearchParams({
+    prefilled_message: prefilledMessage,
+    generate_qr_image: 'PNG',
+  });
+
+  console.log(`Creating QR code for phone ${phoneNumberId} with message: "${prefilledMessage}"`);
+
+  const response = await fetch(`${url}?${params.toString()}`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    console.error('Failed to create QR code:', error);
+    throw new Error(error?.error?.message || 'Failed to create QR code');
+  }
+
+  const data = await response.json();
+  console.log(`Successfully created QR code: ${data.code}`);
+  return data;
+}
+
+/**
+ * Delete a QR code
+ * @see https://developers.facebook.com/docs/whatsapp/business-management-api/qr-codes
+ */
+export async function deleteQRCode(
+  phoneNumberId: string,
+  clinicId: string,
+  codeId: string
+): Promise<boolean> {
+  const accessToken = await getAccessToken(clinicId);
+  const apiVersion = getMetaApiVersion();
+
+  const url = `https://graph.facebook.com/${apiVersion}/${phoneNumberId}/message_qrdls/${codeId}`;
+
+  console.log(`Deleting QR code ${codeId} for phone ${phoneNumberId}`);
+
+  const response = await fetch(url, {
+    method: 'DELETE',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    console.error('Failed to delete QR code:', error);
+    throw new Error(error?.error?.message || 'Failed to delete QR code');
+  }
+
+  console.log(`Successfully deleted QR code ${codeId}`);
+  return true;
 }
