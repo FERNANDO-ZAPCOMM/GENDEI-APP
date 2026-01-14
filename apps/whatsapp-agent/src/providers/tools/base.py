@@ -100,48 +100,38 @@ def get_tool_registry() -> ToolRegistry:
 
 def register_tool_implementations() -> None:
     """
-    Register all tool implementations from function_tools.py.
+    Register all clinic tool implementations from function_tools.py.
     This should be called during application initialization.
     """
     from src.agents.function_tools import (
         _send_text_message_impl,
-        _send_greeting_with_products_button_impl,
-        _send_notify_new_products_button_impl,
-        _set_product_notification_preference_impl,
-        _get_product_info_impl,
-        _list_all_products_impl,
-        _get_product_details_impl,
-        _answer_customer_question_impl,
-        _get_objection_response_impl,
-        _send_product_card_impl,
-        _send_product_catalog_list_impl,
-        _send_full_catalog_impl,
-        _create_order_and_send_payment_impl,
-        _check_order_status_impl,
+        _get_clinic_info_impl,
+        _get_professionals_impl,
+        _get_services_impl,
+        _get_available_slots_impl,
+        _create_appointment_impl,
+        _send_appointment_confirmation_impl,
+        _get_patient_appointments_impl,
+        _cancel_appointment_impl,
+        _reschedule_appointment_impl,
         _enable_human_takeover_impl,
-        _deliver_free_product_impl,
     )
 
     registry = get_tool_registry()
 
     implementations = {
         "send_text_message": _send_text_message_impl,
-        "send_greeting_with_products_button": _send_greeting_with_products_button_impl,
-        "send_notify_new_products_button": _send_notify_new_products_button_impl,
-        "set_product_notification_preference": _set_product_notification_preference_impl,
-        "get_product_info": _get_product_info_impl,
-        "list_all_products": _list_all_products_impl,
-        "get_product_details": _get_product_details_impl,
-        "answer_customer_question": _answer_customer_question_impl,
-        "get_objection_response": _get_objection_response_impl,
-        "send_product_card": _send_product_card_impl,
-        "send_product_catalog_list": _send_product_catalog_list_impl,
-        "send_full_catalog": _send_full_catalog_impl,
-        "create_order_and_send_payment": _create_order_and_send_payment_impl,
-        "check_order_status": _check_order_status_impl,
+        "get_clinic_info": _get_clinic_info_impl,
+        "get_professionals": _get_professionals_impl,
+        "get_services": _get_services_impl,
+        "get_available_slots": _get_available_slots_impl,
+        "create_appointment": _create_appointment_impl,
+        "send_appointment_confirmation": _send_appointment_confirmation_impl,
+        "get_patient_appointments": _get_patient_appointments_impl,
+        "cancel_appointment": _cancel_appointment_impl,
+        "reschedule_appointment": _reschedule_appointment_impl,
         "enable_human_takeover": _enable_human_takeover_impl,
-        "deliver_free_product": _deliver_free_product_impl,
     }
 
     registry.register_implementations(implementations)
-    logger.info(f"Registered {len(implementations)} tool implementations")
+    logger.info(f"Registered {len(implementations)} clinic tool implementations")

@@ -481,31 +481,34 @@ class GendeiDatabase:
             return False
 
     def get_access_token(self, clinic_id: str) -> Optional[str]:
-        """Get access token for clinic - checks multiple locations like Zapcomm"""
+        """Get access token for clinic - prioritizes BISU token for reliability"""
         try:
-            # 1. First try whatsappAccessToken directly in clinic document (Zapcomm pattern)
+            # 1. First try BISU token from environment (most reliable - system user token)
+            # The BISU token has permissions to all WABAs connected via Embedded Signup
+            # Check both META_BISU_ACCESS_TOKEN and WHATSAPP_TOKEN for backward compatibility
+            bisu_token = os.getenv("META_BISU_ACCESS_TOKEN") or os.getenv("WHATSAPP_TOKEN")
+            if bisu_token:
+                logger.info(f"✅ Using system token from environment for {clinic_id}")
+                return bisu_token
+
+            # 2. Fall back to whatsappAccessToken in clinic document
+            # This is the user OAuth token from Embedded Signup (may be short-lived)
             clinic_doc = self.db.collection(CLINICS).document(clinic_id).get()
             if clinic_doc.exists:
                 clinic_data = clinic_doc.to_dict()
                 clinic_token = clinic_data.get("whatsappAccessToken")
                 if clinic_token:
-                    logger.info(f"✅ Using whatsappAccessToken from clinic doc for {clinic_id}")
+                    logger.info(f"⚠️ Using whatsappAccessToken from clinic doc for {clinic_id} (fallback)")
                     return clinic_token
 
-            # 2. Fall back to tokens collection
+            # 3. Fall back to tokens collection
             token_doc = self.db.collection(TOKENS).document(clinic_id).get()
             if token_doc.exists:
                 token_data = token_doc.to_dict()
                 stored_token = token_data.get("accessToken")
                 if stored_token:
-                    logger.info(f"✅ Using accessToken from tokens collection for {clinic_id}")
+                    logger.info(f"⚠️ Using accessToken from tokens collection for {clinic_id} (fallback)")
                     return stored_token
-
-            # 3. Fall back to BISU token from environment
-            bisu_token = os.getenv("META_BISU_ACCESS_TOKEN")
-            if bisu_token:
-                logger.info(f"⚠️ Using BISU token from environment for {clinic_id}")
-                return bisu_token
 
             logger.warning(f"❌ No access token found for clinic {clinic_id}")
             return None

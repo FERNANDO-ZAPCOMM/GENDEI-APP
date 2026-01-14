@@ -11,9 +11,9 @@ from typing import Any, Dict, Optional, List
 from datetime import datetime, timedelta
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request, BackgroundTasks, HTTPException
-from fastapi.responses import Response, HTMLResponse
-import httpx
+from fastapi import FastAPI, Request, BackgroundTasks, HTTPException  # type: ignore
+from fastapi.responses import Response, HTMLResponse  # type: ignore
+import httpx  # type: ignore
 
 # Configure logging
 logging.basicConfig(
@@ -58,6 +58,246 @@ db: Optional[GendeiDatabase] = None
 
 # Note: Message deduplication and conversation state are now Firestore-backed
 # See db.is_message_processed() and db.load_conversation_state()
+
+
+# ============================================
+# MESSAGE BUFFERING (like Zapcomm)
+# Combines rapid sequential messages before processing
+# ============================================
+DEFAULT_MESSAGE_BUFFER_SECONDS = 2.0
+SHORT_MESSAGE_BUFFER_SECONDS = 3.5
+GREETING_MESSAGE_BUFFER_SECONDS = 5.0
+
+# Buffers keyed by clinic+phone
+message_buffer: Dict[str, List[Dict[str, Any]]] = {}
+message_buffer_timers: Dict[str, datetime] = {}
+message_buffer_deadlines: Dict[str, datetime] = {}
+message_buffer_locks: Dict[str, bool] = {}
+
+
+def _looks_like_greeting_only(text: str) -> bool:
+    """Check if message is just a greeting (likely more to follow)."""
+    t = (text or "").strip().lower()
+    if not t:
+        return False
+    if "?" in t:
+        return False
+    if any(k in t for k in ("quero", "preciso", "valor", "preço", "agendar", "marcar", "consulta")):
+        return False
+    return any(
+        t.startswith(prefix)
+        for prefix in ("oi", "olá", "ola", "bom dia", "boa tarde", "boa noite", "tudo bem")
+    ) and len(t) <= 25
+
+
+def _adaptive_buffer_seconds(first_message_text: str) -> float:
+    """Choose buffer window based on first message."""
+    t = (first_message_text or "").strip()
+    if not t:
+        return DEFAULT_MESSAGE_BUFFER_SECONDS
+    if _looks_like_greeting_only(t):
+        return GREETING_MESSAGE_BUFFER_SECONDS
+    if len(t) <= 8 and "?" not in t:
+        return SHORT_MESSAGE_BUFFER_SECONDS
+    return DEFAULT_MESSAGE_BUFFER_SECONDS
+
+
+def add_to_message_buffer(key: str, message_data: Dict[str, Any]) -> bool:
+    """Add message to buffer. Returns True if first message (starts timer)."""
+    is_first = key not in message_buffer or len(message_buffer.get(key, [])) == 0
+    if key not in message_buffer:
+        message_buffer[key] = []
+    message_buffer[key].append(message_data)
+    if is_first:
+        message_buffer_timers[key] = datetime.now()
+        seconds = _adaptive_buffer_seconds(message_data.get("text", ""))
+        message_buffer_deadlines[key] = message_buffer_timers[key] + timedelta(seconds=seconds)
+    return is_first
+
+
+def get_buffered_messages(key: str) -> List[Dict[str, Any]]:
+    """Get and clear all buffered messages for this key."""
+    messages = message_buffer.get(key, [])
+    message_buffer[key] = []
+    if key in message_buffer_timers:
+        del message_buffer_timers[key]
+    if key in message_buffer_deadlines:
+        del message_buffer_deadlines[key]
+    return messages
+
+
+def should_process_buffer(key: str) -> bool:
+    """Check if enough time has passed to process the buffer."""
+    if key not in message_buffer_deadlines:
+        return True
+    return datetime.now() >= message_buffer_deadlines[key]
+
+
+def is_buffer_locked(key: str) -> bool:
+    """Check if buffer is being processed."""
+    return message_buffer_locks.get(key, False)
+
+
+def lock_buffer(key: str) -> None:
+    """Lock buffer for processing."""
+    message_buffer_locks[key] = True
+
+
+def unlock_buffer(key: str) -> None:
+    """Unlock buffer after processing."""
+    message_buffer_locks[key] = False
+
+
+def combine_messages(messages: List[Dict[str, Any]]) -> str:
+    """Combine multiple messages into single context string."""
+    if not messages:
+        return ""
+    if len(messages) == 1:
+        return messages[0].get('text', '')
+    combined_parts = []
+    for msg in messages:
+        text = msg.get('text', '')
+        if text:
+            combined_parts.append(text)
+    return " ".join(combined_parts)
+
+
+# ============================================
+# AI CHAT (Simple OpenAI Integration)
+# ============================================
+async def get_ai_response(
+    clinic_id: str,
+    phone: str,
+    message: str,
+    clinic_context: Optional[Dict[str, Any]] = None
+) -> Optional[str]:
+    """
+    Get AI response using OpenAI Chat Completions.
+    Simple and reliable approach.
+    """
+    import openai  # type: ignore
+
+    try:
+        client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+        # Build clinic context
+        clinic_info = ""
+        if clinic_context:
+            clinic = clinic_context.get("clinic", {})
+            if clinic.get("name"):
+                clinic_info += f"Nome da clínica: {clinic['name']}\n"
+            if clinic.get("address"):
+                clinic_info += f"Endereço: {clinic['address']}\n"
+            if clinic.get("opening_hours"):
+                clinic_info += f"Horário de funcionamento: {clinic['opening_hours']}\n"
+            if clinic.get("phone"):
+                clinic_info += f"Telefone: {clinic['phone']}\n"
+
+            # Professionals
+            professionals = clinic_context.get("professionals", [])
+            if professionals:
+                clinic_info += "\nProfissionais:\n"
+                for p in professionals:
+                    name = p.get('full_name') or p.get('name', '')
+                    specialty = p.get('specialty', '')
+                    clinic_info += f"- {name}"
+                    if specialty:
+                        clinic_info += f" ({specialty})"
+                    clinic_info += "\n"
+
+            # Services
+            services = clinic_context.get("services", [])
+            if services:
+                clinic_info += "\nServiços:\n"
+                for s in services:
+                    name = s.get('name', '')
+                    duration = s.get('duration', 30)
+                    price = s.get('price', 0)
+                    clinic_info += f"- {name} ({duration} min)"
+                    if price and price > 0:
+                        clinic_info += f" - R$ {price:.2f}".replace('.', ',')
+                    clinic_info += "\n"
+
+        system_prompt = f"""Você é o assistente virtual amigável de uma clínica médica.
+
+INFORMAÇÕES DA CLÍNICA:
+{clinic_info if clinic_info else "Informações não disponíveis no momento."}
+
+SUAS RESPONSABILIDADES:
+1. Responder perguntas sobre a clínica (endereço, horário, profissionais, serviços)
+2. Ajudar pacientes a agendar consultas
+3. Informar sobre consultas existentes
+4. Ser educado, prestativo e conciso
+
+REGRAS IMPORTANTES:
+- Responda SEMPRE em português brasileiro
+- Seja breve e direto (máximo 2-3 frases por resposta)
+- Use formatação WhatsApp (*negrito*, _itálico_)
+- Se não souber uma informação específica, sugira que o paciente entre em contato por telefone
+- Para agendar, pergunte: qual profissional, qual data/horário preferido
+- Nunca invente informações que não estão no contexto
+
+EXEMPLOS:
+- Pergunta sobre endereço → Responda com o endereço da clínica
+- Saudação simples → Boas-vindas e pergunte como pode ajudar
+- Quer agendar → Pergunte com qual profissional e sugira verificar horários disponíveis"""
+
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": message}
+            ],
+            max_tokens=300,
+            temperature=0.7
+        )
+
+        ai_response = response.choices[0].message.content
+        logger.info(f"🤖 AI response: {ai_response[:100]}...")
+        return ai_response
+
+    except Exception as e:
+        logger.error(f"❌ AI error: {e}")
+        return None
+
+
+def load_clinic_context(clinic_id: str) -> Dict[str, Any]:
+    """Load clinic context for AI prompts."""
+    context: Dict[str, Any] = {}
+
+    if not db:
+        return context
+
+    try:
+        clinic = db.get_clinic(clinic_id)
+        if clinic:
+            context["clinic"] = {
+                "name": clinic.name,
+                "address": getattr(clinic, 'address', ''),
+                "phone": getattr(clinic, 'phone', ''),
+                "opening_hours": getattr(clinic, 'opening_hours', ''),
+            }
+
+        professionals = db.get_clinic_professionals(clinic_id)
+        if professionals:
+            context["professionals"] = [
+                {
+                    "id": p.id,
+                    "name": p.name,
+                    "full_name": getattr(p, 'full_name', p.name),
+                    "specialty": getattr(p, 'specialty', ''),
+                }
+                for p in professionals
+            ]
+
+        services = db.get_clinic_services(clinic_id)
+        if services:
+            context["services"] = services
+
+    except Exception as e:
+        logger.error(f"Error loading clinic context: {e}")
+
+    return context
 
 
 @asynccontextmanager
@@ -770,42 +1010,34 @@ async def process_message(
             )
         return
 
-    # Check for scheduling intent
-    scheduling_keywords = [
-        "agendar", "marcar", "consulta", "horário", "horarios",
-        "disponibilidade", "agenda", "atendimento"
-    ]
+    # ===========================================
+    # AI CHAT PROCESSING (Simple OpenAI Integration)
+    # ===========================================
+    try:
+        # Load clinic context for AI
+        clinic_context = load_clinic_context(clinic_id)
 
-    if any(kw in msg_lower for kw in scheduling_keywords):
-        await handle_scheduling_intent(clinic_id, phone, message, phone_number_id, access_token)
-        return
+        # Get AI response
+        ai_response = await get_ai_response(
+            clinic_id=clinic_id,
+            phone=phone,
+            message=message,
+            clinic_context=clinic_context
+        )
 
-    # Check for my appointments query
-    if any(phrase in msg_lower for phrase in ["minha consulta", "minhas consultas", "meus agendamentos"]):
-        appointments = get_appointments_by_phone(db, phone, clinic_id, include_past=False)
-
-        if appointments:
-            apt_list = []
-            for apt in appointments[:5]:
-                dt = datetime.strptime(apt.date, "%Y-%m-%d")
-                formatted_date = dt.strftime("%d/%m")
-                status_emoji = "✅" if apt.status.value in ['confirmed', 'confirmed_presence'] else "⏳"
-                apt_list.append(f"{status_emoji} {formatted_date} às {apt.time} - {apt.professional_name}")
-
+        if ai_response:
             await send_whatsapp_message(
                 phone_number_id, phone,
-                f"📋 *Suas consultas:*\n\n" + "\n".join(apt_list),
+                ai_response,
                 access_token
             )
-        else:
-            await send_whatsapp_message(
-                phone_number_id, phone,
-                "Você não tem consultas agendadas.\n\nDigite 'agendar' para marcar uma consulta!",
-                access_token
-            )
-        return
+            logger.info(f"✅ AI responded successfully")
+            return
 
-    # Default response - offer to help with scheduling
+    except Exception as e:
+        logger.error(f"❌ AI error: {e}")
+
+    # Default fallback response
     await send_whatsapp_message(
         phone_number_id, phone,
         "Olá! 👋\n\nSou o assistente virtual da clínica.\n\nPosso ajudar você a:\n"
@@ -853,6 +1085,130 @@ async def verify_webhook(request: Request):
     raise HTTPException(status_code=403, detail="Verification failed")
 
 
+async def process_buffered_messages(
+    clinic_id: str,
+    phone: str,
+    phone_number_id: str,
+    access_token: str,
+    buffer_key: str
+):
+    """Process buffered messages after wait period."""
+    try:
+        # Wait for buffer deadline
+        deadline = message_buffer_deadlines.get(buffer_key)
+        wait_seconds = max(0.0, (deadline - datetime.now()).total_seconds()) if deadline else DEFAULT_MESSAGE_BUFFER_SECONDS
+        await asyncio.sleep(wait_seconds)
+
+        # Check if another handler is already processing
+        if is_buffer_locked(buffer_key):
+            logger.info(f"🔒 Buffer already being processed for {phone}, skipping")
+            return
+
+        # Lock and process
+        lock_buffer(buffer_key)
+        try:
+            buffered_messages = get_buffered_messages(buffer_key)
+            if not buffered_messages:
+                logger.info(f"📭 No buffered messages for {phone}")
+                return
+
+            # Combine all messages
+            combined_text = combine_messages(buffered_messages)
+            first_msg = buffered_messages[0]
+            message_id = first_msg.get('message_id', '')
+            contact_name = first_msg.get('contact_name')
+            button_payload = first_msg.get('button_payload')
+
+            logger.info(f"📬 Processing {len(buffered_messages)} buffered message(s) for {phone}: {combined_text[:50]}...")
+
+            # Process combined message
+            await process_message(
+                clinic_id,
+                phone,
+                combined_text,
+                message_id,
+                phone_number_id,
+                access_token,
+                button_payload,
+                contact_name
+            )
+        finally:
+            unlock_buffer(buffer_key)
+
+    except Exception as e:
+        logger.error(f"❌ Error processing buffered messages: {e}")
+        unlock_buffer(buffer_key)
+
+
+async def handle_voice_message(
+    clinic_id: str,
+    phone: str,
+    media_id: str,
+    message_id: str,
+    phone_number_id: str,
+    access_token: str,
+    contact_name: Optional[str] = None
+):
+    """Handle voice message: download, transcribe, and process."""
+    try:
+        from src.utils.transcription import transcribe_audio
+        from src.utils.messaging import download_whatsapp_media
+
+        logger.info(f"🎤 Processing voice message from {phone}")
+
+        # Download audio
+        download_result = await download_whatsapp_media(media_id)
+        if not download_result:
+            await send_whatsapp_message(
+                phone_number_id, phone,
+                "Desculpe, não consegui processar seu áudio. Pode tentar enviar novamente ou digitar sua mensagem? 🙏",
+                access_token
+            )
+            return
+
+        file_path, mime_type = download_result
+        logger.info(f"📥 Audio downloaded: {file_path}")
+
+        # Transcribe
+        transcription = await transcribe_audio(file_path, mime_type)
+
+        # Clean up temp file
+        try:
+            import os as os_module
+            os_module.remove(file_path)
+        except Exception:
+            pass
+
+        if transcription:
+            logger.info(f"📝 Transcription: {transcription[:100]}...")
+
+            # Process transcribed text like a regular message
+            await process_message(
+                clinic_id,
+                phone,
+                transcription,
+                message_id,
+                phone_number_id,
+                access_token,
+                None,
+                contact_name
+            )
+        else:
+            await send_whatsapp_message(
+                phone_number_id, phone,
+                "Desculpe, não consegui entender seu áudio. Pode tentar enviar novamente ou digitar sua mensagem? 🙏",
+                access_token
+            )
+
+    except Exception as e:
+        logger.error(f"❌ Voice message error: {e}")
+        await send_whatsapp_message(
+            phone_number_id, phone,
+            "Desculpe, ocorreu um erro ao processar seu áudio. Pode digitar sua mensagem?",
+            access_token
+        )
+
+
 @app.post("/webhook")
 async def receive_webhook(request: Request, background_tasks: BackgroundTasks):
     """Receive WhatsApp webhook events."""
@@ -870,25 +1226,29 @@ async def receive_webhook(request: Request, background_tasks: BackgroundTasks):
             for change in changes:
                 value = change.get("value", {})
 
-                # Get phone number ID (identifies which WABA phone number received this)
+                # Get phone number ID
                 metadata = value.get("metadata", {})
                 phone_number_id = metadata.get("phone_number_id")
 
                 if not phone_number_id:
                     continue
 
-                # Look up clinic by phone number ID
+                # Look up clinic
                 clinic = db.get_clinic_by_phone_number_id(phone_number_id) if db else None
                 if not clinic:
                     logger.warning(f"No clinic found for phone_number_id: {phone_number_id}")
                     continue
 
                 clinic_id = clinic.id
-
-                # Get access token for this clinic
                 access_token = db.get_clinic_access_token(clinic_id) if db else WHATSAPP_TOKEN
                 if not access_token:
                     access_token = WHATSAPP_TOKEN
+
+                # Get contact info
+                contacts = value.get("contacts", [])
+                contact_name = None
+                if contacts:
+                    contact_name = contacts[0].get("profile", {}).get("name")
 
                 # Process messages
                 messages = value.get("messages", [])
@@ -903,7 +1263,24 @@ async def receive_webhook(request: Request, background_tasks: BackgroundTasks):
                     sender = msg.get("from")
                     msg_type = msg.get("type")
 
-                    # Extract message content
+                    # Handle voice/audio messages
+                    if msg_type == "audio":
+                        audio_data = msg.get("audio", {})
+                        media_id = audio_data.get("id")
+                        if media_id:
+                            background_tasks.add_task(
+                                handle_voice_message,
+                                clinic_id,
+                                ensure_phone_has_plus(sender),
+                                media_id,
+                                message_id,
+                                phone_number_id,
+                                access_token,
+                                contact_name
+                            )
+                        continue
+
+                    # Extract text message content
                     text = ""
                     button_payload = None
 
@@ -919,17 +1296,43 @@ async def receive_webhook(request: Request, background_tasks: BackgroundTasks):
                         text = msg.get("button", {}).get("text", "")
 
                     if text or button_payload:
-                        # Process in background
-                        background_tasks.add_task(
-                            process_message,
-                            clinic_id,
-                            sender,
-                            text,
-                            message_id,
-                            phone_number_id,
-                            access_token,
-                            button_payload
-                        )
+                        phone = ensure_phone_has_plus(sender)
+                        buffer_key = f"{clinic_id}:{phone}"
+
+                        # For button responses, process immediately (no buffering)
+                        if button_payload:
+                            background_tasks.add_task(
+                                process_message,
+                                clinic_id,
+                                phone,
+                                text,
+                                message_id,
+                                phone_number_id,
+                                access_token,
+                                button_payload,
+                                contact_name
+                            )
+                        else:
+                            # Add to buffer and start timer if first message
+                            message_data = {
+                                'text': text,
+                                'message_id': message_id,
+                                'contact_name': contact_name,
+                                'button_payload': button_payload
+                            }
+                            is_first = add_to_message_buffer(buffer_key, message_data)
+
+                            if is_first:
+                                # Start buffer processing task
+                                logger.info(f"⏳ Starting message buffer for {phone}")
+                                background_tasks.add_task(
+                                    process_buffered_messages,
+                                    clinic_id,
+                                    phone,
+                                    phone_number_id,
+                                    access_token,
+                                    buffer_key
+                                )
 
         return {"status": "ok"}
 
@@ -1179,7 +1582,7 @@ async def pix_payment_page(phone: str, order_id: str):
     """
     try:
         import urllib.parse
-        from jinja2 import Environment, FileSystemLoader
+        from jinja2 import Environment, FileSystemLoader  # type: ignore
 
         # Decode phone from URL
         phone = urllib.parse.unquote(phone)
@@ -1331,6 +1734,6 @@ async def pix_payment_page(phone: str, order_id: str):
 # ============================================
 
 if __name__ == "__main__":
-    import uvicorn
+    import uvicorn  # type: ignore
     port = int(os.getenv("PORT", "8080"))
     uvicorn.run(app, host="0.0.0.0", port=port)

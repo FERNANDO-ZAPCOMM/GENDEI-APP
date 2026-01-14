@@ -1,22 +1,21 @@
 """
-Provider-agnostic tool definitions.
-These are converted to provider-specific formats at runtime.
+Gendei Clinic Tool Definitions
+Provider-agnostic tool definitions for clinic scheduling agents.
 """
 
 from typing import List, Dict, Any
 
 
-# Tool definitions in a neutral format
-# Each tool has: name, description, parameters (with name, type, description, required)
+# Tool definitions for clinic scheduling
 TOOL_DEFINITIONS: Dict[str, Dict[str, Any]] = {
     "send_text_message": {
         "name": "send_text_message",
-        "description": "Send a text message to the customer via WhatsApp. This is the primary tool for communicating with customers. Use for responses, questions, and any text-based communication.",
+        "description": "Send a text message to the patient via WhatsApp. This is the primary tool for communicating with patients.",
         "parameters": [
             {
                 "name": "phone",
                 "type": "string",
-                "description": "Customer phone number in E.164 format (e.g., +5511999999999).",
+                "description": "Patient phone number in E.164 format (e.g., +5511999999999).",
                 "required": True,
             },
             {
@@ -28,238 +27,185 @@ TOOL_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
     },
 
-    "send_greeting_with_products_button": {
-        "name": "send_greeting_with_products_button",
-        "description": "Send welcome greeting with button to show products. Use this when greeting a new customer for the first time.",
-        "parameters": [
-            {
-                "name": "phone",
-                "type": "string",
-                "description": "Customer phone number in E.164 format (e.g., +5511999999999).",
-                "required": True,
-            }
-        ],
-    },
-
-    "send_notify_new_products_button": {
-        "name": "send_notify_new_products_button",
-        "description": "Send a NOTIFY_NEW_PRODUCTS opt-in button (no header), optionally with a short preface message. Use when the user wants to buy/enter something not yet available (no active products).",
-        "parameters": [
-            {
-                "name": "phone",
-                "type": "string",
-                "description": "Customer phone number in E.164 format.",
-                "required": True,
-            },
-            {
-                "name": "message",
-                "type": "string",
-                "description": "Optional preface message before the button.",
-                "required": False,
-                "default": "",
-            }
-        ],
-    },
-
-    "set_product_notification_preference": {
-        "name": "set_product_notification_preference",
-        "description": "Register user's preference to be notified about new products/community launches. Use ONLY when the user explicitly opts in.",
-        "parameters": [
-            {
-                "name": "phone",
-                "type": "string",
-                "description": "Customer phone number in E.164 format.",
-                "required": True,
-            },
-            {
-                "name": "wants_notification",
-                "type": "boolean",
-                "description": "True to enable notifications, False to disable.",
-                "required": False,
-                "default": True,
-            },
-            {
-                "name": "interests",
-                "type": "string",
-                "description": "Optional interests/topics the user mentioned.",
-                "required": False,
-                "default": "",
-            }
-        ],
-    },
-
-    "get_product_info": {
-        "name": "get_product_info",
-        "description": "Get detailed information about a product. Use this to retrieve product details for answering customer questions.",
-        "parameters": [
-            {
-                "name": "product_identifier",
-                "type": "string",
-                "description": "Product ID or title. If not provided, returns the default product.",
-                "required": False,
-            }
-        ],
-    },
-
-    "list_all_products": {
-        "name": "list_all_products",
-        "description": "Get a list of all available products. Use this when the customer asks what products are available or wants to see all options.",
+    "get_clinic_info": {
+        "name": "get_clinic_info",
+        "description": "Get information about the clinic including address, opening hours, phone, and payment options.",
         "parameters": [],
     },
 
-    "get_product_details": {
-        "name": "get_product_details",
-        "description": "Get detailed information about a product including RAG context. Returns comprehensive product information including topics, benefits, FAQ, and objection responses.",
+    "get_professionals": {
+        "name": "get_professionals",
+        "description": "Get list of professionals at the clinic. Can filter by service if specified.",
         "parameters": [
             {
-                "name": "product_id",
+                "name": "service_id",
                 "type": "string",
-                "description": "The product ID to get details for.",
-                "required": True,
-            }
-        ],
-    },
-
-    "answer_customer_question": {
-        "name": "answer_customer_question",
-        "description": "Find an answer for a customer question using RAG context. Searches the product's knowledge base to find relevant answers.",
-        "parameters": [
-            {
-                "name": "product_id",
-                "type": "string",
-                "description": "The product ID to search within.",
-                "required": True,
-            },
-            {
-                "name": "question",
-                "type": "string",
-                "description": "The customer's question to answer.",
-                "required": True,
-            }
-        ],
-    },
-
-    "get_objection_response": {
-        "name": "get_objection_response",
-        "description": "Get a pre-defined response for a customer objection. Use when a customer raises objections like 'it's too expensive', 'I don't have time', etc.",
-        "parameters": [
-            {
-                "name": "product_id",
-                "type": "string",
-                "description": "The product ID related to the objection.",
-                "required": True,
-            },
-            {
-                "name": "objection",
-                "type": "string",
-                "description": "The customer's objection text.",
-                "required": True,
-            }
-        ],
-    },
-
-    "send_product_card": {
-        "name": "send_product_card",
-        "description": "Send a single product card from the catalog via WhatsApp. Shows the product with image, title, price and a 'View' button.",
-        "parameters": [
-            {
-                "name": "phone",
-                "type": "string",
-                "description": "Customer phone number in E.164 format.",
-                "required": True,
-            },
-            {
-                "name": "product_id",
-                "type": "string",
-                "description": "Product ID from the catalog.",
-                "required": True,
-            },
-            {
-                "name": "body_text",
-                "type": "string",
-                "description": "Optional message text to accompany the product card.",
+                "description": "Optional service ID to filter professionals.",
                 "required": False,
             }
         ],
     },
 
-    "send_product_catalog_list": {
-        "name": "send_product_catalog_list",
-        "description": "Send a multi-product catalog message via WhatsApp. Shows up to 30 products in a scrollable list.",
+    "get_services": {
+        "name": "get_services",
+        "description": "Get list of services offered by the clinic with duration and price.",
+        "parameters": [],
+    },
+
+    "get_available_slots": {
+        "name": "get_available_slots",
+        "description": "Get available appointment slots for a professional.",
+        "parameters": [
+            {
+                "name": "professional_id",
+                "type": "string",
+                "description": "ID of the professional.",
+                "required": True,
+            },
+            {
+                "name": "date",
+                "type": "string",
+                "description": "Optional specific date (YYYY-MM-DD format).",
+                "required": False,
+            },
+            {
+                "name": "days_ahead",
+                "type": "integer",
+                "description": "Number of days to look ahead (default 7).",
+                "required": False,
+                "default": 7,
+            }
+        ],
+    },
+
+    "create_appointment": {
+        "name": "create_appointment",
+        "description": "Create a new appointment for a patient.",
         "parameters": [
             {
                 "name": "phone",
                 "type": "string",
-                "description": "Customer phone number in E.164 format.",
+                "description": "Patient phone number in E.164 format.",
                 "required": True,
             },
             {
-                "name": "header_text",
+                "name": "professional_id",
                 "type": "string",
-                "description": "Header text for the message (e.g., 'Nossos Produtos').",
+                "description": "ID of the professional.",
                 "required": True,
             },
             {
-                "name": "body_text",
+                "name": "date",
                 "type": "string",
-                "description": "Body text describing the products.",
+                "description": "Appointment date in YYYY-MM-DD format.",
                 "required": True,
             },
             {
-                "name": "product_ids",
-                "type": "array",
-                "description": "Optional list of specific product IDs. If not provided, sends all products.",
+                "name": "time",
+                "type": "string",
+                "description": "Appointment time in HH:MM format.",
+                "required": True,
+            },
+            {
+                "name": "patient_name",
+                "type": "string",
+                "description": "Full name of the patient.",
+                "required": True,
+            },
+            {
+                "name": "service_id",
+                "type": "string",
+                "description": "Optional ID of the service.",
+                "required": False,
+            },
+            {
+                "name": "payment_type",
+                "type": "string",
+                "description": "Payment type - 'particular' or 'convenio'.",
+                "required": False,
+                "default": "particular",
+            },
+            {
+                "name": "convenio_name",
+                "type": "string",
+                "description": "Name of the health insurance (if convenio).",
+                "required": False,
+            },
+            {
+                "name": "convenio_number",
+                "type": "string",
+                "description": "Health insurance card number (if convenio).",
                 "required": False,
             }
         ],
     },
 
-    "send_full_catalog": {
-        "name": "send_full_catalog",
-        "description": "Send a catalog message that opens the full WhatsApp catalog. Customer can browse all products in the native WhatsApp catalog view.",
+    "send_appointment_confirmation": {
+        "name": "send_appointment_confirmation",
+        "description": "Send appointment confirmation message to the patient.",
         "parameters": [
             {
-                "name": "phone",
+                "name": "appointment_id",
                 "type": "string",
-                "description": "Customer phone number in E.164 format.",
-                "required": True,
-            },
-            {
-                "name": "body_text",
-                "type": "string",
-                "description": "Message text inviting to browse the catalog.",
+                "description": "ID of the appointment to confirm.",
                 "required": True,
             }
         ],
     },
 
-    "create_order_and_send_payment": {
-        "name": "create_order_and_send_payment",
-        "description": "Create an order and send payment instructions to the customer. Creates a new order and sends PIX payment instructions. Use when the customer confirms they want to buy.",
+    "get_patient_appointments": {
+        "name": "get_patient_appointments",
+        "description": "Get patient's upcoming appointments.",
         "parameters": [
             {
                 "name": "phone",
                 "type": "string",
-                "description": "Customer phone number in E.164 format.",
+                "description": "Patient phone number in E.164 format.",
+                "required": True,
+            }
+        ],
+    },
+
+    "cancel_appointment": {
+        "name": "cancel_appointment",
+        "description": "Cancel an appointment.",
+        "parameters": [
+            {
+                "name": "appointment_id",
+                "type": "string",
+                "description": "ID of the appointment to cancel.",
                 "required": True,
             },
             {
-                "name": "product_id",
+                "name": "reason",
                 "type": "string",
-                "description": "Product ID to order. If not provided, uses the default product.",
+                "description": "Optional reason for cancellation.",
                 "required": False,
+                "default": "",
             }
         ],
     },
 
-    "check_order_status": {
-        "name": "check_order_status",
-        "description": "Check the status of orders for a customer. Use when the customer asks about their order status, payment status, or wants to know if their payment was received.",
+    "reschedule_appointment": {
+        "name": "reschedule_appointment",
+        "description": "Reschedule an appointment to a new date and time.",
         "parameters": [
             {
-                "name": "phone",
+                "name": "appointment_id",
                 "type": "string",
-                "description": "Customer phone number to check orders for.",
+                "description": "ID of the appointment to reschedule.",
+                "required": True,
+            },
+            {
+                "name": "new_date",
+                "type": "string",
+                "description": "New date in YYYY-MM-DD format.",
+                "required": True,
+            },
+            {
+                "name": "new_time",
+                "type": "string",
+                "description": "New time in HH:MM format.",
                 "required": True,
             }
         ],
@@ -267,12 +213,12 @@ TOOL_DEFINITIONS: Dict[str, Dict[str, Any]] = {
 
     "enable_human_takeover": {
         "name": "enable_human_takeover",
-        "description": "Enable human takeover for a conversation when the AI cannot handle the request. Use when customer explicitly asks to speak with a human, complex complaint, customer is frustrated, or technical issues.",
+        "description": "Enable human takeover for a conversation when the AI cannot handle the request. Use when patient explicitly asks to speak with a human, complex complaint, or medical questions.",
         "parameters": [
             {
                 "name": "phone",
                 "type": "string",
-                "description": "Customer phone number to enable human takeover for.",
+                "description": "Patient phone number to enable human takeover for.",
                 "required": True,
             },
             {
@@ -283,89 +229,55 @@ TOOL_DEFINITIONS: Dict[str, Dict[str, Any]] = {
             }
         ],
     },
-
-    "deliver_free_product": {
-        "name": "deliver_free_product",
-        "description": "Deliver a free product (lead magnet) to the customer. Use when the customer has expressed interest in a free product and confirmed they want to receive it.",
-        "parameters": [
-            {
-                "name": "phone",
-                "type": "string",
-                "description": "Customer phone number to deliver the product to.",
-                "required": True,
-            },
-            {
-                "name": "product_id",
-                "type": "string",
-                "description": "ID of the free product to deliver.",
-                "required": True,
-            }
-        ],
-    },
 }
 
 
 # Tool groups for different agent types
 AGENT_TOOL_GROUPS: Dict[str, List[str]] = {
-    "greeter": [
-        "send_greeting_with_products_button",
-        "send_notify_new_products_button",
-        "send_text_message",
-        "set_product_notification_preference",
-    ],
-    "notification_optin": [
+    # Greeter - welcomes patients
+    "greeter_agent": [
         "send_text_message",
     ],
-    "product_info": [
+
+    # Clinic Info - answers questions about the clinic
+    "clinic_info_agent": [
         "send_text_message",
-        "send_notify_new_products_button",
-        "get_product_info",
-        "list_all_products",
-        "get_product_details",
-        "answer_customer_question",
-        "get_objection_response",
-        "set_product_notification_preference",
-        "send_product_card",
-        "send_product_catalog_list",
-        "send_full_catalog",
+        "get_clinic_info",
+        "get_professionals",
+        "get_services",
     ],
-    "free_product": [
+
+    # Scheduling - handles appointment booking
+    "scheduling_agent": [
         "send_text_message",
-        "deliver_free_product",
-        "get_product_info",
+        "get_services",
+        "get_professionals",
+        "get_available_slots",
+        "create_appointment",
+        "send_appointment_confirmation",
     ],
-    "objection_handler": [
+
+    # Appointment Manager - view/cancel/reschedule
+    "appointment_manager_agent": [
         "send_text_message",
-        "get_product_info",
-        "get_product_details",
-        "get_objection_response",
+        "get_patient_appointments",
+        "cancel_appointment",
+        "reschedule_appointment",
     ],
-    "sales_closer": [
-        "send_text_message",
-        "create_order_and_send_payment",
-        "get_product_info",
-    ],
-    "payment": [
-        "send_text_message",
-        "create_order_and_send_payment",
-        "check_order_status",
-    ],
-    "support": [
-        "send_text_message",
-        "enable_human_takeover",
-        "check_order_status",
-        "set_product_notification_preference",
-    ],
-    "mentorship_booking": [
+
+    # Support - human escalation
+    "support_agent": [
         "send_text_message",
         "enable_human_takeover",
     ],
-    "triage": [
+
+    # Triage - routes to other agents
+    "triage_agent": [
         "send_text_message",
     ],
 }
 
 
-def get_tools_for_agent(agent_type: str) -> List[str]:
+def get_tools_for_agent(agent_name: str) -> List[str]:
     """Get tool names for an agent type."""
-    return AGENT_TOOL_GROUPS.get(agent_type, ["send_text_message"])
+    return AGENT_TOOL_GROUPS.get(agent_name, ["send_text_message"])

@@ -135,46 +135,78 @@ class OpenAIAgentFactory(BaseAgentFactory):
         """Build system prompt with context injection."""
         prompt = definition.system_prompt
 
-        # Inject creator context
-        if "creator" in context:
-            creator = context["creator"]
-            prompt = prompt.replace("{creator_name}", str(creator.get("name", "")))
-            prompt = prompt.replace("{creator_niche}", str(creator.get("niche", "")))
-            prompt = prompt.replace("{tone}", str(creator.get("tone", "friendly")))
-            prompt = prompt.replace("{voice_style}", str(creator.get("voiceStyle", "friendly_coach")))
+        # Inject clinic context (Gendei)
+        if "clinic" in context:
+            clinic = context["clinic"]
+            prompt = prompt.replace("{clinic_name}", str(clinic.get("name", "Clínica")))
+            prompt = prompt.replace("{clinic_context}", self._format_clinic_context(clinic))
 
-        # Inject product context
-        if "products" in context:
-            products_str = self._format_products(context["products"])
-            prompt = prompt.replace("{products}", products_str)
-            prompt = prompt.replace("{product_count}", str(len(context["products"])))
+        # Inject professionals context
+        if "professionals" in context:
+            prof_str = self._format_professionals(context["professionals"])
+            prompt = prompt.replace("{professionals}", prof_str)
 
-        # Inject free products context
-        if "free_products" in context:
-            free_str = self._format_products(context["free_products"])
-            prompt = prompt.replace("{free_products}", free_str)
-
-        # Inject paid products context
-        if "paid_products" in context:
-            paid_str = self._format_products(context["paid_products"])
-            prompt = prompt.replace("{paid_products}", paid_str)
+        # Inject services context
+        if "services" in context:
+            services_str = self._format_services(context["services"])
+            prompt = prompt.replace("{services}", services_str)
 
         return prompt
 
-    def _format_products(self, products: List[Dict]) -> str:
-        """Format products for prompt injection."""
-        if not products:
-            return "No products available."
+    def _format_clinic_context(self, clinic: Dict) -> str:
+        """Format clinic info for prompt injection."""
+        lines = []
+
+        if clinic.get("name"):
+            lines.append(f"Nome: {clinic['name']}")
+
+        if clinic.get("address"):
+            lines.append(f"Endereço: {clinic['address']}")
+
+        if clinic.get("opening_hours"):
+            lines.append(f"Horário: {clinic['opening_hours']}")
+
+        if clinic.get("phone"):
+            lines.append(f"Telefone: {clinic['phone']}")
+
+        # Payment settings
+        payment = clinic.get("payment_settings", {})
+        if payment.get("acceptsParticular"):
+            lines.append("Aceita: Particular")
+        if payment.get("convenios"):
+            lines.append(f"Convênios: {', '.join(payment['convenios'])}")
+
+        return "\n".join(lines) if lines else "Informações não disponíveis."
+
+    def _format_professionals(self, professionals: List[Dict]) -> str:
+        """Format professionals for prompt injection."""
+        if not professionals:
+            return "Nenhum profissional cadastrado."
 
         lines = []
-        for p in products:
-            title = p.get('title', 'Produto')
-            price = p.get('price', {})
-            if isinstance(price, dict):
-                formatted = price.get('formatted', 'N/A')
-            else:
-                formatted = f"R$ {float(price):.2f}" if price else 'Grátis'
-            lines.append(f"- {title}: {formatted}")
+        for p in professionals:
+            name = p.get('full_name') or p.get('name', 'Profissional')
+            specialty = p.get('specialty', '')
+            line = f"- {name}"
+            if specialty:
+                line += f" ({specialty})"
+            lines.append(line)
+        return "\n".join(lines)
+
+    def _format_services(self, services: List[Dict]) -> str:
+        """Format services for prompt injection."""
+        if not services:
+            return "Nenhum serviço cadastrado."
+
+        lines = []
+        for s in services:
+            name = s.get('name', 'Serviço')
+            duration = s.get('duration', 30)
+            price = s.get('price', 0)
+            line = f"- {name} ({duration} min)"
+            if price and price > 0:
+                line += f" - R$ {price:.2f}".replace('.', ',')
+            lines.append(line)
         return "\n".join(lines)
 
     def get_runner(self) -> BaseRunner:
