@@ -44,13 +44,14 @@ export interface Professional {
   photoUrl?: string;
   bio?: string; // Brief description/summary about the professional
   active: boolean;
-  workingHours?: WorkingHours;
+  workingHours?: WorkingHoursBackend;
   appointmentDuration?: number; // Default duration in minutes
   consultationPrice?: number; // Consultation price in BRL (R$)
   createdAt?: string;
   updatedAt?: string;
 }
 
+// Legacy format with day names (frontend display)
 export interface WorkingHours {
   monday?: DaySchedule;
   tuesday?: DaySchedule;
@@ -59,6 +60,12 @@ export interface WorkingHours {
   friday?: DaySchedule;
   saturday?: DaySchedule;
   sunday?: DaySchedule;
+}
+
+// Backend format: numeric keys where 0=Monday, 1=Tuesday, ..., 6=Sunday
+// Format: { "0": [{ "start": "09:00", "end": "18:00" }], ... }
+export interface WorkingHoursBackend {
+  [day: string]: Array<{ start: string; end: string }>;
 }
 
 export interface DaySchedule {

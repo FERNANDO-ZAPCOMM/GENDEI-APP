@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useTranslations, useLocale } from 'next-intl';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, Loader2, Camera, User, DollarSign, Save, Trash2 } from 'lucide-react';
+import { ArrowLeft, Loader2, Camera, User, DollarSign, Save, Trash2, Clock } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { useClinic } from '@/hooks/use-clinic';
@@ -19,6 +19,7 @@ import { PageLoader } from '@/components/PageLoader';
 import { filterSpecialties } from '@/lib/specialties';
 import { getSpecialtiesForCategories } from '@/lib/clinic-categories';
 import { uploadFile } from '@/lib/upload';
+import type { WorkingHoursBackend } from '@/lib/clinic-types';
 import {
   Select,
   SelectContent,
@@ -37,6 +38,16 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 
+const DAYS_OF_WEEK = [
+  { key: '0', label: 'Segunda-feira' },
+  { key: '1', label: 'Terça-feira' },
+  { key: '2', label: 'Quarta-feira' },
+  { key: '3', label: 'Quinta-feira' },
+  { key: '4', label: 'Sexta-feira' },
+  { key: '5', label: 'Sábado' },
+  { key: '6', label: 'Domingo' },
+];
+
 interface ProfessionalFormData {
   name: string;
   specialty: string;
@@ -47,6 +58,7 @@ interface ProfessionalFormData {
   active: boolean;
   photoUrl: string;
   bio: string;
+  workingHours: WorkingHoursBackend;
 }
 
 export default function ProfessionalEditPage() {
@@ -78,6 +90,7 @@ export default function ProfessionalEditPage() {
     active: true,
     photoUrl: '',
     bio: '',
+    workingHours: {},
   });
   const [isSaving, setIsSaving] = useState(false);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
@@ -87,6 +100,8 @@ export default function ProfessionalEditPage() {
   // Load professional data into form
   useEffect(() => {
     if (professional) {
+      // Convert workingHours to backend format if needed
+      const workingHours = (professional as any).workingHours || {};
       setFormData({
         name: professional.name || '',
         specialty: professional.specialty || '',
@@ -97,9 +112,36 @@ export default function ProfessionalEditPage() {
         active: professional.active ?? true,
         photoUrl: professional.photoUrl || '',
         bio: professional.bio || '',
+        workingHours: workingHours,
       });
     }
   }, [professional]);
+
+  // Toggle working day on/off
+  const toggleWorkingDay = (dayKey: string) => {
+    setFormData(prev => {
+      const newWorkingHours = { ...prev.workingHours };
+      if (newWorkingHours[dayKey] && newWorkingHours[dayKey].length > 0) {
+        // Turn off - remove the day
+        delete newWorkingHours[dayKey];
+      } else {
+        // Turn on - add default hours (9-18)
+        newWorkingHours[dayKey] = [{ start: '09:00', end: '18:00' }];
+      }
+      return { ...prev, workingHours: newWorkingHours };
+    });
+  };
+
+  // Update working hours for a specific day
+  const updateWorkingHours = (dayKey: string, start: string, end: string) => {
+    setFormData(prev => ({
+      ...prev,
+      workingHours: {
+        ...prev.workingHours,
+        [dayKey]: [{ start, end }],
+      },
+    }));
+  };
 
   const handlePhotoUpload = async (file: File) => {
     if (!file || !clinic?.id) return;
@@ -419,6 +461,66 @@ export default function ProfessionalEditPage() {
               disabled={isSaving}
             />
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Working Hours Card */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Clock className="w-5 h-5" />
+            Horários de Atendimento
+          </CardTitle>
+          <CardDescription>
+            Configure os dias e horários que este profissional atende
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {DAYS_OF_WEEK.map((day) => {
+            const isEnabled = formData.workingHours[day.key] && formData.workingHours[day.key].length > 0;
+            const hours = formData.workingHours[day.key]?.[0] || { start: '09:00', end: '18:00' };
+
+            return (
+              <div key={day.key} className="flex items-center gap-4 p-3 border rounded-lg">
+                <div className="w-32">
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      checked={isEnabled}
+                      onCheckedChange={() => toggleWorkingDay(day.key)}
+                      disabled={isSaving}
+                    />
+                    <Label className={`text-sm ${isEnabled ? 'font-medium' : 'text-muted-foreground'}`}>
+                      {day.label}
+                    </Label>
+                  </div>
+                </div>
+                {isEnabled ? (
+                  <div className="flex items-center gap-2 flex-1">
+                    <Input
+                      type="time"
+                      value={hours.start}
+                      onChange={(e) => updateWorkingHours(day.key, e.target.value, hours.end)}
+                      disabled={isSaving}
+                      className="w-28"
+                    />
+                    <span className="text-muted-foreground">às</span>
+                    <Input
+                      type="time"
+                      value={hours.end}
+                      onChange={(e) => updateWorkingHours(day.key, hours.start, e.target.value)}
+                      disabled={isSaving}
+                      className="w-28"
+                    />
+                  </div>
+                ) : (
+                  <span className="text-sm text-muted-foreground">Não atende</span>
+                )}
+              </div>
+            );
+          })}
+          <p className="text-xs text-muted-foreground mt-2">
+            Os horários configurados serão usados pelo agendamento automático via WhatsApp.
+          </p>
         </CardContent>
       </Card>
 

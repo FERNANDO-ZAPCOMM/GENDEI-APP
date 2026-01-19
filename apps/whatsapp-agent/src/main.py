@@ -47,6 +47,8 @@ try:
         format_reminder_message,
         mark_reminder_sent,
     )
+    from src.flows.handler import FlowsHandler, CLINICA_MEDICA_SPECIALTIES
+    from src.flows.manager import send_whatsapp_flow, send_booking_flow, generate_flow_token
     logger.info("✅ Gendei modules imported successfully")
 except Exception as e:
     logger.error(f"❌ Failed to import Gendei modules: {e}")
@@ -58,12 +60,21 @@ VERIFY_TOKEN = os.getenv("META_WEBHOOK_VERIFY_TOKEN", "gendei_verify_token")
 META_API_VERSION = os.getenv("META_API_VERSION", "v24.0")
 DOMAIN = os.getenv("GENDEI_DOMAIN", "https://gendei.com")
 
+# WhatsApp Flows - Two flows for complete scheduling experience
+# Flow 1: Patient Info (ESPECIALIDADE → TIPO_ATENDIMENTO → INFO_CONVENIO → DADOS_PACIENTE)
+# Flow 2: Booking (BOOKING - date picker + time dropdown)
+CLINICA_MEDICA_FORMULARIO_FLOW_ID = os.getenv("CLINICA_MEDICA_FORMULARIO_FLOW_ID", "")  # Flow 1: Patient info
+CLINICA_MEDICA_AGENDAMENTO_FLOW_ID = os.getenv("CLINICA_MEDICA_AGENDAMENTO_FLOW_ID", "")  # Flow 2: Booking
+
 # Booking settings
 DEFAULT_MIN_BOOKING_LEAD_TIME_HOURS = 2  # Minimum hours before a slot can be booked
 UPCOMING_APPOINTMENT_CHECK_DAYS = 14  # Days ahead to check for existing appointments
 
 # Database instance
 db: Optional[GendeiDatabase] = None
+
+# Flows handler instance
+flows_handler: Optional[FlowsHandler] = None
 
 # Note: Message deduplication and conversation state are now Firestore-backed
 # See db.is_message_processed() and db.load_conversation_state()
@@ -484,9 +495,10 @@ def format_appointment_date(date_str: str, time_str: str) -> str:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler."""
-    global db
+    global db, flows_handler
     logger.info("🚀 Starting Gendei WhatsApp Agent...")
     db = GendeiDatabase()
+    flows_handler = FlowsHandler(db)
     logger.info("✅ Database initialized")
     yield
     logger.info("👋 Shutting down Gendei WhatsApp Agent...")
@@ -1209,6 +1221,205 @@ async def handle_appointment_question(
     )
 
 
+async def handle_flow_completion(
+    clinic_id: str,
+    phone: str,
+    flow_response: Dict[str, Any],
+    phone_number_id: str,
+    access_token: str,
+    contact_name: str = ""
+) -> None:
+    """
+    Handle WhatsApp Flow completion response.
+
+    Flow 1 completion (Patient Info) → Send Flow 2 (Booking)
+    Flow 2 completion (Booking) → Create appointment
+    """
+    logger.info(f"🔄 Processing flow completion for {phone}: {flow_response}")
+
+    # Check if this is Flow 1 completion (has patient info, no date/time)
+    # Flow 1 returns: professional_id, professional_name, specialty_name, tipo_pagamento,
+    #                 convenio_nome, convenio_numero, nome, cpf, data_nascimento
+    has_patient_info = "nome" in flow_response and "cpf" in flow_response
+    has_booking = "date" in flow_response and "time" in flow_response
+
+    if has_patient_info and not has_booking:
+        # Flow 1 completed - send Flow 2 (Booking)
+        logger.info(f"📋 Flow 1 completed, sending Booking flow...")
+
+        if not CLINICA_MEDICA_AGENDAMENTO_FLOW_ID:
+            # Fallback: create appointment with just the collected info
+            logger.warning("⚠️ CLINICA_MEDICA_AGENDAMENTO_FLOW_ID not configured, creating placeholder appointment")
+            await send_whatsapp_message(
+                phone_number_id, phone,
+                f"Obrigado {flow_response.get('nome', '')}! 📋\n\n"
+                "Seus dados foram recebidos. Um atendente entrará em contato para "
+                "confirmar data e horário da sua consulta.\n\n"
+                f"Profissional: {flow_response.get('professional_name', '')}\n"
+                f"Especialidade: {flow_response.get('specialty_name', '')}",
+                access_token
+            )
+            return
+
+        # Get professional info and available times
+        professional_id = flow_response.get("professional_id", "")
+        professional_name = flow_response.get("professional_name", "")
+        specialty_name = flow_response.get("specialty_name", "")
+        patient_name = flow_response.get("nome", "")
+        patient_cpf = flow_response.get("cpf", "")
+
+        # Get available times for the professional
+        available_times = []
+        if db and professional_id:
+            professional = db.get_professional(clinic_id, professional_id)
+            if professional:
+                working_hours = professional.get("workingHours", {})
+                duration = professional.get("appointmentDuration", 30)
+
+                # Generate time slots from working hours
+                time_slots = set()
+                for day_key, day_hours in working_hours.items():
+                    for period in day_hours:
+                        start_str = period.get("start", "09:00")
+                        end_str = period.get("end", "18:00")
+
+                        try:
+                            start_time = datetime.strptime(start_str, "%H:%M")
+                            end_time = datetime.strptime(end_str, "%H:%M")
+
+                            current = start_time
+                            while current < end_time:
+                                time_slots.add(current.strftime("%H:%M"))
+                                current += timedelta(minutes=duration)
+                        except ValueError:
+                            continue
+
+                available_times = [{"id": t, "title": t} for t in sorted(time_slots)][:20]
+
+        if not available_times:
+            available_times = [
+                {"id": "08:00", "title": "08:00"},
+                {"id": "09:00", "title": "09:00"},
+                {"id": "10:00", "title": "10:00"},
+                {"id": "11:00", "title": "11:00"},
+                {"id": "14:00", "title": "14:00"},
+                {"id": "15:00", "title": "15:00"},
+                {"id": "16:00", "title": "16:00"},
+                {"id": "17:00", "title": "17:00"},
+            ]
+
+        # Calculate date range
+        today = datetime.now()
+        min_date = (today + timedelta(days=1)).strftime("%Y-%m-%d")
+        max_date = (today + timedelta(days=30)).strftime("%Y-%m-%d")
+
+        # Generate new flow token with patient data
+        flow_token = generate_flow_token(clinic_id, phone)
+
+        # Send Booking Flow (Flow 2)
+        success = await send_booking_flow(
+            phone_number_id=phone_number_id,
+            to=phone,
+            flow_id=CLINICA_MEDICA_AGENDAMENTO_FLOW_ID,
+            flow_token=flow_token,
+            access_token=access_token,
+            professional_id=professional_id,
+            professional_name=professional_name,
+            specialty_name=specialty_name,
+            patient_name=patient_name,
+            patient_cpf=patient_cpf,
+            available_times=available_times,
+            min_date=min_date,
+            max_date=max_date,
+        )
+
+        if success:
+            logger.info(f"✅ Booking flow sent to {phone}")
+            # Update conversation state
+            if db:
+                db.save_conversation_state(clinic_id, phone, {
+                    "state": "in_booking_flow",
+                    "professional_id": professional_id,
+                    "professional_name": professional_name,
+                    "patient_name": patient_name,
+                    "patient_cpf": patient_cpf,
+                })
+        else:
+            logger.error(f"❌ Failed to send booking flow to {phone}")
+            await send_whatsapp_message(
+                phone_number_id, phone,
+                "Desculpe, ocorreu um erro ao carregar os horários. "
+                "Por favor, tente novamente.",
+                access_token
+            )
+
+    elif has_booking:
+        # Flow 2 completed - create appointment
+        logger.info(f"📅 Flow 2 completed, creating appointment...")
+
+        professional_id = flow_response.get("professional_id", "")
+        professional_name = flow_response.get("doctor_name", "")
+        patient_name = flow_response.get("patient_name", "")
+        patient_cpf = flow_response.get("patient_cpf", "")
+        selected_date = flow_response.get("date", "")
+        selected_time = flow_response.get("time", "")
+
+        # Format date for display
+        try:
+            dt = datetime.strptime(selected_date, "%Y-%m-%d")
+            formatted_date = dt.strftime("%d/%m/%Y")
+            weekday_names = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"]
+            weekday = weekday_names[dt.weekday()]
+        except ValueError:
+            formatted_date = selected_date
+            weekday = ""
+
+        # Create the appointment
+        try:
+            appointment = await create_appointment(
+                db=db,
+                clinic_id=clinic_id,
+                professional_id=professional_id,
+                professional_name=professional_name,
+                patient_name=patient_name,
+                patient_phone=phone,
+                date=selected_date,
+                time=selected_time,
+                duration=30,
+                notes=f"CPF: {patient_cpf}" if patient_cpf else "Agendado via WhatsApp Flow",
+            )
+
+            logger.info(f"✅ Appointment created: {appointment.get('id') if appointment else 'N/A'}")
+
+            # Send confirmation message
+            confirmation_msg = (
+                f"✅ *Agendamento Confirmado!*\n\n"
+                f"📅 {weekday}, {formatted_date} às {selected_time}\n"
+                f"👨‍⚕️ {professional_name}\n"
+                f"👤 {patient_name}\n\n"
+                "Você receberá um lembrete 24h antes da consulta.\n\n"
+                "Para cancelar ou reagendar, basta enviar uma mensagem!"
+            )
+            await send_whatsapp_message(phone_number_id, phone, confirmation_msg, access_token)
+
+            # Reset conversation state
+            if db:
+                db.save_conversation_state(clinic_id, phone, {"state": "idle"})
+
+        except Exception as e:
+            logger.error(f"❌ Failed to create appointment: {e}")
+            await send_whatsapp_message(
+                phone_number_id, phone,
+                "Desculpe, ocorreu um erro ao confirmar o agendamento. "
+                "Por favor, tente novamente ou entre em contato conosco.",
+                access_token
+            )
+
+    else:
+        # Unknown flow response
+        logger.warning(f"⚠️ Unknown flow response format: {flow_response}")
+
+
 async def handle_scheduling_intent(
     clinic_id: str,
     phone: str,
@@ -1228,6 +1439,67 @@ async def handle_scheduling_intent(
 
     # Get professionals
     professionals = db.get_clinic_professionals(clinic_id)
+
+    # =============================================
+    # USE WHATSAPP FLOWS IF CONFIGURED
+    # Flow 1: Patient Info (ESPECIALIDADE → TIPO_ATENDIMENTO → INFO_CONVENIO → DADOS_PACIENTE → CONFIRMACAO)
+    # Flow 2: Booking (BOOKING - date picker + time dropdown)
+    # =============================================
+    flow_id_to_use = CLINICA_MEDICA_FORMULARIO_FLOW_ID
+
+    if flow_id_to_use and professionals:
+        logger.info(f"📱 Using WhatsApp Flow for scheduling (flow_id: {flow_id_to_use})")
+
+        # Build especialidades list (each professional = one specialty option)
+        especialidades = []
+        for prof in professionals:
+            specialty = getattr(prof, 'specialty', '') or ''
+            specialty_name = CLINICA_MEDICA_SPECIALTIES.get(specialty, specialty) if specialty else "Especialista"
+            prof_name = (prof.full_name or prof.name or "")[:72]
+            especialidades.append({
+                "id": prof.id,
+                "title": specialty_name[:24],
+                "description": prof_name
+            })
+
+        # Generate flow token (clinic_id:phone:timestamp)
+        flow_token = generate_flow_token(clinic_id, phone)
+
+        # Initial data for the ESPECIALIDADE screen
+        initial_data = {
+            "especialidades": especialidades[:10],  # Max 10 for RadioButtonsGroup
+            "error_message": "",
+        }
+
+        # Send Flow 1 (Patient Info)
+        success = await send_whatsapp_flow(
+            phone_number_id=phone_number_id,
+            to=phone,
+            flow_id=flow_id_to_use,
+            flow_token=flow_token,
+            flow_cta="Agendar Consulta",
+            header_text="Agendar Consulta",
+            body_text=f"Olá! Vamos agendar sua consulta na *{clinic.name}*.\n\nClique no botão abaixo para começar.",
+            access_token=access_token,
+            flow_action="data_exchange",
+            initial_screen="ESPECIALIDADE",
+            initial_data=initial_data,
+        )
+
+        if success:
+            # Save state for flow tracking
+            new_state = {
+                "state": "in_patient_info_flow",
+                "flow_token": flow_token,
+                "clinic_id": clinic_id,
+            }
+            if db:
+                db.save_conversation_state(clinic_id, phone, new_state)
+            logger.info(f"✅ Patient Info Flow sent to {phone}")
+            return
+        else:
+            logger.warning(f"⚠️ Failed to send flow, falling back to list messages")
+            # Fall through to regular flow below
 
     if not professionals:
         await send_whatsapp_message(
@@ -1327,17 +1599,23 @@ async def show_professional_slots(
 
     # Group slots by date (handle both TimeSlot objects and dicts)
     slots_by_date: Dict[str, List[Any]] = {}
-    for slot in slots[:30]:  # Limit to 30 slots
+    for slot in slots[:30]:  # Limit to 30 slots for processing
         date_str = slot.date if hasattr(slot, 'date') else slot.get('date', '')
         if date_str not in slots_by_date:
             slots_by_date[date_str] = []
         slots_by_date[date_str].append(slot)
 
     # Build sections for WhatsApp list (one section per date)
+    # IMPORTANT: WhatsApp allows max 10 total rows across all sections
     sections = []
     slot_map = {}  # Map slot IDs to slot data
+    total_rows = 0
+    MAX_TOTAL_ROWS = 10  # WhatsApp limit
 
     for date_str, date_slots in list(slots_by_date.items())[:5]:  # Max 5 dates
+        if total_rows >= MAX_TOTAL_ROWS:
+            break
+
         try:
             dt = datetime.strptime(date_str, "%Y-%m-%d")
             day_names = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
@@ -1348,7 +1626,9 @@ async def show_professional_slots(
             section_title = date_str
 
         rows = []
-        for slot in date_slots[:10]:  # Max 10 slots per date
+        for slot in date_slots:
+            if total_rows >= MAX_TOTAL_ROWS:
+                break
             time_str = slot.time if hasattr(slot, 'time') else slot.get('time', '')
             slot_id = f"slot_{date_str}_{time_str.replace(':', '')}"
             slot_map[slot_id] = {"date": date_str, "time": time_str}
@@ -1357,6 +1637,7 @@ async def show_professional_slots(
                 "title": time_str,
                 "description": f"{professional_name}"[:72]
             })
+            total_rows += 1
 
         if rows:
             sections.append({"title": section_title, "rows": rows})
@@ -2232,9 +2513,38 @@ async def receive_webhook(request: Request, background_tasks: BackgroundTasks):
                         text = msg.get("text", {}).get("body", "")
                     elif msg_type == "interactive":
                         interactive = msg.get("interactive", {})
-                        if interactive.get("type") == "button_reply":
+                        interactive_type = interactive.get("type", "")
+
+                        if interactive_type == "button_reply":
                             button_payload = interactive.get("button_reply", {}).get("id")
                             text = interactive.get("button_reply", {}).get("title", "")
+
+                        elif interactive_type == "nfm_reply":
+                            # WhatsApp Flow completion response
+                            nfm_reply = interactive.get("nfm_reply", {})
+                            response_json_str = nfm_reply.get("response_json", "{}")
+
+                            try:
+                                flow_response = json.loads(response_json_str)
+                                logger.info(f"📱 Flow completed: {flow_response}")
+
+                                phone = ensure_phone_has_plus(sender)
+
+                                # Handle flow completion in background
+                                background_tasks.add_task(
+                                    handle_flow_completion,
+                                    clinic_id,
+                                    phone,
+                                    flow_response,
+                                    phone_number_id,
+                                    access_token,
+                                    contact_name
+                                )
+                            except json.JSONDecodeError as e:
+                                logger.error(f"❌ Failed to parse flow response: {e}")
+
+                            continue  # Skip normal message processing
+
                     elif msg_type == "button":
                         button_payload = msg.get("button", {}).get("payload")
                         text = msg.get("button", {}).get("text", "")
@@ -2671,6 +2981,75 @@ async def pix_payment_page(phone: str, order_id: str):
             </body>
             </html>
         """, status_code=500)
+
+
+# ============================================
+# WHATSAPP FLOWS ENDPOINT
+# ============================================
+
+@app.post("/flows")
+async def flows_endpoint(request: Request):
+    """
+    WhatsApp Flows data endpoint.
+    Handles INIT, data_exchange, and BACK actions for dynamic flows.
+    """
+    try:
+        body = await request.json()
+        logger.info(f"📱 Flow request received: {json.dumps(body)[:500]}")
+
+        action = body.get("action", "")
+        screen = body.get("screen")
+        data = body.get("data", {})
+        flow_token = body.get("flow_token", "")
+
+        # Handle ping (health check)
+        if action == "ping":
+            return {"data": {"status": "active"}}
+
+        # Handle error notifications
+        if action == "error":
+            logger.error(f"Flow error: {data}")
+            return {"data": {"acknowledged": True}}
+
+        # Extract clinic_id from flow_token (format: clinic_id:phone:timestamp)
+        # Or from the initial data
+        clinic_id = ""
+        patient_phone = ""
+
+        if flow_token:
+            parts = flow_token.split(":")
+            if len(parts) >= 2:
+                clinic_id = parts[0]
+                patient_phone = parts[1] if len(parts) > 1 else ""
+
+        if not clinic_id:
+            clinic_id = data.get("clinic_id", "")
+
+        if not clinic_id:
+            logger.error("No clinic_id in flow request")
+            return {"data": {"error_message": "Erro: clínica não identificada"}}
+
+        # Add patient phone to data for appointment creation
+        data["patient_phone"] = patient_phone
+
+        # Process with flows handler
+        if flows_handler:
+            result = await flows_handler.handle_request(
+                action=action,
+                screen=screen,
+                data=data,
+                flow_token=flow_token,
+                clinic_id=clinic_id,
+            )
+            logger.info(f"📤 Flow response: {json.dumps(result)[:500]}")
+            return result
+        else:
+            logger.error("Flows handler not initialized")
+            return {"data": {"error_message": "Erro interno"}}
+
+    except Exception as e:
+        logger.error(f"❌ Flow endpoint error: {e}")
+        return {"data": {"error_message": "Erro ao processar solicitação"}}
 
 
 # ============================================

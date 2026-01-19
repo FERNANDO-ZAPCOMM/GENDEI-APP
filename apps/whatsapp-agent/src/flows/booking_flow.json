@@ -1,0 +1,114 @@
+{
+  "version": "6.2",
+  "data_api_version": "3.0",
+  "routing_model": {},
+  "screens": [
+    {
+      "id": "BOOKING",
+      "title": "Agendar Consulta",
+      "terminal": true,
+      "data": {
+        "doctor_name": {
+          "type": "string",
+          "__example__": "Dr. Silva"
+        },
+        "specialty_name": {
+          "type": "string",
+          "__example__": "Clínico Geral"
+        },
+        "professional_id": {
+          "type": "string",
+          "__example__": "prof1"
+        },
+        "patient_name": {
+          "type": "string",
+          "__example__": "Maria Silva"
+        },
+        "patient_cpf": {
+          "type": "string",
+          "__example__": "12345678900"
+        },
+        "available_times": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {"type": "string"},
+              "title": {"type": "string"}
+            }
+          },
+          "__example__": [
+            {"id": "08:00", "title": "08:00"},
+            {"id": "09:00", "title": "09:00"},
+            {"id": "10:00", "title": "10:00"}
+          ]
+        },
+        "min_date": {
+          "type": "string",
+          "__example__": "2026-01-20"
+        },
+        "max_date": {
+          "type": "string",
+          "__example__": "2026-02-20"
+        },
+        "error_message": {
+          "type": "string",
+          "__example__": ""
+        }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "TextHeading",
+            "text": "${data.doctor_name}"
+          },
+          {
+            "type": "TextSubheading",
+            "text": "${data.specialty_name}"
+          },
+          {
+            "type": "TextBody",
+            "text": "Selecione a data e horário para sua consulta:"
+          },
+          {
+            "type": "Form",
+            "name": "booking_form",
+            "children": [
+              {
+                "type": "DatePicker",
+                "name": "date",
+                "label": "Data da Consulta",
+                "required": true,
+                "min-date": "${data.min_date}",
+                "max-date": "${data.max_date}"
+              },
+              {
+                "type": "Dropdown",
+                "name": "time",
+                "label": "Horário",
+                "required": true,
+                "data-source": "${data.available_times}"
+              },
+              {
+                "type": "Footer",
+                "label": "Confirmar Agendamento",
+                "on-click-action": {
+                  "name": "complete",
+                  "payload": {
+                    "professional_id": "${data.professional_id}",
+                    "doctor_name": "${data.doctor_name}",
+                    "patient_name": "${data.patient_name}",
+                    "patient_cpf": "${data.patient_cpf}",
+                    "date": "${form.date}",
+                    "time": "${form.time}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -111,10 +111,24 @@ TEST_CREATOR_ID="${TEST_CREATOR_ID:-}"
 DEFAULT_CREATOR_ID="${DEFAULT_CREATOR_ID:-default_creator}"
 DOMAIN="${DOMAIN:-https://gendei-whatsapp-agent-647402645066.us-central1.run.app}"
 
+# WHATSAPP FLOWS CONFIGURATION
+# Two flows for complete scheduling experience:
+# Flow 1: Patient Info (ESPECIALIDADE → TIPO_ATENDIMENTO → INFO_CONVENIO → DADOS_PACIENTE)
+# Flow 2: Booking (BOOKING - date picker + time dropdown)
+CLINICA_MEDICA_FORMULARIO_FLOW_ID="${CLINICA_MEDICA_FORMULARIO_FLOW_ID:-}"
+CLINICA_MEDICA_AGENDAMENTO_FLOW_ID="${CLINICA_MEDICA_AGENDAMENTO_FLOW_ID:-}"
+
 echo "Configuration loaded:"
 echo "  Mode: ${TEST_CREATOR_ID:+Testing (TEST_CREATOR_ID=$TEST_CREATOR_ID)}${TEST_CREATOR_ID:-Multi-clinic (Firestore lookup)}"
 echo "  Default Creator ID: ${DEFAULT_CREATOR_ID}"
 echo "  Domain: ${DOMAIN}"
+if [ -n "${CLINICA_MEDICA_FORMULARIO_FLOW_ID}" ]; then
+    echo "  WhatsApp Flows: ENABLED"
+    echo "    CLINICA_MEDICA_FORMULARIO: ${CLINICA_MEDICA_FORMULARIO_FLOW_ID}"
+    echo "    CLINICA_MEDICA_AGENDAMENTO: ${CLINICA_MEDICA_AGENDAMENTO_FLOW_ID:-NOT SET}"
+else
+    echo "  WhatsApp Flows: DISABLED (set CLINICA_MEDICA_FORMULARIO_FLOW_ID and CLINICA_MEDICA_AGENDAMENTO_FLOW_ID to enable)"
+fi
 
 # ENABLE REQUIRED APIs
 echo "Enabling required APIs for ${PROJECT_ID}..."
@@ -238,7 +252,9 @@ gcloud run deploy "${SERVICE_NAME}" \
     --set-env-vars="PAGSEGURO_ENVIRONMENT=${PAGSEGURO_ENVIRONMENT:-production}" \
     --set-env-vars="DEFAULT_BRAZILIAN_PHONE=${DEFAULT_BRAZILIAN_PHONE:-}" \
     --set-env-vars="AI_PROVIDER=${AI_PROVIDER}" \
-    --set-env-vars="ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}"
+    --set-env-vars="ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}" \
+    --set-env-vars="CLINICA_MEDICA_FORMULARIO_FLOW_ID=${CLINICA_MEDICA_FORMULARIO_FLOW_ID:-}" \
+    --set-env-vars="CLINICA_MEDICA_AGENDAMENTO_FLOW_ID=${CLINICA_MEDICA_AGENDAMENTO_FLOW_ID:-}"
 
 echo "Deployment complete!"
 echo "Use the URL below as your WhatsApp webhook:"
