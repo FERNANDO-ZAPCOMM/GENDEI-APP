@@ -1745,6 +1745,43 @@ async def process_message(
     msg_lower = message.lower().strip()
 
     # =============================================
+    # DETECT GREETING AND RESET STATE IF NEEDED
+    # If user sends a greeting while in middle of flow, reset and start fresh
+    # =============================================
+    greeting_patterns = [
+        "oi", "olá", "ola", "oie", "oii", "oiii",
+        "bom dia", "boa tarde", "boa noite",
+        "tudo bem", "td bem", "tudo bom", "td bom",
+        "e ai", "e aí", "eai", "eaí",
+        "hey", "hello", "hi",
+        "opa", "fala", "salve",
+    ]
+
+    # Check if message is primarily a greeting (not button, short message)
+    if not button_payload and len(msg_lower) < 30:
+        is_greeting = any(
+            msg_lower == g or
+            msg_lower.startswith(g + " ") or
+            msg_lower.startswith(g + ",") or
+            msg_lower.startswith(g + "!") or
+            msg_lower.startswith(g + "?")
+            for g in greeting_patterns
+        )
+
+        # If it's a greeting and user is in a mid-flow state, reset and greet
+        if is_greeting and current_state not in (None, "new", "novo", "", "awaiting_greeting_response", "general_chat"):
+            logger.info(f"👋 Greeting detected while in state '{current_state}', resetting conversation for {phone}")
+            # Clear the old state
+            if db:
+                db.save_conversation_state(clinic_id, phone, {"state": None, "waUserName": contact_name, "waUserPhone": phone})
+            # Send fresh greeting
+            await send_initial_greeting(
+                clinic_id, phone, phone_number_id, access_token,
+                contact_name=contact_name
+            )
+            return
+
+    # =============================================
     # HANDLE INTERACTIVE BUTTON/LIST RESPONSES
     # =============================================
     if button_payload:
