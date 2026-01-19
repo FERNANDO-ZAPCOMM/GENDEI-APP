@@ -1025,6 +1025,428 @@ export async function createReminderTemplates(
   return { created, errors };
 }
 
+// ============================================
+// WHATSAPP FLOWS CREATION
+// ============================================
+
+/**
+ * WhatsApp Flow JSON for patient info collection (CLINIC_PATIENT_FORM)
+ * Screens: ESPECIALIDADE → TIPO_ATENDIMENTO → INFO_CONVENIO → DADOS_PACIENTE (terminal)
+ */
+const PATIENT_INFO_FLOW_JSON = {
+  version: '6.2',
+  screens: [
+    {
+      id: 'ESPECIALIDADE',
+      title: 'Agendar Consulta',
+      layout: {
+        type: 'SingleColumnLayout',
+        children: [
+          {
+            type: 'Form',
+            name: 'form_especialidade',
+            children: [
+              {
+                type: 'RadioButtonsGroup',
+                name: 'especialidade',
+                label: 'Especialidade',
+                required: true,
+                'data-source': [
+                  { id: 'derma_clinica', title: 'Dermatologia Clínica', description: 'Dr. Ricardo Mendes' },
+                  { id: 'derma_cirurgica', title: 'Dermatologia Cirúrgica', description: 'Dra. Camila Santos' },
+                  { id: 'derma_estetica', title: 'Cosmiatria', description: 'Dr. Felipe Oliveira' },
+                  { id: 'derma_oncologica', title: 'Dermatologia Oncológica', description: 'Dra. Ana Beatriz Costa' },
+                ],
+              },
+              {
+                type: 'Footer',
+                label: 'Continuar',
+                'on-click-action': {
+                  name: 'navigate',
+                  next: { type: 'screen', name: 'TIPO_ATENDIMENTO' },
+                  payload: { especialidade: '${form.especialidade}' },
+                },
+              },
+            ],
+          },
+        ],
+      },
+    },
+    {
+      id: 'TIPO_ATENDIMENTO',
+      title: 'Tipo de Atendimento',
+      data: {
+        especialidade: { type: 'string', __example__: 'cardiologia' },
+      },
+      layout: {
+        type: 'SingleColumnLayout',
+        children: [
+          {
+            type: 'Form',
+            name: 'form_pagamento',
+            children: [
+              {
+                type: 'RadioButtonsGroup',
+                name: 'tipo_pagamento',
+                label: 'Tipo de atendimento',
+                required: true,
+                'data-source': [
+                  { id: 'convenio', title: 'Convênio', description: 'Tenho plano de saúde' },
+                  { id: 'particular', title: 'Particular', description: 'Pagamento direto (PIX/Cartão)' },
+                ],
+              },
+              {
+                type: 'Footer',
+                label: 'Continuar',
+                'on-click-action': {
+                  name: 'navigate',
+                  next: { type: 'screen', name: 'INFO_CONVENIO' },
+                  payload: {
+                    especialidade: '${data.especialidade}',
+                    tipo_pagamento: '${form.tipo_pagamento}',
+                  },
+                },
+              },
+            ],
+          },
+        ],
+      },
+    },
+    {
+      id: 'INFO_CONVENIO',
+      title: 'Dados do Convênio',
+      data: {
+        especialidade: { type: 'string', __example__: 'cardiologia' },
+        tipo_pagamento: { type: 'string', __example__: 'convenio' },
+      },
+      layout: {
+        type: 'SingleColumnLayout',
+        children: [
+          {
+            type: 'Form',
+            name: 'form_convenio',
+            children: [
+              {
+                type: 'Dropdown',
+                name: 'convenio_nome',
+                label: 'Seu convênio',
+                required: false,
+                'data-source': [
+                  { id: 'unimed', title: 'Unimed' },
+                  { id: 'bradesco_saude', title: 'Bradesco Saúde' },
+                  { id: 'sulamerica', title: 'SulAmérica' },
+                  { id: 'amil', title: 'Amil' },
+                  { id: 'notredame', title: 'NotreDame Intermédica' },
+                  { id: 'hapvida', title: 'Hapvida' },
+                  { id: 'porto_seguro', title: 'Porto Seguro Saúde' },
+                  { id: 'outro', title: 'Outro' },
+                ],
+              },
+              {
+                type: 'TextInput',
+                name: 'convenio_numero',
+                label: 'Nº da carteirinha',
+                'input-type': 'text',
+                required: false,
+                'helper-text': 'Encontre no cartão do convênio',
+              },
+              {
+                type: 'Footer',
+                label: 'Continuar',
+                'on-click-action': {
+                  name: 'navigate',
+                  next: { type: 'screen', name: 'DADOS_PACIENTE' },
+                  payload: {
+                    especialidade: '${data.especialidade}',
+                    tipo_pagamento: '${data.tipo_pagamento}',
+                    convenio_nome: '${form.convenio_nome}',
+                    convenio_numero: '${form.convenio_numero}',
+                  },
+                },
+              },
+            ],
+          },
+        ],
+      },
+    },
+    {
+      id: 'DADOS_PACIENTE',
+      title: 'Dados do Paciente',
+      terminal: true,
+      data: {
+        especialidade: { type: 'string', __example__: 'cardiologia' },
+        tipo_pagamento: { type: 'string', __example__: 'convenio' },
+        convenio_nome: { type: 'string', __example__: 'unimed' },
+        convenio_numero: { type: 'string', __example__: '123456789' },
+      },
+      layout: {
+        type: 'SingleColumnLayout',
+        children: [
+          {
+            type: 'Form',
+            name: 'form_paciente',
+            children: [
+              {
+                type: 'TextInput',
+                name: 'nome',
+                label: 'Nome completo',
+                'input-type': 'text',
+                required: true,
+                'helper-text': 'Como consta no documento',
+              },
+              {
+                type: 'TextInput',
+                name: 'cpf',
+                label: 'CPF',
+                'input-type': 'text',
+                required: true,
+                pattern: '^\\d{3}\\.?\\d{3}\\.?\\d{3}-?\\d{2}$',
+                'helper-text': 'Ex: 123.456.789-00',
+              },
+              {
+                type: 'DatePicker',
+                name: 'data_nascimento',
+                label: 'Data de nascimento',
+                required: true,
+                'max-date': '2025-12-31',
+                'helper-text': 'Selecione sua data de nascimento',
+              },
+              {
+                type: 'Footer',
+                label: 'Ver Horários',
+                'on-click-action': {
+                  name: 'complete',
+                  payload: {
+                    especialidade: '${data.especialidade}',
+                    tipo_pagamento: '${data.tipo_pagamento}',
+                    convenio_nome: '${data.convenio_nome}',
+                    convenio_numero: '${data.convenio_numero}',
+                    nome: '${form.nome}',
+                    cpf: '${form.cpf}',
+                    data_nascimento: '${form.data_nascimento}',
+                  },
+                },
+              },
+            ],
+          },
+        ],
+      },
+    },
+  ],
+};
+
+/**
+ * WhatsApp Flow JSON for booking date/time selection (CLINIC_PATIENT_DATEPICKER)
+ * Single terminal screen for date and time selection
+ */
+const BOOKING_FLOW_JSON = {
+  version: '6.2',
+  screens: [
+    {
+      id: 'BOOKING',
+      terminal: true,
+      title: 'Escolha o Horário',
+      data: {
+        doctor_name: { type: 'string', __example__: 'Dr. Ricardo Mendes' },
+        specialty_name: { type: 'string', __example__: 'Dermatologia Clínica' },
+      },
+      layout: {
+        type: 'SingleColumnLayout',
+        children: [
+          { type: 'TextBody', text: 'Agenda de ${data.doctor_name}' },
+          {
+            type: 'Form',
+            name: 'booking_form',
+            children: [
+              {
+                type: 'DatePicker',
+                name: 'date',
+                label: 'Data da consulta',
+                required: true,
+              },
+              {
+                type: 'Dropdown',
+                name: 'time',
+                label: 'Horário',
+                required: true,
+                'data-source': [
+                  { id: '08:00', title: '08:00' },
+                  { id: '09:00', title: '09:00' },
+                  { id: '10:00', title: '10:00' },
+                  { id: '11:00', title: '11:00' },
+                  { id: '14:00', title: '14:00' },
+                  { id: '15:00', title: '15:00' },
+                  { id: '16:00', title: '16:00' },
+                ],
+              },
+              {
+                type: 'Footer',
+                label: 'Confirmar Horário',
+                'on-click-action': {
+                  name: 'complete',
+                  payload: {
+                    date: '${form.date}',
+                    time: '${form.time}',
+                    doctor_name: '${data.doctor_name}',
+                    specialty_name: '${data.specialty_name}',
+                  },
+                },
+              },
+            ],
+          },
+        ],
+      },
+    },
+  ],
+};
+
+/**
+ * Create WhatsApp Flows for scheduling during Embedded Signup
+ * Creates the flows under the specific WABA so they can be used with that WABA's phone numbers
+ */
+export async function createSchedulingFlows(
+  wabaId: string
+): Promise<{ flowIds: { patientInfo?: string; booking?: string }; errors: string[] }> {
+  const bisuToken = getMetaBisuToken();
+  const apiVersion = getMetaApiVersion();
+  const flowsEndpointUrl = getWhatsAppAgentUrl();
+
+  if (!bisuToken) {
+    throw new Error('BISU token required');
+  }
+
+  if (!flowsEndpointUrl) {
+    console.warn('⚠️ GENDEI_WHATSAPP_AGENT_URL not set, flows will not have endpoint configured');
+  }
+
+  const flowIds: { patientInfo?: string; booking?: string } = {};
+  const errors: string[] = [];
+
+  // Flows to create
+  const flows = [
+    {
+      key: 'patientInfo' as const,
+      name: 'CLINICA_MEDICA_FORMULARIO',
+      categories: ['APPOINTMENT_BOOKING'],
+      json: PATIENT_INFO_FLOW_JSON,
+    },
+    {
+      key: 'booking' as const,
+      name: 'CLINICA_MEDICA_AGENDAMENTO',
+      categories: ['APPOINTMENT_BOOKING'],
+      json: BOOKING_FLOW_JSON,
+    },
+  ];
+
+  for (const flow of flows) {
+    try {
+      console.log(`📱 Creating flow: ${flow.name} for WABA ${wabaId}...`);
+
+      // Step 1: Create the flow
+      const createResponse = await fetch(`https://graph.facebook.com/${apiVersion}/${wabaId}/flows`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${bisuToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: flow.name,
+          categories: flow.categories,
+        }),
+      });
+
+      if (!createResponse.ok) {
+        const error = await createResponse.json();
+        // Check if flow already exists
+        if (error.error?.code === 100 && error.error?.error_subcode === 2388069) {
+          console.log(`⚠️ Flow ${flow.name} already exists, trying to get existing flow...`);
+          // Try to get existing flows
+          const listResponse = await fetch(
+            `https://graph.facebook.com/${apiVersion}/${wabaId}/flows?fields=id,name,status`,
+            { headers: { Authorization: `Bearer ${bisuToken}` } }
+          );
+          if (listResponse.ok) {
+            const listData = await listResponse.json();
+            const existingFlow = listData.data?.find((f: any) => f.name === flow.name);
+            if (existingFlow) {
+              console.log(`✅ Found existing flow: ${flow.name} (ID: ${existingFlow.id})`);
+              flowIds[flow.key] = existingFlow.id;
+              continue;
+            }
+          }
+        }
+        errors.push(`${flow.name}: ${error.error?.message || 'Failed to create flow'}`);
+        console.error(`Failed to create flow ${flow.name}:`, error);
+        continue;
+      }
+
+      const createData = await createResponse.json();
+      const flowId = createData.id;
+      console.log(`✅ Flow created: ${flow.name} (ID: ${flowId})`);
+
+      // Step 2: Upload the flow JSON
+      const flowJsonStr = JSON.stringify(flow.json);
+      const formData = new FormData();
+      formData.append('name', 'flow.json');
+      formData.append('asset_type', 'FLOW_JSON');
+      formData.append('file', new Blob([flowJsonStr], { type: 'application/json' }), 'flow.json');
+
+      const uploadResponse = await fetch(`https://graph.facebook.com/${apiVersion}/${flowId}/assets`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${bisuToken}`,
+        },
+        body: formData,
+      });
+
+      if (!uploadResponse.ok) {
+        const error = await uploadResponse.json();
+        errors.push(`${flow.name} upload: ${error.error?.message || 'Failed to upload flow JSON'}`);
+        console.error(`Failed to upload flow JSON for ${flow.name}:`, error);
+        // Still save the flow ID even if JSON upload fails
+        flowIds[flow.key] = flowId;
+        continue;
+      }
+
+      console.log(`✅ Flow JSON uploaded for ${flow.name}`);
+
+      // Step 3: Set the endpoint URL if available
+      if (flowsEndpointUrl) {
+        const endpointUrl = `${flowsEndpointUrl}/flows`;
+        const updateResponse = await fetch(`https://graph.facebook.com/${apiVersion}/${flowId}`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${bisuToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            endpoint_uri: endpointUrl,
+          }),
+        });
+
+        if (updateResponse.ok) {
+          console.log(`✅ Flow endpoint set: ${endpointUrl}`);
+        } else {
+          const error = await updateResponse.json();
+          console.warn(`⚠️ Could not set flow endpoint: ${error.error?.message}`);
+        }
+      }
+
+      // Step 4: Publish the flow (optional - can be done manually in Meta Business Manager)
+      // Note: Publishing requires the flow to pass validation
+      // For now, we leave it in DRAFT state for manual review
+      console.log(`ℹ️ Flow ${flow.name} created in DRAFT state. Publish manually in Meta Business Manager.`);
+
+      flowIds[flow.key] = flowId;
+    } catch (error: any) {
+      errors.push(`${flow.name}: ${error.message}`);
+      console.error(`Error creating flow ${flow.name}:`, error);
+    }
+  }
+
+  return { flowIds, errors };
+}
+
 /**
  * Delete a message template
  */

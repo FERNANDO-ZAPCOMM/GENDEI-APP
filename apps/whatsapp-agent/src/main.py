@@ -1450,7 +1450,16 @@ async def handle_scheduling_intent(
     # Flow 1: Patient Info (ESPECIALIDADE → TIPO_ATENDIMENTO → INFO_CONVENIO → DADOS_PACIENTE → CONFIRMACAO)
     # Flow 2: Booking (BOOKING - date picker + time dropdown)
     # =============================================
-    flow_id_to_use = CLINICA_MEDICA_FORMULARIO_FLOW_ID
+    # Get clinic-specific flow ID from Firestore (created during Embedded Signup)
+    # Falls back to environment variable for backward compatibility
+    whatsapp_config = getattr(clinic, 'whatsappConfig', None) or {}
+    if isinstance(whatsapp_config, dict):
+        flow_id_to_use = whatsapp_config.get('patientInfoFlowId', '') or CLINICA_MEDICA_FORMULARIO_FLOW_ID
+    else:
+        # Handle case where whatsappConfig is an object with attributes
+        flow_id_to_use = getattr(whatsapp_config, 'patientInfoFlowId', '') or CLINICA_MEDICA_FORMULARIO_FLOW_ID
+
+    logger.info(f"🔍 Flow ID for clinic {clinic_id}: {flow_id_to_use or 'NOT CONFIGURED'}")
 
     if flow_id_to_use and professionals:
         logger.info(f"📱 Using WhatsApp Flow for scheduling (flow_id: {flow_id_to_use})")

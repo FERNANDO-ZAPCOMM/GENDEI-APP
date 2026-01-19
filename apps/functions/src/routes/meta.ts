@@ -93,8 +93,30 @@ router.post(
         phoneNumberId,
       });
 
-      // If successful, create reminder templates
+      // If successful, create flows and templates
       if (result.success && result.wabaId) {
+        // Create WhatsApp Flows FIRST (more important, faster)
+        try {
+          console.log(`Creating scheduling flows for clinic ${clinicId}...`);
+          const flowsResult = await metaService.createSchedulingFlows(result.wabaId);
+
+          // Update clinic with flow IDs
+          if (flowsResult.flowIds.patientInfo || flowsResult.flowIds.booking) {
+            await db.collection(CLINICS).doc(clinicId).update({
+              'whatsappConfig.flowsCreated': true,
+              ...(flowsResult.flowIds.patientInfo && { 'whatsappConfig.patientInfoFlowId': flowsResult.flowIds.patientInfo }),
+              ...(flowsResult.flowIds.booking && { 'whatsappConfig.bookingFlowId': flowsResult.flowIds.booking }),
+              'whatsappConfig.flowsResult': flowsResult,
+            });
+          }
+
+          console.log(`✅ Scheduling flows created for clinic ${clinicId}:`, flowsResult);
+        } catch (flowError: any) {
+          console.error('Error creating scheduling flows:', flowError);
+          // Don't fail the whole signup if flow creation fails
+        }
+
+        // Create reminder templates (can be slow, do after flows)
         try {
           const clinicDoc = await db.collection(CLINICS).doc(clinicId).get();
           const clinicName = clinicDoc.data()?.name || 'Clinic';
@@ -162,8 +184,28 @@ router.post(
         phoneNumberId,
       });
 
-      // Create reminder templates
+      // Create flows and templates
       if (result.success) {
+        // Create WhatsApp Flows FIRST (more important, faster)
+        try {
+          console.log(`Creating scheduling flows for clinic ${clinicId}...`);
+          const flowsResult = await metaService.createSchedulingFlows(wabaId);
+
+          if (flowsResult.flowIds.patientInfo || flowsResult.flowIds.booking) {
+            await db.collection(CLINICS).doc(clinicId).update({
+              'whatsappConfig.flowsCreated': true,
+              ...(flowsResult.flowIds.patientInfo && { 'whatsappConfig.patientInfoFlowId': flowsResult.flowIds.patientInfo }),
+              ...(flowsResult.flowIds.booking && { 'whatsappConfig.bookingFlowId': flowsResult.flowIds.booking }),
+              'whatsappConfig.flowsResult': flowsResult,
+            });
+          }
+
+          console.log(`✅ Scheduling flows created for clinic ${clinicId}:`, flowsResult);
+        } catch (flowError: any) {
+          console.error('Error creating scheduling flows:', flowError);
+        }
+
+        // Create reminder templates (can be slow, do after flows)
         try {
           const clinicDoc = await db.collection(CLINICS).doc(clinicId).get();
           const clinicName = clinicDoc.data()?.name || 'Clinic';
@@ -225,8 +267,28 @@ router.post('/embedded-signup/complete-direct', async (req: Request, res: Respon
       phoneNumberId,
     });
 
-    // Create reminder templates
+    // Create flows and templates
     if (result.success) {
+      // Create WhatsApp Flows FIRST (more important, faster)
+      try {
+        console.log(`Creating scheduling flows for clinic ${clinicId}...`);
+        const flowsResult = await metaService.createSchedulingFlows(wabaId);
+
+        if (flowsResult.flowIds.patientInfo || flowsResult.flowIds.booking) {
+          await db.collection(CLINICS).doc(clinicId).update({
+            'whatsappConfig.flowsCreated': true,
+            ...(flowsResult.flowIds.patientInfo && { 'whatsappConfig.patientInfoFlowId': flowsResult.flowIds.patientInfo }),
+            ...(flowsResult.flowIds.booking && { 'whatsappConfig.bookingFlowId': flowsResult.flowIds.booking }),
+            'whatsappConfig.flowsResult': flowsResult,
+          });
+        }
+
+        console.log(`✅ Scheduling flows created for clinic ${clinicId}:`, flowsResult);
+      } catch (flowError: any) {
+        console.error('Error creating scheduling flows:', flowError);
+      }
+
+      // Create reminder templates (can be slow, do after flows)
       try {
         const clinicDoc = await db.collection(CLINICS).doc(clinicId).get();
         const clinicName = clinicDoc.data()?.name || 'Clinic';
@@ -288,8 +350,28 @@ router.post('/embedded-signup/complete-code', async (req: Request, res: Response
     // Update connection status
     await metaService.updateConnectionStatus(clinicId, connectionData);
 
-    // Create reminder templates
+    // Create flows and templates
     if (connectionData.wabaId) {
+      // Create WhatsApp Flows FIRST (more important, faster)
+      try {
+        console.log(`Creating scheduling flows for clinic ${clinicId}...`);
+        const flowsResult = await metaService.createSchedulingFlows(connectionData.wabaId);
+
+        if (flowsResult.flowIds.patientInfo || flowsResult.flowIds.booking) {
+          await db.collection(CLINICS).doc(clinicId).update({
+            'whatsappConfig.flowsCreated': true,
+            ...(flowsResult.flowIds.patientInfo && { 'whatsappConfig.patientInfoFlowId': flowsResult.flowIds.patientInfo }),
+            ...(flowsResult.flowIds.booking && { 'whatsappConfig.bookingFlowId': flowsResult.flowIds.booking }),
+            'whatsappConfig.flowsResult': flowsResult,
+          });
+        }
+
+        console.log(`✅ Scheduling flows created for clinic ${clinicId}:`, flowsResult);
+      } catch (flowError: any) {
+        console.error('Error creating scheduling flows:', flowError);
+      }
+
+      // Create reminder templates (can be slow, do after flows)
       try {
         const clinicDoc = await db.collection(CLINICS).doc(clinicId).get();
         const clinicName = clinicDoc.data()?.name || 'Clinic';
@@ -352,8 +434,23 @@ router.get('/oauth/callback', async (req: Request, res: Response) => {
         // Update connection status in Firestore
         await metaService.updateConnectionStatus(clinicId, connectionData);
 
-        // Create reminder templates
+        // Create flows and templates
         if (connectionData.wabaId) {
+          // Create WhatsApp Flows FIRST (more important, faster)
+          try {
+            const flowsResult = await metaService.createSchedulingFlows(connectionData.wabaId);
+            if (flowsResult.flowIds.patientInfo || flowsResult.flowIds.booking) {
+              await db.collection(CLINICS).doc(clinicId).update({
+                'whatsappConfig.flowsCreated': true,
+                ...(flowsResult.flowIds.patientInfo && { 'whatsappConfig.patientInfoFlowId': flowsResult.flowIds.patientInfo }),
+                ...(flowsResult.flowIds.booking && { 'whatsappConfig.bookingFlowId': flowsResult.flowIds.booking }),
+              });
+            }
+          } catch (flowError) {
+            console.error('Error creating scheduling flows:', flowError);
+          }
+
+          // Create reminder templates (can be slow, do after flows)
           try {
             const clinicDoc = await db.collection(CLINICS).doc(clinicId).get();
             const clinicName = clinicDoc.data()?.name || 'Clinic';
@@ -388,7 +485,21 @@ router.get('/oauth/callback', async (req: Request, res: Response) => {
         phoneNumberId: phone_number_id as string | undefined,
       });
 
-      // Create reminder templates
+      // Create WhatsApp Flows FIRST (more important, faster)
+      try {
+        const flowsResult = await metaService.createSchedulingFlows(waba_id as string);
+        if (flowsResult.flowIds.patientInfo || flowsResult.flowIds.booking) {
+          await db.collection(CLINICS).doc(clinicId).update({
+            'whatsappConfig.flowsCreated': true,
+            ...(flowsResult.flowIds.patientInfo && { 'whatsappConfig.patientInfoFlowId': flowsResult.flowIds.patientInfo }),
+            ...(flowsResult.flowIds.booking && { 'whatsappConfig.bookingFlowId': flowsResult.flowIds.booking }),
+          });
+        }
+      } catch (flowError) {
+        console.error('Error creating scheduling flows:', flowError);
+      }
+
+      // Create reminder templates (can be slow, do after flows)
       try {
         const clinicDoc = await db.collection(CLINICS).doc(clinicId).get();
         const clinicName = clinicDoc.data()?.name || 'Clinic';
@@ -627,6 +738,22 @@ router.post(
       const clinicDoc = await db.collection(CLINICS).doc(clinicId).get();
       const clinicName = clinicDoc.data()?.name || 'Clinic';
 
+      // Create flows FIRST (faster)
+      let flowsResult;
+      try {
+        flowsResult = await metaService.createSchedulingFlows(status.meta.wabaId);
+        if (flowsResult.flowIds.patientInfo || flowsResult.flowIds.booking) {
+          await db.collection(CLINICS).doc(clinicId).update({
+            'whatsappConfig.flowsCreated': true,
+            ...(flowsResult.flowIds.patientInfo && { 'whatsappConfig.patientInfoFlowId': flowsResult.flowIds.patientInfo }),
+            ...(flowsResult.flowIds.booking && { 'whatsappConfig.bookingFlowId': flowsResult.flowIds.booking }),
+          });
+        }
+      } catch (flowError: any) {
+        console.error('Error creating flows:', flowError);
+      }
+
+      // Create templates (can be slow)
       const result = await metaService.createReminderTemplates(status.meta.wabaId, clinicName);
 
       // Update clinic with template creation status
@@ -639,6 +766,7 @@ router.post(
         success: true,
         wabaId: status.meta.wabaId,
         ...result,
+        flowsResult,
       });
     } catch (error: any) {
       console.error('Error creating templates:', error);

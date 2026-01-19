@@ -16,6 +16,7 @@ import { DisconnectButton } from './DisconnectButton';
 import { BusinessProfileCard } from './BusinessProfileCard';
 import { QRCodesCard } from './QRCodesCard';
 import { TemplateStatusCard } from './TemplateStatusCard';
+import { FlowsStatusCard } from './FlowsStatusCard';
 
 interface WhatsAppSettingsContentProps {
   onConnected?: () => void;
@@ -176,6 +177,11 @@ export function WhatsAppSettingsContent({ onConnected }: WhatsAppSettingsContent
           {/* Message Templates Section - Show when WABA is connected */}
           {status.meta?.wabaId && (
             <TemplateStatusCard wabaId={status.meta.wabaId} />
+          )}
+
+          {/* WhatsApp Flows Section - Show when WABA is connected */}
+          {status.meta?.wabaId && (
+            <FlowsStatusCard wabaId={status.meta.wabaId} />
           )}
 
           {/* Disconnect Button */}
