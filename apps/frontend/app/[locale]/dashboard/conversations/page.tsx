@@ -3,8 +3,9 @@
 import { useState, useMemo } from 'react';
 import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
-import { Search, MessageCircle, Zap, CalendarDays, Eye } from 'lucide-react';
+import { Search, MessageCircle, Zap, CalendarDays, Eye, MoreVertical, Archive, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
+import { toast } from 'sonner';
 
 import { useClinic } from '@/hooks/use-clinic';
 import { useProfessionals } from '@/hooks/use-professionals';
@@ -13,12 +14,16 @@ import { getConversationStateColor } from '@/lib/meta-utils';
 import {
   useConversations,
   useConversationStats,
+  useArchiveConversation,
+  useDeleteConversation,
   ConversationState,
   type ConversationFilters,
+  type ConversationDocument,
 } from '@/hooks/use-conversations';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   Select,
@@ -27,6 +32,23 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { TableSkeleton } from '@/components/skeletons/TableSkeleton';
 import { PermissionGuard } from '@/components/auth/PermissionGuard';
 
@@ -62,6 +84,9 @@ function getColorFromString(str: string): string {
     'bg-rose-100 text-rose-700',
   ];
 
+  // Handle undefined or null input
+  if (!str) return colors[0];
+
   let hash = 0;
   for (let i = 0; i < str.length; i++) {
     hash = str.charCodeAt(i) + ((hash << 5) - hash);
@@ -79,6 +104,10 @@ function ConversationsPageContent() {
   const [stateFilter, setStateFilter] = useState<ConversationState | 'all'>('all');
   const [takeoverFilter, setTakeoverFilter] = useState<'all' | 'ai' | 'human'>('all');
   const [selectedProfessionalId, setSelectedProfessionalId] = useState<string | null>(null);
+  const [conversationToDelete, setConversationToDelete] = useState<ConversationDocument | null>(null);
+
+  const archiveMutation = useArchiveConversation();
+  const deleteMutation = useDeleteConversation();
 
   const { data: professionals } = useProfessionals(clinic?.id || '');
   const activeProfessionals = useMemo(
@@ -107,11 +136,41 @@ function ConversationsPageContent() {
     router.push(`/dashboard/conversations/${conversationId}`);
   };
 
+  const handleArchive = async (conversation: ConversationDocument, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!clinic?.id) return;
+
+    try {
+      await archiveMutation.mutateAsync({
+        clinicId: clinic.id,
+        conversationId: conversation.id,
+      });
+      toast.success('Conversa arquivada');
+    } catch (error) {
+      toast.error('Erro ao arquivar conversa');
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!clinic?.id || !conversationToDelete) return;
+
+    try {
+      await deleteMutation.mutateAsync({
+        clinicId: clinic.id,
+        conversationId: conversationToDelete.id,
+      });
+      toast.success('Conversa excluída');
+      setConversationToDelete(null);
+    } catch (error) {
+      toast.error('Erro ao excluir conversa');
+    }
+  };
+
   if (isLoading && !conversations.length) {
     return (
       <div className="space-y-6 page-transition">
         <div>
-          <h1 className="text-3xl font-semibold text-gray-900">{t('conversations.title')}</h1>
+          <h1 className="text-2xl font-semibold text-gray-900">{t('conversations.title')}</h1>
           <p className="text-gray-600 mt-1">{t('conversations.description')}</p>
         </div>
         <TableSkeleton rows={8} columns={5} />
@@ -123,7 +182,7 @@ function ConversationsPageContent() {
     <div className="space-y-6 page-transition">
       {/* Header */}
       <div>
-        <h1 className="text-2xl sm:text-3xl font-semibold text-gray-900">{t('conversations.title')}</h1>
+        <h1 className="text-2xl sm:text-2xl font-semibold text-gray-900">{t('conversations.title')}</h1>
         <p className="text-sm sm:text-base text-gray-600 mt-1">{t('conversations.description')}</p>
       </div>
 
@@ -137,9 +196,7 @@ function ConversationsPageContent() {
                   <p className="text-xs text-blue-600 font-medium">{t('conversations.stats.total')}</p>
                   <p className="text-2xl font-bold text-blue-700">{stats?.totalConversations || 0}</p>
                 </div>
-                <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
-                  <MessageCircle className="w-5 h-5 text-blue-600" />
-                </div>
+                <MessageCircle className="w-5 h-5 text-blue-600" />
               </div>
             </CardContent>
           </Card>
@@ -151,9 +208,7 @@ function ConversationsPageContent() {
                   <p className="text-xs text-emerald-600 font-medium">{t('conversations.stats.active')}</p>
                   <p className="text-2xl font-bold text-emerald-700">{stats?.activeConversations || 0}</p>
                 </div>
-                <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center">
-                  <Zap className="w-5 h-5 text-emerald-600" />
-                </div>
+                <Zap className="w-5 h-5 text-emerald-600" />
               </div>
             </CardContent>
           </Card>
@@ -166,9 +221,7 @@ function ConversationsPageContent() {
                 <p className="text-xs text-purple-600 font-medium">{t('conversations.stats.new7days') || 'Ultimos 7 dias'}</p>
                 <p className="text-2xl font-bold text-purple-700">{stats?.totalConversations || 0}</p>
               </div>
-              <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center">
-                <CalendarDays className="w-5 h-5 text-purple-600" />
-              </div>
+              <CalendarDays className="w-5 h-5 text-purple-600" />
             </div>
           </CardContent>
         </Card>
@@ -293,10 +346,34 @@ function ConversationsPageContent() {
                         </div>
                       </div>
                     </div>
-                    <div className="flex-shrink-0 text-right">
+                    <div className="flex items-center gap-2 flex-shrink-0">
                       <p className="text-xs text-muted-foreground">
                         {format(new Date(conversation.lastMessageAt), 'dd/MM HH:mm')}
                       </p>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                          <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <MoreVertical className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={(e) => handleArchive(conversation, e)}>
+                            <Archive className="h-4 w-4 mr-2" />
+                            Arquivar
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setConversationToDelete(conversation);
+                            }}
+                            className="text-red-600 focus:text-red-600"
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Excluir
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                   </div>
                 ))}
@@ -407,12 +484,40 @@ function ConversationsPageContent() {
                         {getInitials(conversation.waUserName || conversation.waUserPhone || conversation.waUserId)}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <h3 className="font-medium text-sm truncate">
-                          {conversation.waUserName || conversation.waUserPhone || conversation.waUserId}
-                        </h3>
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          {format(new Date(conversation.lastMessageAt), 'dd/MM HH:mm')}
-                        </p>
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-medium text-sm truncate">
+                              {conversation.waUserName || conversation.waUserPhone || conversation.waUserId}
+                            </h3>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              {format(new Date(conversation.lastMessageAt), 'dd/MM HH:mm')}
+                            </p>
+                          </div>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                              <Button variant="ghost" size="icon" className="h-8 w-8 -mt-1 -mr-1">
+                                <MoreVertical className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={(e) => handleArchive(conversation, e)}>
+                                <Archive className="h-4 w-4 mr-2" />
+                                Arquivar
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setConversationToDelete(conversation);
+                                }}
+                                className="text-red-600 focus:text-red-600"
+                              >
+                                <Trash2 className="h-4 w-4 mr-2" />
+                                Excluir
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
                         <div className="flex items-center gap-1.5 flex-wrap mt-2">
                           <Badge
                             variant="outline"
@@ -435,6 +540,33 @@ function ConversationsPageContent() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!conversationToDelete} onOpenChange={() => setConversationToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir conversa?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta ação não pode ser desfeita. A conversa com{' '}
+              <strong>
+                {conversationToDelete?.waUserName ||
+                  conversationToDelete?.waUserPhone ||
+                  conversationToDelete?.waUserId}
+              </strong>{' '}
+              e todas as mensagens serão excluídas permanentemente.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -27,12 +27,10 @@ router.get('/', verifyAuth, async (req: Request, res: Response) => {
       return res.status(403).json({ message: 'Access denied' });
     }
 
-    let query = db.collection(PATIENTS)
+    // Simple query to avoid Firestore index requirements
+    const snapshot = await db.collection(PATIENTS)
       .where('clinicIds', 'array-contains', clinicId)
-      .orderBy('name')
-      .limit(limit);
-
-    const snapshot = await query.get();
+      .get();
 
     let patients = snapshot.docs.map(doc => ({
       id: doc.id,
@@ -47,6 +45,14 @@ router.get('/', verifyAuth, async (req: Request, res: Response) => {
         (p as any).phone?.includes(search) ||
         (p as any).cpf?.includes(search)
       );
+    }
+
+    // Sort by name in memory
+    patients.sort((a: any, b: any) => (a.name || '').localeCompare(b.name || ''));
+
+    // Apply limit
+    if (patients.length > limit) {
+      patients = patients.slice(0, limit);
     }
 
     return res.json(patients);

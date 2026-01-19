@@ -4,6 +4,37 @@ import { apiClient } from '@/lib/api';
 import type { Professional } from '@/lib/clinic-types';
 
 /**
+ * Hook to fetch a single professional by ID
+ */
+export function useProfessional(clinicId: string, professionalId: string) {
+  const { getIdToken } = useAuth();
+
+  const query = useQuery({
+    queryKey: ['professional', clinicId, professionalId],
+    queryFn: async (): Promise<Professional | null> => {
+      const token = await getIdToken();
+      if (!token) throw new Error('Not authenticated');
+
+      try {
+        return await apiClient<Professional>(
+          `/professionals/${professionalId}?clinicId=${clinicId}`,
+          { token }
+        );
+      } catch (error) {
+        return null;
+      }
+    },
+    enabled: !!clinicId && !!professionalId,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  return {
+    ...query,
+    data: query.data ?? null,
+  };
+}
+
+/**
  * Hook to fetch and manage professionals for a clinic
  */
 export function useProfessionals(clinicId: string) {

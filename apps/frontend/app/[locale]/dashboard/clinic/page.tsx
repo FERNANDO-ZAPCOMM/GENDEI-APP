@@ -262,7 +262,7 @@ export default function ClinicSettingsPage() {
     <div className="space-y-4 sm:space-y-6 page-transition">
       {/* Header */}
       <div>
-        <h1 className="text-2xl sm:text-3xl font-semibold text-gray-900">Configurações da Clínica</h1>
+        <h1 className="text-2xl sm:text-2xl font-semibold text-gray-900">Configurações da Clínica</h1>
         <p className="text-sm sm:text-base text-gray-600 mt-1">Configure as informações do seu negócio</p>
       </div>
 

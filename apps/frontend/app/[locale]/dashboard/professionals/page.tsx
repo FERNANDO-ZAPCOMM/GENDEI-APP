@@ -310,7 +310,7 @@ export default function ProfessionalsPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-semibold text-gray-900">Profissionais</h1>
+          <h1 className="text-2xl sm:text-2xl font-semibold text-gray-900">Profissionais</h1>
           <p className="text-sm sm:text-base text-gray-600 mt-1">Gerencie os profissionais da sua clínica</p>
         </div>
         {hasProfessionals && (
@@ -324,55 +324,47 @@ export default function ProfessionalsPage() {
       {/* Statistics Cards - Only show when professionals exist */}
       {hasProfessionals && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card>
+          <Card className="bg-gradient-to-br from-blue-50 to-white border-blue-100">
             <CardContent className="pt-4 pb-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs text-muted-foreground">Total</p>
-                  <p className="text-2xl font-bold">{professionals.length}</p>
+                  <p className="text-xs text-blue-600 font-medium">Total</p>
+                  <p className="text-2xl font-bold text-blue-700">{professionals.length}</p>
                 </div>
-                <div className="p-2 bg-blue-100 rounded-lg">
-                  <User className="w-5 h-5 text-blue-600" />
-                </div>
+                <User className="w-5 h-5 text-blue-600" />
               </div>
             </CardContent>
           </Card>
-          <Card>
+          <Card className="border-emerald-100" style={{ background: 'linear-gradient(to bottom right, #f5fefa, white)' }}>
             <CardContent className="pt-4 pb-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs text-muted-foreground">Ativos</p>
-                  <p className="text-2xl font-bold text-emerald-600">{activeProfessionals.length}</p>
+                  <p className="text-xs text-emerald-600 font-medium">Ativos</p>
+                  <p className="text-2xl font-bold text-emerald-700">{activeProfessionals.length}</p>
                 </div>
-                <div className="p-2 bg-emerald-100 rounded-lg">
-                  <UserPlus className="w-5 h-5 text-emerald-600" />
-                </div>
+                <UserPlus className="w-5 h-5 text-emerald-600" />
               </div>
             </CardContent>
           </Card>
-          <Card>
+          <Card className="bg-gradient-to-br from-slate-50 to-white border-slate-100">
             <CardContent className="pt-4 pb-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs text-muted-foreground">Inativos</p>
-                  <p className="text-2xl font-bold text-slate-500">{inactiveProfessionals.length}</p>
+                  <p className="text-xs text-slate-500 font-medium">Inativos</p>
+                  <p className="text-2xl font-bold text-slate-600">{inactiveProfessionals.length}</p>
                 </div>
-                <div className="p-2 bg-slate-100 rounded-lg">
-                  <User className="w-5 h-5 text-slate-500" />
-                </div>
+                <User className="w-5 h-5 text-slate-500" />
               </div>
             </CardContent>
           </Card>
-          <Card>
+          <Card className="bg-gradient-to-br from-purple-50 to-white border-purple-100">
             <CardContent className="pt-4 pb-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs text-muted-foreground">Especialidades</p>
-                  <p className="text-2xl font-bold text-purple-600">{usedSpecialties.length}</p>
+                  <p className="text-xs text-purple-600 font-medium">Especialidades</p>
+                  <p className="text-2xl font-bold text-purple-700">{usedSpecialties.length}</p>
                 </div>
-                <div className="p-2 bg-purple-100 rounded-lg">
-                  <Clock className="w-5 h-5 text-purple-600" />
-                </div>
+                <Clock className="w-5 h-5 text-purple-600" />
               </div>
             </CardContent>
           </Card>
@@ -637,7 +629,8 @@ export default function ProfessionalsPage() {
                   {filteredProfessionals.map((professional) => (
                     <div
                       key={professional.id}
-                      className="flex items-center gap-4 p-3 border rounded-lg hover:bg-muted/50 transition-colors"
+                      className="flex items-center gap-4 p-3 border rounded-lg hover:bg-muted/50 transition-colors cursor-pointer"
+                      onClick={() => router.push(`/${locale}/dashboard/professionals/${professional.id}`)}
                     >
                       <Avatar className="w-12 h-12">
                         <AvatarImage src={professional.photoUrl} alt={professional.name} />
@@ -672,13 +665,16 @@ export default function ProfessionalsPage() {
                         variant="outline"
                         size="sm"
                         className="hidden sm:flex"
-                        onClick={() => router.push(`/${locale}/dashboard/appointments?professional=${professional.id}`)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          router.push(`/${locale}/dashboard/appointments?professional=${professional.id}`);
+                        }}
                       >
                         <Calendar className="w-4 h-4 mr-2" />
                         Ver Agenda
                       </Button>
                       <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
+                        <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
                           <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
                             <MoreHorizontal className="w-4 h-4" />
                           </Button>
@@ -688,7 +684,7 @@ export default function ProfessionalsPage() {
                             <Calendar className="w-4 h-4 mr-2" />
                             Ver Agenda
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleOpenDialog(professional)}>
+                          <DropdownMenuItem onClick={() => router.push(`/${locale}/dashboard/professionals/${professional.id}`)}>
                             <Pencil className="w-4 h-4 mr-2" />
                             Editar
                           </DropdownMenuItem>

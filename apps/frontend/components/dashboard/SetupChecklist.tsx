@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   CheckCircle2,
   ChevronDown,
@@ -40,8 +40,15 @@ export function SetupChecklist({
   const progressPercent = (completedCount / totalSteps) * 100;
   const isAllComplete = completedCount === totalSteps;
 
-  // Always start expanded, user can collapse
-  const [isExpanded, setIsExpanded] = useState(true);
+  // Auto-minimize when all steps are complete, otherwise start expanded
+  const [isExpanded, setIsExpanded] = useState(!isAllComplete);
+
+  // Auto-collapse when all steps become complete
+  useEffect(() => {
+    if (isAllComplete) {
+      setIsExpanded(false);
+    }
+  }, [isAllComplete]);
 
   return (
     <Card className={isAllComplete ? 'border-green-200 bg-green-50/30' : ''}>

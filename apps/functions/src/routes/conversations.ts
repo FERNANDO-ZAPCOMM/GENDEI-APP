@@ -485,4 +485,135 @@ router.patch('/:conversationId', verifyAuth, async (req: Request, res: Response)
   }
 });
 
+// POST /conversations/:conversationId/archive - Archive a conversation
+router.post('/:conversationId/archive', verifyAuth, async (req: Request, res: Response) => {
+  try {
+    const { conversationId } = req.params;
+    const user = (req as any).user;
+    const clinicId = req.query.clinicId as string || user?.uid;
+
+    if (!clinicId) {
+      return res.status(400).json({ message: 'Clinic ID is required' });
+    }
+
+    if (user?.uid !== clinicId) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    const convRef = db
+      .collection(CLINICS)
+      .doc(clinicId)
+      .collection('conversations')
+      .doc(conversationId);
+
+    const convDoc = await convRef.get();
+
+    if (!convDoc.exists) {
+      return res.status(404).json({ message: 'Conversation not found' });
+    }
+
+    await convRef.update({
+      isArchived: true,
+      archivedAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+
+    return res.json({
+      data: { success: true, message: 'Conversation archived' }
+    });
+  } catch (error: any) {
+    console.error('Error archiving conversation:', error);
+    return res.status(500).json({ message: error.message });
+  }
+});
+
+// POST /conversations/:conversationId/unarchive - Unarchive a conversation
+router.post('/:conversationId/unarchive', verifyAuth, async (req: Request, res: Response) => {
+  try {
+    const { conversationId } = req.params;
+    const user = (req as any).user;
+    const clinicId = req.query.clinicId as string || user?.uid;
+
+    if (!clinicId) {
+      return res.status(400).json({ message: 'Clinic ID is required' });
+    }
+
+    if (user?.uid !== clinicId) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    const convRef = db
+      .collection(CLINICS)
+      .doc(clinicId)
+      .collection('conversations')
+      .doc(conversationId);
+
+    const convDoc = await convRef.get();
+
+    if (!convDoc.exists) {
+      return res.status(404).json({ message: 'Conversation not found' });
+    }
+
+    await convRef.update({
+      isArchived: false,
+      archivedAt: null,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+
+    return res.json({
+      data: { success: true, message: 'Conversation unarchived' }
+    });
+  } catch (error: any) {
+    console.error('Error unarchiving conversation:', error);
+    return res.status(500).json({ message: error.message });
+  }
+});
+
+// DELETE /conversations/:conversationId - Delete a conversation permanently
+router.delete('/:conversationId', verifyAuth, async (req: Request, res: Response) => {
+  try {
+    const { conversationId } = req.params;
+    const user = (req as any).user;
+    const clinicId = req.query.clinicId as string || user?.uid;
+
+    if (!clinicId) {
+      return res.status(400).json({ message: 'Clinic ID is required' });
+    }
+
+    if (user?.uid !== clinicId) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    const convRef = db
+      .collection(CLINICS)
+      .doc(clinicId)
+      .collection('conversations')
+      .doc(conversationId);
+
+    const convDoc = await convRef.get();
+
+    if (!convDoc.exists) {
+      return res.status(404).json({ message: 'Conversation not found' });
+    }
+
+    // Delete all messages in the conversation first
+    const messagesSnapshot = await convRef.collection('messages').get();
+    const batch = db.batch();
+
+    messagesSnapshot.docs.forEach(doc => {
+      batch.delete(doc.ref);
+    });
+
+    // Delete the conversation document
+    batch.delete(convRef);
+
+    await batch.commit();
+
+    return res.status(204).send();
+  } catch (error: any) {
+    console.error('Error deleting conversation:', error);
+    return res.status(500).json({ message: error.message });
+  }
+});
+
 export default router;

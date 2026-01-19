@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import Link from 'next/link';
@@ -12,32 +12,17 @@ import {
   Settings,
   ChevronDown,
   ChevronRight,
-  ChevronLeft,
   User,
-  Menu,
-  X,
   Users,
   Calendar,
   UserPlus,
   Stethoscope,
-  ClipboardList,
   CreditCard,
-  Search,
-  Bell,
-  Plus,
-  CalendarPlus,
-  UserPlus2,
-  Clock,
-  PanelLeftClose,
-  PanelLeft,
-  Building2,
 } from 'lucide-react';
 import { FaWhatsapp } from 'react-icons/fa';
 
 import { useAuth } from '@/hooks/use-auth';
 import { useClinic, useClinicStats } from '@/hooks/use-clinic';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import {
   DropdownMenu,
@@ -47,13 +32,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
 import { TypingDots } from '@/components/PageLoader';
 import { cn } from '@/lib/utils';
 
@@ -289,54 +267,6 @@ function NavigationItems({
   return <>{navigation.map((item) => renderNavItem(item))}</>;
 }
 
-// Quick Add Dialog
-function QuickAddDialog({ locale }: { locale: string }) {
-  const [open, setOpen] = useState(false);
-
-  const quickActions = [
-    { name: 'Nova Consulta', href: `/dashboard/appointments`, icon: CalendarPlus, description: 'Agendar consulta' },
-    { name: 'Novo Paciente', href: `/dashboard/patients/new`, icon: UserPlus2, description: 'Cadastrar paciente' },
-    { name: 'Bloquear Horário', href: `/dashboard/appointments`, icon: Clock, description: 'Bloquear agenda' },
-  ];
-
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button size="sm" className="gap-2">
-          <Plus className="w-4 h-4" />
-          <span className="hidden sm:inline">Novo</span>
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Ação Rápida</DialogTitle>
-        </DialogHeader>
-        <div className="grid gap-3 py-4">
-          {quickActions.map((action) => {
-            const Icon = action.icon;
-            return (
-              <Link
-                key={action.name}
-                href={`/${locale}${action.href}`}
-                onClick={() => setOpen(false)}
-                className="flex items-center gap-4 p-4 rounded-lg border hover:bg-gray-50 transition-colors"
-              >
-                <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center">
-                  <Icon className="w-5 h-5 text-gray-600" />
-                </div>
-                <div>
-                  <p className="font-medium">{action.name}</p>
-                  <p className="text-sm text-gray-500">{action.description}</p>
-                </div>
-              </Link>
-            );
-          })}
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
 // Mobile Bottom Navigation
 function MobileBottomNav({ pathname, locale }: { pathname: string; locale: string }) {
   const bottomNavItems = [
@@ -384,26 +314,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const { currentUser, signOut, loading: authLoading } = useAuth();
   const { currentClinic: clinic, isLoading: clinicLoading } = useClinic();
   const { data: stats } = useClinicStats(clinic?.id || '');
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
 
   const locale = pathname.split('/')[1];
   const todayCount = stats?.todayAppointments || 0;
-
-  // TODO: Replace with real notifications from Firebase
-  const notifications: { id: number; title: string; time: string }[] = [];
 
   useEffect(() => {
     if (!authLoading && !currentUser) {
       router.push(`/${locale}/signin`);
     }
   }, [currentUser, authLoading, router, locale]);
-
-  useEffect(() => {
-    setMobileMenuOpen(false);
-  }, [pathname]);
 
   const handleSignOut = async () => {
     try {
@@ -417,192 +336,59 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   if (authLoading || clinicLoading || !currentUser) {
     return (
-      <div className="min-h-screen bg-white">
-        <div className="min-h-screen flex items-center justify-center">
-          <div className="bg-white rounded-full px-5 py-3 shadow-sm border border-slate-100">
-            <TypingDots size="lg" />
-          </div>
-        </div>
+      <div className="min-h-screen bg-white flex items-center justify-center">
+        <TypingDots size="lg" />
       </div>
     );
   }
 
   return (
     <div className="min-h-screen bg-white">
-      {/* Desktop Header */}
-      <header className={cn(
-        'hidden md:flex fixed top-0 right-0 z-30 h-16 bg-white border-b border-gray-200 items-center justify-between px-6 transition-all',
-        sidebarCollapsed ? 'left-16' : 'left-64'
-      )}>
-        {/* Search Bar */}
-        <div className="flex-1 max-w-md">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <Input
-              type="search"
-              placeholder="Buscar pacientes, consultas..."
-              className="pl-10 bg-gray-50 border-gray-200 focus:bg-white"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-          </div>
-        </div>
-
-        {/* Right Actions */}
-        <div className="flex items-center gap-3">
-          <QuickAddDialog locale={locale} />
-
-          {/* Notifications */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="relative h-10 w-10">
-                <Bell className="w-6 h-6" />
-                {notifications.length > 0 && (
-                  <span className="absolute -top-0.5 -right-0.5 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                    {notifications.length}
-                  </span>
-                )}
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-80">
-              <DropdownMenuLabel>Notificações</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              {notifications.length === 0 ? (
-                <div className="p-4 text-center text-gray-500 text-sm">
-                  Nenhuma notificação
-                </div>
-              ) : (
-                notifications.map((notif) => (
-                  <DropdownMenuItem key={notif.id} className="flex flex-col items-start gap-1 py-3">
-                    <span className="font-medium">{notif.title}</span>
-                    <span className="text-xs text-gray-500">{notif.time}</span>
-                  </DropdownMenuItem>
-                ))
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </header>
-
       {/* Mobile Header */}
       <div className="md:hidden fixed top-0 left-0 right-0 z-50 bg-white border-b border-gray-200">
-        <div className="flex items-center justify-between px-4 py-3">
-          <div className="flex items-center gap-3">
-            <span className="text-xl text-black logo-font">Gendei</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon" onClick={() => setSearchOpen(!searchOpen)}>
-              <Search className="w-5 h-5" />
-            </Button>
-            <QuickAddDialog locale={locale} />
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="relative">
-                  <Bell className="w-5 h-5" />
-                  {notifications.length > 0 && (
-                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center text-[10px]">
-                      {notifications.length}
-                    </span>
-                  )}
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-72">
-                <DropdownMenuLabel>Notificações</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                {notifications.map((notif) => (
-                  <DropdownMenuItem key={notif.id} className="flex flex-col items-start gap-1 py-3">
-                    <span className="font-medium text-sm">{notif.title}</span>
-                    <span className="text-xs text-gray-500">{notif.time}</span>
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
+        <div className="flex items-center justify-center px-4 py-3">
+          <span className="text-xl text-black logo-font">Gendei</span>
         </div>
-        {/* Mobile Search Bar */}
-        {searchOpen && (
-          <div className="px-4 pb-3">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <Input
-                type="search"
-                placeholder="Buscar..."
-                className="pl-10"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                autoFocus
-              />
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Desktop Sidebar */}
-      <aside
-        className={cn(
-          'hidden md:flex fixed inset-y-0 left-0 bg-white border-r border-gray-200 flex-col transition-all duration-300 z-40',
-          sidebarCollapsed ? 'w-16' : 'w-64'
-        )}
-      >
+      <aside className="hidden md:flex fixed inset-y-0 left-0 w-64 bg-white border-r border-gray-200 flex-col z-40">
         {/* Logo */}
-        <div className={cn(
-          'h-16 flex items-center border-b border-gray-200',
-          sidebarCollapsed ? 'justify-center px-2' : 'justify-between px-4'
-        )}>
-          {!sidebarCollapsed && (
-            <div>
-              <span className="text-xl text-black logo-font">Gendei</span>
-            </div>
-          )}
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-            className="h-8 w-8"
-          >
-            {sidebarCollapsed ? (
-              <PanelLeft className="w-4 h-4" />
-            ) : (
-              <PanelLeftClose className="w-4 h-4" />
-            )}
-          </Button>
+        <div className="p-6">
+          <span className="text-2xl text-black logo-font">Gendei</span>
+          <p className="text-sm text-muted-foreground mt-1">Painel da Clínica</p>
         </div>
 
         {/* Navigation */}
-        <nav className={cn(
-          'flex-1 overflow-y-auto',
-          sidebarCollapsed ? 'p-2 space-y-2' : 'p-4 space-y-1'
-        )}>
+        <nav className="flex-1 overflow-y-auto p-4 space-y-1">
           <NavigationItems
             navigation={navigation}
             pathname={pathname}
             t={t}
-            collapsed={sidebarCollapsed}
+            collapsed={false}
             todayCount={todayCount}
           />
         </nav>
 
-        {/* User section - only show when expanded */}
-        {!sidebarCollapsed && (
-          <div className="p-4 border-t border-gray-200">
-            <div className="mb-3">
-              <p className="text-sm font-medium text-gray-900 truncate">{currentUser.email}</p>
-              <p className="text-xs text-gray-500">{clinic?.name}</p>
-            </div>
-            <Button variant="outline" className="w-full justify-start" size="sm" onClick={handleSignOut}>
-              <LogOut className="w-4 h-4 mr-2" />
-              {t('auth.signout')}
-            </Button>
+        {/* User section */}
+        <div className="p-4 border-t border-gray-200">
+          <div className="mb-3">
+            <p className="text-sm font-normal text-gray-900 truncate">{currentUser.email}</p>
+            <p className="text-xs text-gray-500">{clinic?.name}</p>
           </div>
-        )}
+          <button
+            onClick={handleSignOut}
+            className="w-full flex items-center justify-start gap-2 px-4 py-2 text-sm font-normal text-gray-600 hover:bg-gray-50 hover:text-gray-900 border border-gray-200 rounded-full transition-colors"
+          >
+            <LogOut className="w-4 h-4" />
+            {t('auth.signout')}
+          </button>
+        </div>
       </aside>
 
       {/* Main content */}
-      <main className={cn(
-        'transition-all duration-300 pt-16 pb-20 md:pb-0',
-        sidebarCollapsed ? 'md:pl-16' : 'md:pl-64'
-      )}>
-        <div className="p-4 sm:p-6 md:p-6">
+      <main className="md:pl-64 pt-16 md:pt-0 pb-20 md:pb-0">
+        <div className="p-4 sm:p-6 md:p-8">
           {children}
         </div>
       </main>

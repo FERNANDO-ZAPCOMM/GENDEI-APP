@@ -145,7 +145,7 @@ export default function PaymentsPage() {
     <div className="space-y-6 page-transition">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-semibold text-gray-900">Configurações de Pagamento</h1>
+        <h1 className="text-2xl font-semibold text-gray-900">Configurações de Pagamento</h1>
         <p className="text-gray-600 mt-1">Configure as formas de pagamento e opções de cobrança</p>
       </div>
 

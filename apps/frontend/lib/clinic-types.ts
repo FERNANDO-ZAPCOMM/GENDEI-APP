@@ -19,6 +19,7 @@ export interface Clinic {
   name: string;
   ownerId: string;
   adminIds?: string[];
+  category?: string;                // Clinic category (clinica_medica, odontologia, etc)
   address?: string;                 // Legacy: simple address string
   addressData?: ClinicAddress;      // New: structured address with coordinates
   phone?: string;

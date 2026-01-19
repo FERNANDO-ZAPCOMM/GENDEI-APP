@@ -84,7 +84,7 @@ export default function DashboardPage() {
     <div className="space-y-6 sm:space-y-8 page-transition">
       {/* Header */}
       <div>
-        <h1 className="text-2xl sm:text-3xl font-semibold text-gray-900">
+        <h1 className="text-2xl sm:text-2xl font-semibold text-gray-900">
           {t('dashboard.overview')}
         </h1>
         {clinic?.name && (
@@ -121,9 +121,7 @@ export default function DashboardPage() {
                     <p className="text-2xl font-bold text-blue-700">{stats?.todayAppointments || 0}</p>
                   )}
                 </div>
-                <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center shrink-0">
-                  <Calendar className="w-5 h-5 text-blue-600" />
-                </div>
+                <Calendar className="w-5 h-5 text-blue-600 shrink-0" />
               </div>
             </CardContent>
           </Card>
@@ -142,9 +140,7 @@ export default function DashboardPage() {
                     <p className="text-2xl font-bold text-purple-700">{stats?.weekAppointments || 0}</p>
                   )}
                 </div>
-                <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center shrink-0">
-                  <CalendarDays className="w-5 h-5 text-purple-600" />
-                </div>
+                <CalendarDays className="w-5 h-5 text-purple-600 shrink-0" />
               </div>
             </CardContent>
           </Card>
@@ -163,9 +159,7 @@ export default function DashboardPage() {
                     <p className="text-2xl font-bold text-indigo-700">{stats?.totalPatients || 0}</p>
                   )}
                 </div>
-                <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center shrink-0">
-                  <Users className="w-5 h-5 text-indigo-600" />
-                </div>
+                <Users className="w-5 h-5 text-indigo-600 shrink-0" />
               </div>
             </CardContent>
           </Card>
@@ -182,13 +176,11 @@ export default function DashboardPage() {
                     {isWhatsAppConnected ? t('whatsapp.connected') : t('whatsapp.notConnected')}
                   </p>
                 </div>
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${isWhatsAppConnected ? 'bg-green-100' : 'bg-gray-100'}`}>
-                  {isWhatsAppConnected ? (
-                    <CheckCircle className="w-5 h-5 text-green-600" />
-                  ) : (
-                    <XCircle className="w-5 h-5 text-gray-400" />
-                  )}
-                </div>
+                {isWhatsAppConnected ? (
+                  <CheckCircle className="w-5 h-5 text-green-600 shrink-0" />
+                ) : (
+                  <XCircle className="w-5 h-5 text-gray-400 shrink-0" />
+                )}
               </div>
             </CardContent>
           </Card>

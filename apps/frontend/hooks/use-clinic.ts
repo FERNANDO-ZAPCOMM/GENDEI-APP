@@ -24,9 +24,10 @@ export function useClinic() {
         });
         return clinic;
       } catch {
-        // New user or no clinic exists - return minimal object
+        // New user or no clinic exists - return minimal object with user's uid as id
+        // The clinic id is always the user's uid, so we use that even for new clinics
         return {
-          id: '',
+          id: currentUser!.uid,
           name: currentUser!.displayName || 'Nova Clínica',
           ownerId: currentUser!.uid,
           isNewClinic: true,

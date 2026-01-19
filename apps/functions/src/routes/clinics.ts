@@ -37,6 +37,32 @@ router.get('/', verifyAuth, async (req: Request, res: Response) => {
   }
 });
 
+// GET /clinics/me - Get current user's clinic (alias)
+router.get('/me', verifyAuth, async (req: Request, res: Response) => {
+  try {
+    const user = (req as any).user;
+    const clinicId = user?.uid;
+
+    if (!clinicId) {
+      return res.status(401).json({ message: 'Not authenticated' });
+    }
+
+    const clinicDoc = await db.collection(CLINICS).doc(clinicId).get();
+
+    if (!clinicDoc.exists) {
+      return res.status(404).json({ message: 'Clinic not found' });
+    }
+
+    return res.json({
+      id: clinicDoc.id,
+      ...clinicDoc.data()
+    });
+  } catch (error: any) {
+    console.error('Error getting clinic:', error);
+    return res.status(500).json({ message: error.message });
+  }
+});
+
 // PATCH /clinics/me - Update current user's clinic
 router.patch('/me', verifyAuth, async (req: Request, res: Response) => {
   try {
@@ -380,22 +406,23 @@ router.get('/:clinicId/time-blocks', verifyAuth, async (req: Request, res: Respo
       return res.status(403).json({ message: 'Access denied' });
     }
 
-    let query: any = db.collection(TIME_BLOCKS)
-      .where('clinicId', '==', clinicId);
-
-    if (startDate) {
-      query = query.where('date', '>=', startDate);
-    }
-    if (endDate) {
-      query = query.where('date', '<=', endDate);
-    }
-
-    const snapshot = await query.get();
+    // Simple query - just filter by clinicId to avoid index requirements
+    const snapshot = await db.collection(TIME_BLOCKS)
+      .where('clinicId', '==', clinicId)
+      .get();
 
     let timeBlocks = snapshot.docs.map((doc: any) => ({
       id: doc.id,
       ...doc.data()
     }));
+
+    // Filter by date range in memory
+    if (startDate) {
+      timeBlocks = timeBlocks.filter((block: any) => block.date >= startDate);
+    }
+    if (endDate) {
+      timeBlocks = timeBlocks.filter((block: any) => block.date <= endDate);
+    }
 
     // Filter by professional if specified
     if (professionalId) {
@@ -403,6 +430,12 @@ router.get('/:clinicId/time-blocks', verifyAuth, async (req: Request, res: Respo
         !block.professionalId || block.professionalId === professionalId
       );
     }
+
+    // Sort by date and time
+    timeBlocks.sort((a: any, b: any) => {
+      if (a.date !== b.date) return a.date.localeCompare(b.date);
+      return (a.startTime || '').localeCompare(b.startTime || '');
+    });
 
     return res.json({ timeBlocks });
   } catch (error: any) {

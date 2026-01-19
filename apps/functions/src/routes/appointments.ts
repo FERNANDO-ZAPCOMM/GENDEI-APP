@@ -10,7 +10,70 @@ const db = getFirestore();
 
 const APPOINTMENTS = 'gendei_appointments';
 
-// GET /appointments?clinicId=xxx - Get appointments for a clinic
+// Helper function to get appointments
+async function getAppointmentsForClinic(
+  clinicId: string,
+  startDate?: string,
+  endDate?: string,
+  professionalId?: string,
+  status?: string
+) {
+  // Simple query - just filter by clinicId to avoid index requirements
+  const snapshot = await db.collection(APPOINTMENTS)
+    .where('clinicId', '==', clinicId)
+    .get();
+
+  let appointments = snapshot.docs.map((doc: any) => ({
+    id: doc.id,
+    ...doc.data()
+  }));
+
+  // Filter by date range in memory
+  if (startDate) {
+    appointments = appointments.filter((apt: any) => apt.date >= startDate);
+  }
+  if (endDate) {
+    appointments = appointments.filter((apt: any) => apt.date <= endDate);
+  }
+  if (professionalId) {
+    appointments = appointments.filter((apt: any) => apt.professionalId === professionalId);
+  }
+  if (status) {
+    appointments = appointments.filter((apt: any) => apt.status === status);
+  }
+
+  // Sort by date and time
+  appointments.sort((a: any, b: any) => {
+    if (a.date !== b.date) return a.date.localeCompare(b.date);
+    return (a.time || '').localeCompare(b.time || '');
+  });
+
+  return appointments;
+}
+
+// GET /appointments/clinic/:clinicId - Get appointments for a clinic (path param version)
+router.get('/clinic/:clinicId', verifyAuth, async (req: Request, res: Response) => {
+  try {
+    const user = (req as any).user;
+    const clinicId = req.params.clinicId;
+    const startDate = req.query.startDate as string;
+    const endDate = req.query.endDate as string;
+    const professionalId = req.query.professionalId as string;
+    const status = req.query.status as string;
+
+    if (user?.uid !== clinicId) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    const appointments = await getAppointmentsForClinic(clinicId, startDate, endDate, professionalId, status);
+    return res.json(appointments);
+  } catch (error: any) {
+    console.error('Error getting appointments:', error);
+    return res.status(500).json({ message: error.message });
+  }
+});
+
+// GET /appointments?clinicId=xxx - Get appointments for a clinic (query param version)
 router.get('/', verifyAuth, async (req: Request, res: Response) => {
   try {
     const user = (req as any).user;
@@ -28,29 +91,7 @@ router.get('/', verifyAuth, async (req: Request, res: Response) => {
       return res.status(403).json({ message: 'Access denied' });
     }
 
-    let query = db.collection(APPOINTMENTS)
-      .where('clinicId', '==', clinicId);
-
-    if (startDate) {
-      query = query.where('date', '>=', startDate);
-    }
-    if (endDate) {
-      query = query.where('date', '<=', endDate);
-    }
-    if (professionalId) {
-      query = query.where('professionalId', '==', professionalId);
-    }
-    if (status) {
-      query = query.where('status', '==', status);
-    }
-
-    const snapshot = await query.orderBy('date').orderBy('time').get();
-
-    const appointments = snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
-
+    const appointments = await getAppointmentsForClinic(clinicId, startDate, endDate, professionalId, status);
     return res.json(appointments);
   } catch (error: any) {
     console.error('Error getting appointments:', error);

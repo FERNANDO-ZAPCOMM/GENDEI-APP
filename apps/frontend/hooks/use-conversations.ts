@@ -364,3 +364,128 @@ export function useUpdateConversationState() {
 
   return mutation;
 }
+
+/**
+ * Hook to archive a conversation
+ */
+export function useArchiveConversation() {
+  const { getIdToken } = useAuth();
+  const queryClient = useQueryClient();
+
+  const mutation = useMutation({
+    mutationFn: async ({
+      clinicId,
+      conversationId,
+    }: {
+      clinicId: string;
+      conversationId: string;
+    }) => {
+      const token = await getIdToken();
+      if (!token) throw new Error('Not authenticated');
+
+      const result = await apiClient<{ data: { success: boolean } }>(
+        `/conversations/${conversationId}/archive?clinicId=${clinicId}`,
+        {
+          method: 'POST',
+          token,
+        }
+      );
+      return result.data;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: ['conversation', variables.clinicId, variables.conversationId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ['conversations', variables.clinicId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ['conversation-stats', variables.clinicId],
+      });
+    },
+  });
+
+  return mutation;
+}
+
+/**
+ * Hook to unarchive a conversation
+ */
+export function useUnarchiveConversation() {
+  const { getIdToken } = useAuth();
+  const queryClient = useQueryClient();
+
+  const mutation = useMutation({
+    mutationFn: async ({
+      clinicId,
+      conversationId,
+    }: {
+      clinicId: string;
+      conversationId: string;
+    }) => {
+      const token = await getIdToken();
+      if (!token) throw new Error('Not authenticated');
+
+      const result = await apiClient<{ data: { success: boolean } }>(
+        `/conversations/${conversationId}/unarchive?clinicId=${clinicId}`,
+        {
+          method: 'POST',
+          token,
+        }
+      );
+      return result.data;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: ['conversation', variables.clinicId, variables.conversationId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ['conversations', variables.clinicId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ['conversation-stats', variables.clinicId],
+      });
+    },
+  });
+
+  return mutation;
+}
+
+/**
+ * Hook to delete a conversation permanently
+ */
+export function useDeleteConversation() {
+  const { getIdToken } = useAuth();
+  const queryClient = useQueryClient();
+
+  const mutation = useMutation({
+    mutationFn: async ({
+      clinicId,
+      conversationId,
+    }: {
+      clinicId: string;
+      conversationId: string;
+    }) => {
+      const token = await getIdToken();
+      if (!token) throw new Error('Not authenticated');
+
+      await apiClient<void>(
+        `/conversations/${conversationId}?clinicId=${clinicId}`,
+        {
+          method: 'DELETE',
+          token,
+        }
+      );
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: ['conversations', variables.clinicId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ['conversation-stats', variables.clinicId],
+      });
+    },
+  });
+
+  return mutation;
+}

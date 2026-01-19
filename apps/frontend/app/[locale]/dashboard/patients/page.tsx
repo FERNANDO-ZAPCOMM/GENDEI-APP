@@ -92,7 +92,7 @@ export default function PatientsPage() {
 
     try {
       await remove.mutateAsync(id);
-      toast.success('Paciente excluido!');
+      toast.success('Paciente excluído!');
     } catch (error: any) {
       toast.error(error.message || 'Erro ao excluir paciente');
     }
@@ -115,8 +115,8 @@ export default function PatientsPage() {
     <div className="space-y-6 page-transition">
       {/* Header */}
       <div>
-        <h1 className="text-2xl sm:text-3xl font-semibold text-gray-900">Pacientes</h1>
-        <p className="text-sm sm:text-base text-gray-600 mt-1">Gerencie os pacientes da sua clinica</p>
+        <h1 className="text-2xl sm:text-2xl font-semibold text-gray-900">Pacientes</h1>
+        <p className="text-sm sm:text-base text-gray-600 mt-1">Gerencie os pacientes da sua clínica</p>
       </div>
 
       {/* Stats Cards Row - Desktop */}
@@ -129,9 +129,7 @@ export default function PatientsPage() {
                   <p className="text-xs text-indigo-600 font-medium">Total</p>
                   <p className="text-2xl font-bold text-indigo-700">{stats.total}</p>
                 </div>
-                <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center">
-                  <Users className="w-5 h-5 text-indigo-600" />
-                </div>
+                <Users className="w-5 h-5 text-indigo-600" />
               </div>
             </CardContent>
           </Card>
@@ -140,12 +138,10 @@ export default function PatientsPage() {
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs text-emerald-600 font-medium">Novos este Mes</p>
+                  <p className="text-xs text-emerald-600 font-medium">Novos este Mês</p>
                   <p className="text-2xl font-bold text-emerald-700">{stats.newThisMonth}</p>
                 </div>
-                <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center">
-                  <Calendar className="w-5 h-5 text-emerald-600" />
-                </div>
+                <Calendar className="w-5 h-5 text-emerald-600" />
               </div>
             </CardContent>
           </Card>
@@ -158,9 +154,7 @@ export default function PatientsPage() {
                 <p className="text-xs text-blue-600 font-medium">Com Consultas</p>
                 <p className="text-2xl font-bold text-blue-700">{stats.withAppointments}</p>
               </div>
-              <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
-                <UserCheck className="w-5 h-5 text-blue-600" />
-              </div>
+              <UserCheck className="w-5 h-5 text-blue-600" />
             </div>
           </CardContent>
         </Card>

@@ -10,6 +10,11 @@ import asyncio
 from typing import Any, Dict, Optional, List
 from datetime import datetime, timedelta
 from contextlib import asynccontextmanager
+from contextvars import ContextVar
+
+# Context variable to store current clinic_id for message logging
+_current_clinic_id: ContextVar[Optional[str]] = ContextVar('current_clinic_id', default=None)
+_current_phone_number_id: ContextVar[Optional[str]] = ContextVar('current_phone_number_id', default=None)
 
 from fastapi import FastAPI, Request, BackgroundTasks, HTTPException  # type: ignore
 from fastapi.responses import Response, HTMLResponse  # type: ignore
@@ -52,6 +57,10 @@ WHATSAPP_TOKEN = os.getenv("META_BISU_ACCESS_TOKEN", "")
 VERIFY_TOKEN = os.getenv("META_WEBHOOK_VERIFY_TOKEN", "gendei_verify_token")
 META_API_VERSION = os.getenv("META_API_VERSION", "v24.0")
 DOMAIN = os.getenv("GENDEI_DOMAIN", "https://gendei.com")
+
+# Booking settings
+DEFAULT_MIN_BOOKING_LEAD_TIME_HOURS = 2  # Minimum hours before a slot can be booked
+UPCOMING_APPOINTMENT_CHECK_DAYS = 14  # Days ahead to check for existing appointments
 
 # Database instance
 db: Optional[GendeiDatabase] = None
@@ -300,6 +309,178 @@ def load_clinic_context(clinic_id: str) -> Dict[str, Any]:
     return context
 
 
+def get_clinic_min_lead_time(clinic_id: str) -> int:
+    """Get minimum booking lead time in hours for a clinic."""
+    if not db:
+        return DEFAULT_MIN_BOOKING_LEAD_TIME_HOURS
+
+    try:
+        clinic = db.get_clinic(clinic_id)
+        if clinic:
+            # Check if clinic has custom setting
+            settings = getattr(clinic, 'booking_settings', None) or {}
+            return settings.get('minLeadTimeHours', DEFAULT_MIN_BOOKING_LEAD_TIME_HOURS)
+    except Exception as e:
+        logger.error(f"Error getting clinic lead time: {e}")
+
+    return DEFAULT_MIN_BOOKING_LEAD_TIME_HOURS
+
+
+def filter_slots_by_lead_time(slots: List[Any], min_lead_hours: int) -> List[Any]:
+    """Filter out slots that are too close to current time.
+
+    Handles both TimeSlot objects and dict representations.
+    """
+    if not slots:
+        return []
+
+    now = datetime.now()
+    min_booking_time = now + timedelta(hours=min_lead_hours)
+
+    filtered = []
+    for slot in slots:
+        try:
+            # Handle both TimeSlot objects and dicts
+            if hasattr(slot, 'date'):
+                slot_date = slot.date
+                slot_time = slot.time
+            else:
+                slot_date = slot.get('date', '')
+                slot_time = slot.get('time', '')
+
+            slot_dt = datetime.strptime(f"{slot_date} {slot_time}", "%Y-%m-%d %H:%M")
+
+            if slot_dt >= min_booking_time:
+                filtered.append(slot)
+        except (ValueError, AttributeError):
+            continue
+
+    return filtered
+
+
+def get_patient_upcoming_appointments(clinic_id: str, phone: str) -> List[Appointment]:
+    """Get upcoming appointments for a patient within the configured window."""
+    if not db:
+        return []
+
+    try:
+        appointments = get_appointments_by_phone(db, phone, clinic_id, include_past=False)
+
+        # Filter to appointments within the check window
+        today = datetime.now().date()
+        max_date = today + timedelta(days=UPCOMING_APPOINTMENT_CHECK_DAYS)
+
+        upcoming = [
+            apt for apt in appointments
+            if datetime.strptime(apt.date, "%Y-%m-%d").date() <= max_date
+        ]
+
+        return upcoming
+    except Exception as e:
+        logger.error(f"Error getting patient upcoming appointments: {e}")
+        return []
+
+
+def detect_frustrated_sentiment(message: str) -> bool:
+    """Detect if user message indicates frustration or anger.
+
+    Note: We intentionally do NOT flag ALL CAPS or excessive punctuation
+    as many users type this way without being frustrated (caps lock on,
+    emphasis, excitement, etc.). Only explicit angry keywords trigger escalation.
+    """
+    msg_lower = message.lower()
+
+    # Frustrated/angry indicators - these are strong signals of actual frustration
+    angry_keywords = [
+        "absurdo", "ridículo", "ridícula", "inaceitável", "inaceitavel",
+        "péssimo", "pessimo", "horrível", "horrivel", "vergonha",
+        "reclamar", "reclamação", "reclamacao", "ouvidoria",
+        "nunca mais", "vocês são", "voces sao", "isso é uma",
+        "desrespeito", "falta de respeito", "incompetente",
+        "processando", "processo", "procon", "denúncia", "denuncia",
+        "não acredito", "nao acredito", "que palhaçada", "palhacada",
+        "raiva", "irritado", "irritada", "revoltado", "revoltada",
+        "advogado", "justiça", "justica",
+    ]
+
+    # Check for angry keywords only
+    if any(kw in msg_lower for kw in angry_keywords):
+        return True
+
+    return False
+
+
+def detect_human_escalation_request(message: str) -> bool:
+    """Detect if user explicitly requests to speak with a human.
+
+    Catches phrases like:
+    - "quero falar com humano"
+    - "recepção" / "recepcao"
+    - "preciso ligar"
+    - "falar com atendente"
+    - etc.
+    """
+    msg_lower = message.lower()
+
+    # Explicit human escalation requests
+    human_keywords = [
+        # Direct requests for human/person
+        "falar com humano", "quero falar com humano",
+        "falar com pessoa", "quero falar com pessoa",
+        "falar com alguem", "falar com alguém",
+        "quero falar com alguem", "quero falar com alguém",
+        "atendente", "atendimento humano",
+        "falar com atendente", "quero atendente",
+        "pessoa real", "humano real",
+        "ser atendido", "ser atendida",
+        # Reception/front desk
+        "recepção", "recepcao", "recepcionista",
+        "falar com a recepção", "falar com a recepcao",
+        "ligar pra recepção", "ligar pra recepcao",
+        # Phone/call requests
+        "preciso ligar", "quero ligar", "vou ligar",
+        "me liga", "me ligue", "me ligam",
+        "alguem me liga", "alguém me liga",
+        "podem me ligar", "pode me ligar",
+        "ligar pra clinica", "ligar pra clínica",
+        "ligar para clinica", "ligar para clínica",
+        "numero do telefone", "número do telefone",
+        "qual o telefone", "qual telefone",
+        # Explicit transfer requests
+        "transferir", "transfira", "passar pra",
+        "passar para atendente", "passar pro atendente",
+        "não quero falar com robô", "nao quero falar com robo",
+        "não quero falar com bot", "nao quero falar com bot",
+        "esse bot", "esse robô", "esse robo",
+    ]
+
+    # Check for explicit human escalation keywords
+    if any(kw in msg_lower for kw in human_keywords):
+        return True
+
+    return False
+
+
+def format_appointment_date(date_str: str, time_str: str) -> str:
+    """Format appointment date/time in a friendly way."""
+    try:
+        dt = datetime.strptime(date_str, "%Y-%m-%d")
+        day_names = ["segunda", "terça", "quarta", "quinta", "sexta", "sábado", "domingo"]
+        day_name = day_names[dt.weekday()]
+
+        today = datetime.now().date()
+        apt_date = dt.date()
+
+        if apt_date == today:
+            return f"hoje às {time_str}"
+        elif apt_date == today + timedelta(days=1):
+            return f"amanhã às {time_str}"
+        else:
+            return f"{day_name}, {dt.strftime('%d/%m')} às {time_str}"
+    except ValueError:
+        return f"{date_str} às {time_str}"
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler."""
@@ -348,10 +529,14 @@ async def send_whatsapp_message(
     phone_number_id: str,
     to: str,
     message: str,
-    access_token: str
+    access_token: str,
+    log_to_db: bool = True
 ) -> bool:
-    """Send WhatsApp text message."""
+    """Send WhatsApp text message and optionally log to database."""
     url = f"https://graph.facebook.com/{META_API_VERSION}/{phone_number_id}/messages"
+
+    # Ensure phone has + prefix for consistent storage
+    to_normalized = ensure_phone_has_plus(to)
 
     async with httpx.AsyncClient() as client:
         response = await client.post(
@@ -359,6 +544,7 @@ async def send_whatsapp_message(
             headers={
                 "Authorization": f"Bearer {access_token}",
                 "Content-Type": "application/json",
+                "Cache-Control": "no-cache",
             },
             json={
                 "messaging_product": "whatsapp",
@@ -370,6 +556,13 @@ async def send_whatsapp_message(
 
         if response.status_code == 200:
             logger.info(f"✅ Message sent to {to}")
+            # Log outgoing message to database using context variables
+            clinic_id = _current_clinic_id.get()
+            if log_to_db and db and clinic_id:
+                db.log_conversation_message(
+                    clinic_id, to_normalized, "text", message,
+                    source="ai", phone_number_id=phone_number_id
+                )
             return True
         else:
             logger.error(f"❌ Failed to send message: {response.text}")
@@ -391,12 +584,15 @@ async def send_whatsapp_buttons(
         for btn in buttons[:3]  # Max 3 buttons
     ]
 
+    to_normalized = ensure_phone_has_plus(to)
+
     async with httpx.AsyncClient() as client:
         response = await client.post(
             url,
             headers={
                 "Authorization": f"Bearer {access_token}",
                 "Content-Type": "application/json",
+                "Cache-Control": "no-cache",
             },
             json={
                 "messaging_product": "whatsapp",
@@ -412,9 +608,74 @@ async def send_whatsapp_buttons(
 
         if response.status_code == 200:
             logger.info(f"✅ Buttons sent to {to}")
+            # Log outgoing message
+            clinic_id = _current_clinic_id.get()
+            if db and clinic_id:
+                button_titles = ", ".join([b["title"] for b in buttons[:3]])
+                db.log_conversation_message(
+                    clinic_id, to_normalized, "interactive",
+                    f"{body_text}\n[Opções: {button_titles}]",
+                    source="ai", phone_number_id=phone_number_id
+                )
             return True
         else:
             logger.error(f"❌ Failed to send buttons: {response.text}")
+            return False
+
+
+async def send_whatsapp_list(
+    phone_number_id: str,
+    to: str,
+    header_text: str,
+    body_text: str,
+    button_text: str,
+    sections: List[Dict[str, Any]],
+    access_token: str
+) -> bool:
+    """Send WhatsApp interactive list message (for more than 3 options)."""
+    url = f"https://graph.facebook.com/{META_API_VERSION}/{phone_number_id}/messages"
+
+    to_normalized = ensure_phone_has_plus(to)
+
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": to,
+        "type": "interactive",
+        "interactive": {
+            "type": "list",
+            "header": {"type": "text", "text": header_text},
+            "body": {"text": body_text},
+            "action": {
+                "button": button_text,
+                "sections": sections
+            }
+        }
+    }
+
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            url,
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "application/json",
+                "Cache-Control": "no-cache",
+            },
+            json=payload
+        )
+
+        if response.status_code == 200:
+            logger.info(f"✅ List message sent to {to}")
+            # Log outgoing message
+            clinic_id = _current_clinic_id.get()
+            if db and clinic_id:
+                db.log_conversation_message(
+                    clinic_id, to_normalized, "interactive",
+                    f"{header_text}\n{body_text}\n[Lista interativa]",
+                    source="ai", phone_number_id=phone_number_id
+                )
+            return True
+        else:
+            logger.error(f"❌ Failed to send list: {response.text}")
             return False
 
 
@@ -461,6 +722,7 @@ async def send_pix_payment_cta(
             headers={
                 "Authorization": f"Bearer {access_token}",
                 "Content-Type": "application/json",
+                "Cache-Control": "no-cache",
             },
             json=payload
         )
@@ -473,13 +735,98 @@ async def send_pix_payment_cta(
             return False
 
 
+async def send_whatsapp_contact_card(
+    phone_number_id: str,
+    to: str,
+    contact_name: str,
+    contact_phone: str,
+    contact_email: Optional[str],
+    organization: str,
+    access_token: str
+) -> bool:
+    """Send WhatsApp contact card with clinic details."""
+    url = f"https://graph.facebook.com/{META_API_VERSION}/{phone_number_id}/messages"
+
+    to_normalized = ensure_phone_has_plus(to)
+
+    # Build contact object
+    contact = {
+        "name": {
+            "formatted_name": contact_name,
+            "first_name": contact_name
+        },
+        "org": {
+            "company": organization
+        },
+        "phones": [
+            {
+                "phone": contact_phone,
+                "type": "WORK"
+            }
+        ]
+    }
+
+    # Add email if available
+    if contact_email:
+        contact["emails"] = [
+            {
+                "email": contact_email,
+                "type": "WORK"
+            }
+        ]
+
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": to,
+        "type": "contacts",
+        "contacts": [contact]
+    }
+
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            url,
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "application/json",
+                "Cache-Control": "no-cache",
+            },
+            json=payload
+        )
+
+        if response.status_code == 200:
+            logger.info(f"✅ Contact card sent to {to}")
+            # Log outgoing message
+            clinic_id = _current_clinic_id.get()
+            if db and clinic_id:
+                db.log_conversation_message(
+                    clinic_id, to_normalized, "contacts",
+                    f"[Cartão de contato: {contact_name} - {contact_phone}]",
+                    source="ai", phone_number_id=phone_number_id
+                )
+            return True
+        else:
+            logger.error(f"❌ Failed to send contact card: {response.text}")
+            return False
+
+
 async def mark_message_as_read(
     phone_number_id: str,
     message_id: str,
-    access_token: str
+    access_token: str,
+    show_typing: bool = False
 ) -> None:
-    """Mark message as read."""
+    """Mark message as read, optionally show typing indicator."""
     url = f"https://graph.facebook.com/{META_API_VERSION}/{phone_number_id}/messages"
+
+    payload: Dict[str, Any] = {
+        "messaging_product": "whatsapp",
+        "status": "read",
+        "message_id": message_id
+    }
+
+    # Add typing indicator (shows typing dots for ~25s or until response)
+    if show_typing:
+        payload["typing_indicator"] = {"type": "text"}
 
     async with httpx.AsyncClient() as client:
         await client.post(
@@ -487,13 +834,19 @@ async def mark_message_as_read(
             headers={
                 "Authorization": f"Bearer {access_token}",
                 "Content-Type": "application/json",
+                "Cache-Control": "no-cache",
             },
-            json={
-                "messaging_product": "whatsapp",
-                "status": "read",
-                "message_id": message_id
-            }
+            json=payload
         )
+
+
+async def send_typing_indicator(
+    phone_number_id: str,
+    message_id: str,
+    access_token: str
+) -> None:
+    """Show typing indicator (dots) - lasts ~25s or until bot responds."""
+    await mark_message_as_read(phone_number_id, message_id, access_token, show_typing=True)
 
 
 # ============================================
@@ -566,6 +919,296 @@ async def handle_reminder_response(
         logger.info(f"❌ Appointment {appointment.id} cancelled by patient")
 
 
+async def send_initial_greeting(
+    clinic_id: str,
+    phone: str,
+    phone_number_id: str,
+    access_token: str,
+    contact_name: Optional[str] = None
+) -> None:
+    """Send smart greeting - checks for existing appointments first."""
+    clinic = db.get_clinic(clinic_id) if db else None
+    clinic_name = clinic.name if clinic else "nossa clínica"
+
+    # Check for upcoming appointments
+    upcoming_appointments = get_patient_upcoming_appointments(clinic_id, phone)
+
+    if upcoming_appointments:
+        # User has upcoming appointment(s) - show personalized greeting
+        apt = upcoming_appointments[0]  # Get the next one
+        apt_date_formatted = format_appointment_date(apt.date, apt.time)
+
+        # Use patient name from appointment or contact name
+        patient_name = apt.patient_name or contact_name or ""
+        greeting_name = patient_name.split()[0] if patient_name else ""  # First name only
+
+        # Save state with appointment context
+        if db:
+            state = db.load_conversation_state(clinic_id, phone)
+            state["state"] = "awaiting_appointment_action"
+            state["clinic_id"] = clinic_id
+            state["current_appointment_id"] = apt.id
+            state["current_appointment_date"] = apt.date
+            state["current_appointment_time"] = apt.time
+            state["current_appointment_professional"] = apt.professional_name
+            state["current_appointment_professional_id"] = apt.professional_id
+            db.save_conversation_state(clinic_id, phone, state)
+
+        # Build personalized greeting
+        greeting = f"👋 *Olá{', ' + greeting_name if greeting_name else ''}!*\n\n"
+        greeting += f"Vi que você tem uma consulta agendada:\n\n"
+        greeting += f"📅 *{apt_date_formatted}*\n"
+        greeting += f"👨‍⚕️ *{apt.professional_name}*\n\n"
+        greeting += f"Como posso ajudar?"
+
+        buttons = [
+            {"id": "apt_reagendar", "title": "Reagendar"},
+            {"id": "apt_cancelar", "title": "Cancelar"},
+            {"id": "apt_duvida", "title": "Outra dúvida"},
+        ]
+
+        await send_whatsapp_buttons(
+            phone_number_id, phone,
+            greeting,
+            buttons,
+            access_token
+        )
+        logger.info(f"👋 Sent appointment-aware greeting to {phone} (apt: {apt.id})")
+
+    else:
+        # No upcoming appointments - standard greeting
+        if db:
+            state = db.load_conversation_state(clinic_id, phone)
+            state["state"] = "awaiting_greeting_response"
+            state["clinic_id"] = clinic_id
+            db.save_conversation_state(clinic_id, phone, state)
+
+        buttons = [
+            {"id": "greeting_sim", "title": "Sim, agendar"},
+            {"id": "greeting_nao", "title": "Não, obrigado"},
+        ]
+
+        await send_whatsapp_buttons(
+            phone_number_id, phone,
+            f"👋 *Bem-vindo(a) a {clinic_name}!*\n\n"
+            f"Sou o assistente virtual e estou aqui para ajudar.\n\n"
+            f"Deseja agendar sua próxima consulta?",
+            buttons,
+            access_token
+        )
+        logger.info(f"👋 Sent standard greeting to {phone} (no upcoming appointments)")
+
+
+async def handle_greeting_response_no(
+    clinic_id: str,
+    phone: str,
+    phone_number_id: str,
+    access_token: str
+) -> None:
+    """Handle when user says NO to scheduling - show clinic contact card."""
+    clinic = db.get_clinic(clinic_id) if db else None
+
+    # Update state to general chat
+    if db:
+        state = db.load_conversation_state(clinic_id, phone)
+        state["state"] = "general_chat"
+        db.save_conversation_state(clinic_id, phone, state)
+
+    # Build contact info message
+    contact_parts = ["Entendo! Sem problemas. 😊\n"]
+
+    if clinic:
+        clinic_name = getattr(clinic, 'name', None) or "Clínica"
+        contact_parts.append(f"Aqui está o contato da *{clinic_name}*:")
+
+        if hasattr(clinic, 'address') and clinic.address:
+            contact_parts.append(f"\n📍 Endereço: {clinic.address}")
+
+        if hasattr(clinic, 'opening_hours') and clinic.opening_hours:
+            contact_parts.append(f"🕐 Horário: {clinic.opening_hours}")
+
+    contact_parts.append("\n\nSe mudar de ideia sobre agendar, é só enviar uma mensagem!")
+
+    await send_whatsapp_message(
+        phone_number_id, phone,
+        "\n".join(contact_parts),
+        access_token
+    )
+
+    # Send contact card if clinic has phone
+    if clinic:
+        clinic_name = getattr(clinic, 'name', None) or "Clínica"
+        clinic_phone = getattr(clinic, 'phone', None)
+        clinic_email = getattr(clinic, 'email', None)
+
+        if clinic_phone:
+            await send_whatsapp_contact_card(
+                phone_number_id, phone,
+                contact_name=clinic_name,
+                contact_phone=clinic_phone,
+                contact_email=clinic_email,
+                organization=clinic_name,
+                access_token=access_token
+            )
+
+
+async def escalate_to_human(
+    clinic_id: str,
+    phone: str,
+    phone_number_id: str,
+    access_token: str,
+    reason: str,
+    auto_takeover: bool = False
+) -> None:
+    """Escalate conversation to human - send contact card and enable human takeover."""
+    clinic = db.get_clinic(clinic_id) if db else None
+
+    # Update conversation state first
+    if db:
+        state = db.load_conversation_state(clinic_id, phone)
+        state["state"] = "escalated"
+        state["escalation_reason"] = reason
+
+        if auto_takeover:
+            state["isHumanTakeover"] = True
+            state["aiPaused"] = True
+
+        db.save_conversation_state(clinic_id, phone, state)
+
+    # Send escalation message
+    await send_whatsapp_message(
+        phone_number_id, phone,
+        "Entendo! Vou encaminhar seu caso para nossa equipe. 🙋‍♀️\n\n"
+        "Um de nossos atendentes entrará em contato em breve.\n\n"
+        "Se preferir, você pode entrar em contato diretamente:",
+        access_token
+    )
+
+    # Send contact card if clinic has phone
+    if clinic:
+        clinic_name = getattr(clinic, 'name', None) or "Clínica"
+        clinic_phone = getattr(clinic, 'phone', None)
+        clinic_email = getattr(clinic, 'email', None)
+
+        if clinic_phone:
+            await send_whatsapp_contact_card(
+                phone_number_id, phone,
+                contact_name=clinic_name,
+                contact_phone=clinic_phone,
+                contact_email=clinic_email,
+                organization=clinic_name,
+                access_token=access_token
+            )
+
+    logger.info(f"🚨 Escalated conversation for {phone}. Reason: {reason}, Auto-takeover: {auto_takeover}")
+
+
+async def handle_appointment_reschedule(
+    clinic_id: str,
+    phone: str,
+    phone_number_id: str,
+    access_token: str,
+    state: Dict[str, Any]
+) -> None:
+    """Handle request to reschedule existing appointment - start scheduling flow."""
+    current_apt_id = state.get("current_appointment_id")
+    current_professional_id = state.get("current_appointment_professional_id")
+    current_professional_name = state.get("current_appointment_professional")
+    current_date = state.get("current_appointment_date")
+    current_time = state.get("current_appointment_time")
+
+    # Update state to indicate we're rescheduling
+    state["state"] = "rescheduling"
+    state["rescheduling_appointment_id"] = current_apt_id
+    state["selected_professional_id"] = current_professional_id
+    state["selected_professional_name"] = current_professional_name
+    if db:
+        db.save_conversation_state(clinic_id, phone, state)
+
+    # Inform user and show available slots for the same professional
+    await send_whatsapp_message(
+        phone_number_id, phone,
+        f"Vamos remarcar sua consulta! 📅\n\n"
+        f"Consulta atual: *{format_appointment_date(current_date, current_time)}* com *{current_professional_name}*\n\n"
+        f"Buscando novos horários disponíveis...",
+        access_token
+    )
+
+    # Show available slots for the same professional
+    await show_professional_slots(
+        clinic_id, phone,
+        current_professional_id,
+        current_professional_name,
+        "",  # specialty not needed
+        phone_number_id, access_token
+    )
+
+
+async def handle_appointment_cancel_request(
+    clinic_id: str,
+    phone: str,
+    phone_number_id: str,
+    access_token: str,
+    state: Dict[str, Any]
+) -> None:
+    """Handle cancellation request - escalate to human for refund verification."""
+    current_apt_id = state.get("current_appointment_id")
+    current_date = state.get("current_appointment_date")
+    current_time = state.get("current_appointment_time")
+    current_professional = state.get("current_appointment_professional")
+
+    # Update state with cancellation request
+    state["state"] = "cancellation_requested"
+    state["cancellation_appointment_id"] = current_apt_id
+    if db:
+        db.save_conversation_state(clinic_id, phone, state)
+
+    # Escalate to human (cancel requires refund verification)
+    await send_whatsapp_message(
+        phone_number_id, phone,
+        f"Entendi que você deseja cancelar sua consulta de *{format_appointment_date(current_date, current_time)}* com *{current_professional}*.\n\n"
+        f"⚠️ Para cancelamentos, nossa equipe precisa verificar as políticas de reembolso.\n\n"
+        f"Um atendente entrará em contato em breve para finalizar o cancelamento.",
+        access_token
+    )
+
+    # Enable human takeover for cancellation handling
+    await escalate_to_human(
+        clinic_id, phone,
+        phone_number_id, access_token,
+        reason=f"Solicitação de cancelamento - Consulta {current_apt_id} ({current_date} {current_time})",
+        auto_takeover=True
+    )
+
+
+async def handle_appointment_question(
+    clinic_id: str,
+    phone: str,
+    phone_number_id: str,
+    access_token: str,
+    state: Dict[str, Any]
+) -> None:
+    """Handle 'other question' about appointment - offer help options."""
+    # Update state to general chat
+    state["state"] = "general_chat"
+    if db:
+        db.save_conversation_state(clinic_id, phone, state)
+
+    # Send helpful message
+    await send_whatsapp_message(
+        phone_number_id, phone,
+        "Claro! Como posso ajudar? 🤔\n\n"
+        "Você pode perguntar sobre:\n"
+        "• Horário de funcionamento\n"
+        "• Endereço e como chegar\n"
+        "• Formas de pagamento\n"
+        "• Informações sobre profissionais\n"
+        "• Serviços oferecidos\n\n"
+        "Ou digite sua dúvida!",
+        access_token
+    )
+
+
 async def handle_scheduling_intent(
     clinic_id: str,
     phone: str,
@@ -573,7 +1216,7 @@ async def handle_scheduling_intent(
     phone_number_id: str,
     access_token: str
 ) -> None:
-    """Handle appointment scheduling intent."""
+    """Handle appointment scheduling intent with interactive WhatsApp flows."""
     clinic = db.get_clinic(clinic_id)
     if not clinic:
         await send_whatsapp_message(
@@ -594,47 +1237,158 @@ async def handle_scheduling_intent(
         )
         return
 
-    # If only one professional, show their availability directly
+    # If only one professional, show time slots directly with buttons
     if len(professionals) == 1:
         prof = professionals[0]
-        slots = get_available_slots(db, clinic_id, professional_id=prof.id, days_ahead=7)
-
-        if slots:
-            slots_text = format_slots_for_display(slots[:15], prof.full_name)
-            new_state = {
-                "state": "selecting_slot",
-                "clinic_id": clinic_id,
-                "professional_id": prof.id,
-                "professional_name": prof.full_name,
-            }
-            if db:
-                db.save_conversation_state(clinic_id, phone, new_state)
-            await send_whatsapp_message(
-                phone_number_id, phone,
-                f"Olá! Aqui está a agenda de {prof.full_name}:\n\n{slots_text}\n\nQual horário você prefere? (ex: '15/01 às 14:00')",
-                access_token
-            )
-        else:
-            await send_whatsapp_message(
-                phone_number_id, phone,
-                f"Desculpe, não há horários disponíveis para {prof.full_name} nos próximos dias.",
-                access_token
-            )
-    else:
-        # Multiple professionals - ask which one
-        prof_list = "\n".join([f"• {p.full_name} - {p.specialty}" for p in professionals])
+        await show_professional_slots(
+            clinic_id, phone, prof.id, prof.full_name or prof.name,
+            getattr(prof, 'specialty', ''),
+            phone_number_id, access_token
+        )
+    elif len(professionals) <= 3:
+        # 2-3 professionals: use buttons
+        buttons = [
+            {"id": f"prof_{p.id}", "title": (p.full_name or p.name)[:20]}
+            for p in professionals[:3]
+        ]
+        # Save state
+        prof_map = {f"prof_{p.id}": {"id": p.id, "name": p.full_name or p.name, "specialty": getattr(p, 'specialty', '')} for p in professionals}
         new_state = {
             "state": "selecting_professional",
             "clinic_id": clinic_id,
-            "professionals": {p.name.lower(): p for p in professionals},
+            "professionals_map": prof_map,
         }
         if db:
             db.save_conversation_state(clinic_id, phone, new_state)
-        await send_whatsapp_message(
+
+        await send_whatsapp_buttons(
             phone_number_id, phone,
-            f"Olá! Temos os seguintes profissionais disponíveis:\n\n{prof_list}\n\nCom qual você gostaria de agendar?",
+            f"👋 Olá! Vamos agendar sua consulta.\n\n*{clinic.name}*\n\nSelecione o profissional:",
+            buttons,
             access_token
         )
+    else:
+        # More than 3 professionals: use list
+        rows = [
+            {
+                "id": f"prof_{p.id}",
+                "title": (p.full_name or p.name)[:24],
+                "description": getattr(p, 'specialty', '')[:72] or "Profissional"
+            }
+            for p in professionals[:10]
+        ]
+        sections = [{"title": "Profissionais", "rows": rows}]
+
+        # Save state
+        prof_map = {f"prof_{p.id}": {"id": p.id, "name": p.full_name or p.name, "specialty": getattr(p, 'specialty', '')} for p in professionals}
+        new_state = {
+            "state": "selecting_professional",
+            "clinic_id": clinic_id,
+            "professionals_map": prof_map,
+        }
+        if db:
+            db.save_conversation_state(clinic_id, phone, new_state)
+
+        await send_whatsapp_list(
+            phone_number_id, phone,
+            "Agendar Consulta",
+            f"👋 Olá! Vamos agendar sua consulta na *{clinic.name}*.\n\nSelecione o profissional desejado:",
+            "Ver profissionais",
+            sections,
+            access_token
+        )
+
+
+async def show_professional_slots(
+    clinic_id: str,
+    phone: str,
+    professional_id: str,
+    professional_name: str,
+    specialty: str,
+    phone_number_id: str,
+    access_token: str
+) -> None:
+    """Show available time slots for a professional using WhatsApp list."""
+    slots = get_available_slots(db, clinic_id, professional_id=professional_id, days_ahead=7)
+
+    # Filter by minimum booking lead time
+    min_lead_hours = get_clinic_min_lead_time(clinic_id)
+    if slots and min_lead_hours > 0:
+        slots = filter_slots_by_lead_time(slots, min_lead_hours)
+        logger.info(f"🕐 Filtered slots with {min_lead_hours}h lead time: {len(slots)} remaining")
+
+    if not slots:
+        await send_whatsapp_message(
+            phone_number_id, phone,
+            f"Desculpe, não há horários disponíveis para *{professional_name}* nos próximos dias.\n\nPor favor, entre em contato com a clínica.",
+            access_token
+        )
+        return
+
+    # Group slots by date (handle both TimeSlot objects and dicts)
+    slots_by_date: Dict[str, List[Any]] = {}
+    for slot in slots[:30]:  # Limit to 30 slots
+        date_str = slot.date if hasattr(slot, 'date') else slot.get('date', '')
+        if date_str not in slots_by_date:
+            slots_by_date[date_str] = []
+        slots_by_date[date_str].append(slot)
+
+    # Build sections for WhatsApp list (one section per date)
+    sections = []
+    slot_map = {}  # Map slot IDs to slot data
+
+    for date_str, date_slots in list(slots_by_date.items())[:5]:  # Max 5 dates
+        try:
+            dt = datetime.strptime(date_str, "%Y-%m-%d")
+            day_names = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
+            day_name = day_names[dt.weekday()]
+            formatted_date = dt.strftime("%d/%m")
+            section_title = f"{day_name}, {formatted_date}"
+        except ValueError:
+            section_title = date_str
+
+        rows = []
+        for slot in date_slots[:10]:  # Max 10 slots per date
+            time_str = slot.time if hasattr(slot, 'time') else slot.get('time', '')
+            slot_id = f"slot_{date_str}_{time_str.replace(':', '')}"
+            slot_map[slot_id] = {"date": date_str, "time": time_str}
+            rows.append({
+                "id": slot_id,
+                "title": time_str,
+                "description": f"{professional_name}"[:72]
+            })
+
+        if rows:
+            sections.append({"title": section_title, "rows": rows})
+
+    if not sections:
+        await send_whatsapp_message(
+            phone_number_id, phone,
+            f"Desculpe, não há horários disponíveis para *{professional_name}*.",
+            access_token
+        )
+        return
+
+    # Save state
+    new_state = {
+        "state": "selecting_slot",
+        "clinic_id": clinic_id,
+        "professional_id": professional_id,
+        "professional_name": professional_name,
+        "slot_map": slot_map,
+    }
+    if db:
+        db.save_conversation_state(clinic_id, phone, new_state)
+
+    specialty_text = f" ({specialty})" if specialty else ""
+    await send_whatsapp_list(
+        phone_number_id, phone,
+        "Horários Disponíveis",
+        f"📅 *{professional_name}*{specialty_text}\n\nSelecione um horário disponível:",
+        "Ver horários",
+        sections,
+        access_token
+    )
 
 
 async def process_message(
@@ -650,6 +1404,10 @@ async def process_message(
     """Process incoming WhatsApp message."""
     phone = ensure_phone_has_plus(phone)
 
+    # Set context variables for message logging
+    _current_clinic_id.set(clinic_id)
+    _current_phone_number_id.set(phone_number_id)
+
     # Mark as read
     await mark_message_as_read(phone_number_id, message_id, access_token)
 
@@ -657,11 +1415,17 @@ async def process_message(
     if db:
         db.upsert_contact(clinic_id, phone, name=contact_name)
 
+    # Log incoming message (always log for conversation history)
+    if db:
+        db.log_conversation_message(
+            clinic_id, phone, "text", message,
+            source="patient", phone_number_id=phone_number_id
+        )
+
     # Check human takeover - skip AI processing if human has taken over
     if db and db.is_human_takeover_enabled(clinic_id, phone):
         logger.info(f"🙋 Human takeover active for {phone}, skipping AI processing")
-        # Log message but don't respond
-        db.log_conversation_message(clinic_id, phone, "text", message, source="patient")
+        # Message already logged above, just skip AI processing
         return
 
     # Check for button response (reminder confirmation)
@@ -684,53 +1448,226 @@ async def process_message(
     state = db.load_conversation_state(clinic_id, phone) if db else {}
     current_state = state.get("state")
 
+    # Update conversation with contact info if available (like Zapcomm)
+    if db and contact_name and contact_name != state.get("waUserName"):
+        state["waUserName"] = contact_name
+        state["waUserPhone"] = phone
+        state["waUserId"] = phone  # For frontend compatibility
+        db.save_conversation_state(clinic_id, phone, state)
+        logger.info(f"👤 Updated conversation with contact name: {contact_name}")
+
     msg_lower = message.lower().strip()
 
-    # Handle ongoing conversation flows
-    if current_state == "selecting_professional":
-        # User is selecting a professional
-        professionals = state.get("professionals", {})
-        selected = None
+    # =============================================
+    # HANDLE INTERACTIVE BUTTON/LIST RESPONSES
+    # =============================================
+    if button_payload:
+        # Handle greeting response buttons
+        if button_payload == "greeting_sim":
+            logger.info(f"📅 User {phone} wants to schedule (greeting button)")
+            await handle_scheduling_intent(
+                clinic_id, phone, "quero agendar",
+                phone_number_id, access_token
+            )
+            return
 
-        for name, prof in professionals.items():
-            if name in msg_lower or prof.name.lower() in msg_lower:
-                selected = prof
-                break
+        if button_payload == "greeting_nao":
+            logger.info(f"👋 User {phone} declined scheduling (greeting button)")
+            await handle_greeting_response_no(
+                clinic_id, phone,
+                phone_number_id, access_token
+            )
+            return
 
-        if selected:
-            slots = get_available_slots(db, clinic_id, professional_id=selected.id, days_ahead=7)
-            if slots:
-                slots_text = format_slots_for_display(slots[:15], selected.full_name)
+        # Handle appointment action buttons (when user has existing appointment)
+        if button_payload == "apt_reagendar":
+            logger.info(f"📅 User {phone} wants to reschedule appointment")
+            await handle_appointment_reschedule(
+                clinic_id, phone,
+                phone_number_id, access_token, state
+            )
+            return
+
+        if button_payload == "apt_cancelar":
+            logger.info(f"❌ User {phone} wants to cancel appointment - escalating")
+            await handle_appointment_cancel_request(
+                clinic_id, phone,
+                phone_number_id, access_token, state
+            )
+            return
+
+        if button_payload == "apt_duvida":
+            logger.info(f"❓ User {phone} has other question about appointment")
+            await handle_appointment_question(
+                clinic_id, phone,
+                phone_number_id, access_token, state
+            )
+            return
+
+        # Professional selection from buttons/list
+        if button_payload.startswith("prof_"):
+            prof_map = state.get("professionals_map", {})
+            prof_data = prof_map.get(button_payload)
+            if prof_data:
+                await show_professional_slots(
+                    clinic_id, phone,
+                    prof_data["id"],
+                    prof_data["name"],
+                    prof_data.get("specialty", ""),
+                    phone_number_id, access_token
+                )
+                return
+
+        # Slot selection from list
+        if button_payload.startswith("slot_"):
+            slot_map = state.get("slot_map", {})
+            slot_data = slot_map.get(button_payload)
+            if slot_data:
+                # Move to collecting name
                 new_state = {
-                    "state": "selecting_slot",
+                    "state": "collecting_name",
                     "clinic_id": clinic_id,
-                    "professional_id": selected.id,
-                    "professional_name": selected.full_name,
+                    "professional_id": state.get("professional_id"),
+                    "professional_name": state.get("professional_name"),
+                    "date": slot_data["date"],
+                    "time": slot_data["time"],
                 }
                 if db:
                     db.save_conversation_state(clinic_id, phone, new_state)
+
+                # Parse date for display
+                try:
+                    dt = datetime.strptime(slot_data["date"], "%Y-%m-%d")
+                    day_names = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"]
+                    day_name = day_names[dt.weekday()]
+                    formatted_date = dt.strftime("%d/%m")
+                except ValueError:
+                    day_name = ""
+                    formatted_date = slot_data["date"]
+
                 await send_whatsapp_message(
                     phone_number_id, phone,
-                    f"Ótimo! Aqui está a agenda de {selected.full_name}:\n\n{slots_text}\n\nQual horário você prefere?",
+                    f"✅ Horário selecionado!\n\n"
+                    f"📅 *{day_name}, {formatted_date}*\n"
+                    f"🕐 *{slot_data['time']}*\n"
+                    f"👨‍⚕️ *{state.get('professional_name')}*\n\n"
+                    f"Por favor, me diga seu *nome completo* para finalizar o agendamento:",
                     access_token
                 )
-            else:
-                await send_whatsapp_message(
-                    phone_number_id, phone,
-                    f"Desculpe, {selected.full_name} não tem horários disponíveis nos próximos dias.",
-                    access_token
-                )
+                return
+
+    # =============================================
+    # DETECT SCHEDULING INTENT (before AI chat)
+    # =============================================
+    scheduling_keywords = [
+        "agendar", "marcar", "consulta", "agendamento",
+        "quero agendar", "preciso agendar", "quero marcar",
+        "horário", "horarios", "disponibilidade",
+        "qual profissional", "quais profissionais",
+        "quais opções", "quais opcoes", "qual opção",
+    ]
+
+    # Check if this is a NEW conversation (first message)
+    # Send initial greeting with scheduling option
+    if current_state in (None, "new", "novo") or not current_state:
+        # If they explicitly mention scheduling, skip greeting and go straight to flow
+        if any(kw in msg_lower for kw in scheduling_keywords):
+            logger.info(f"📅 Scheduling intent detected: {message[:50]}...")
+            await handle_scheduling_intent(
+                clinic_id, phone, message,
+                phone_number_id, access_token
+            )
+            return
+
+        # Otherwise, send the welcome greeting with buttons
+        logger.info(f"👋 New conversation from {phone}, sending initial greeting")
+        await send_initial_greeting(
+            clinic_id, phone, phone_number_id, access_token,
+            contact_name=contact_name
+        )
+        return
+
+    # Handle user waiting for greeting response who types text instead of clicking button
+    if current_state == "awaiting_greeting_response":
+        # Check if they want to schedule based on text
+        positive_responses = ["sim", "quero", "yes", "agendar", "marcar", "consulta"]
+        negative_responses = ["nao", "não", "no", "depois", "agora não", "obrigado"]
+
+        if any(resp in msg_lower for resp in positive_responses):
+            logger.info(f"📅 User {phone} wants to schedule (text response)")
+            await handle_scheduling_intent(
+                clinic_id, phone, message,
+                phone_number_id, access_token
+            )
+            return
+
+        if any(resp in msg_lower for resp in negative_responses):
+            logger.info(f"👋 User {phone} declined scheduling (text response)")
+            await handle_greeting_response_no(
+                clinic_id, phone, phone_number_id, access_token
+            )
+            return
+
+        # If unclear response, re-send the greeting buttons
+        await send_initial_greeting(
+            clinic_id, phone, phone_number_id, access_token
+        )
+        return
+
+    # Handle general chat state - user previously declined but might want to schedule now
+    if current_state == "general_chat":
+        # Check if they now want to schedule
+        if any(kw in msg_lower for kw in scheduling_keywords):
+            logger.info(f"📅 User {phone} now wants to schedule from general chat")
+            await handle_scheduling_intent(
+                clinic_id, phone, message,
+                phone_number_id, access_token
+            )
+            return
+        # Otherwise, continue to AI chat below
+
+    # Handle ongoing conversation flows
+    if current_state == "selecting_professional":
+        # User is selecting a professional (text fallback - buttons handled above)
+        prof_map = state.get("professionals_map", {})
+
+        # Try to match by name in text
+        selected = None
+        for prof_data in prof_map.values():
+            prof_name_lower = prof_data.get("name", "").lower()
+            if prof_name_lower and prof_name_lower in msg_lower:
+                selected = prof_data
+                break
+
+        if selected:
+            await show_professional_slots(
+                clinic_id, phone,
+                selected["id"],
+                selected["name"],
+                selected.get("specialty", ""),
+                phone_number_id, access_token
+            )
         else:
+            # Re-show the professional selection
             await send_whatsapp_message(
                 phone_number_id, phone,
-                "Não entendi. Por favor, digite o nome do profissional desejado.",
+                "Por favor, selecione um profissional usando os botões acima ☝️",
                 access_token
             )
         return
 
-    elif current_state in ("selecting_slot", "rescheduling"):
-        # User is selecting a time slot - parse date/time from message
-        # Simple parsing for formats like "15/01 às 14:00" or "amanhã às 10:00"
+    elif current_state == "selecting_slot":
+        # User should select from the list (button handled above)
+        # If they type text, guide them to use the list
+        await send_whatsapp_message(
+            phone_number_id, phone,
+            "Por favor, selecione um horário usando a lista acima ☝️\n\nClique em *'Ver horários'* para ver as opções disponíveis.",
+            access_token
+        )
+        return
+
+    elif current_state == "rescheduling":
+        # Rescheduling flow - parse date/time from message
         import re
 
         # Try to find date pattern
@@ -757,36 +1694,16 @@ async def process_message(
                 )
 
                 if time_str in available:
-                    if current_state == "rescheduling":
-                        # Reschedule existing appointment
-                        reschedule_appointment(db, state["appointment_id"], date_str, time_str)
-                        await send_whatsapp_message(
-                            phone_number_id, phone,
-                            f"✅ Consulta reagendada com sucesso!\n\n📅 {day:02d}/{month:02d} às {time_str}\n👨‍⚕️ {state['professional_name']}\n\nTe esperamos!",
-                            access_token
-                        )
-                    else:
-                        # Create new appointment
-                        new_state = {
-                            "state": "collecting_name",
-                            "clinic_id": clinic_id,
-                            "professional_id": state["professional_id"],
-                            "professional_name": state["professional_name"],
-                            "date": date_str,
-                            "time": time_str,
-                        }
-                        if db:
-                            db.save_conversation_state(clinic_id, phone, new_state)
-                        await send_whatsapp_message(
-                            phone_number_id, phone,
-                            f"Perfeito! Horário {day:02d}/{month:02d} às {time_str} selecionado.\n\nPor favor, me diga seu *nome completo*:",
-                            access_token
-                        )
-
-                    if current_state == "rescheduling":
-                        # Clear conversation state
-                        if db:
-                            db.save_conversation_state(clinic_id, phone, {"state": "new", "context": {}})
+                    # Reschedule existing appointment
+                    reschedule_appointment(db, state["appointment_id"], date_str, time_str)
+                    await send_whatsapp_message(
+                        phone_number_id, phone,
+                        f"✅ Consulta reagendada com sucesso!\n\n📅 {day:02d}/{month:02d} às {time_str}\n👨‍⚕️ {state['professional_name']}\n\nTe esperamos!",
+                        access_token
+                    )
+                    # Clear conversation state
+                    if db:
+                        db.save_conversation_state(clinic_id, phone, {"state": "new", "context": {}})
                 else:
                     await send_whatsapp_message(
                         phone_number_id, phone,
@@ -1008,6 +1925,33 @@ async def process_message(
                 "Desculpe, ocorreu um erro ao agendar. Por favor, tente novamente.",
                 access_token
             )
+        return
+
+    # ===========================================
+    # SENTIMENT DETECTION - Auto-escalate frustrated users
+    # ===========================================
+    if detect_frustrated_sentiment(message):
+        logger.warning(f"😤 Frustrated sentiment detected from {phone}: {message[:50]}...")
+        await escalate_to_human(
+            clinic_id, phone,
+            phone_number_id, access_token,
+            reason=f"Usuário frustrado/irritado - Mensagem: {message[:100]}",
+            auto_takeover=True
+        )
+        return
+
+    # ===========================================
+    # EXPLICIT HUMAN ESCALATION REQUEST
+    # ===========================================
+    # Detect when user explicitly asks to speak with a human, reception, etc.
+    if detect_human_escalation_request(message):
+        logger.info(f"🙋 User {phone} requested human escalation: {message[:50]}...")
+        await escalate_to_human(
+            clinic_id, phone,
+            phone_number_id, access_token,
+            reason=f"Solicitação de atendimento humano - Mensagem: {message[:100]}",
+            auto_takeover=True
+        )
         return
 
     # ===========================================

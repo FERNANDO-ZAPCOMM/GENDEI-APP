@@ -198,6 +198,7 @@ fi
 echo "Building & pushing multi-arch image (x86_64)..."
 docker buildx build \
     --platform linux/amd64 \
+    --no-cache \
     -t "${REGION}-docker.pkg.dev/${PROJECT_ID}/docker-repo/${SERVICE_NAME}" \
     . \
     --push

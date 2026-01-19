@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 
 export const metadata: Metadata = {
   title: "Gendei - Agendamento de Consultas via WhatsApp",
-  description: "Plataforma de agendamento de consultas via WhatsApp para clinicas",
+  description: "Plataforma de agendamento de consultas via WhatsApp para clínicas",
   icons: {
     icon: [
       { url: '/favicon.ico', sizes: 'any' },

@@ -885,6 +885,7 @@
     },
     "state": {
       "novo": "Novo",
+      "new": "Novo",
       "qualificado": "Qualificado",
       "negociando": "Negociando",
       "fechado": "Fechado",

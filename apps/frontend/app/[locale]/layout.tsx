@@ -59,7 +59,15 @@ export default async function LocaleLayout({ children, params }: LocaleLayoutPro
               <AuthGuard>
                 {children}
               </AuthGuard>
-              <Toaster position="top-right" richColors />
+              <Toaster
+                position="top-right"
+                richColors
+                toastOptions={{
+                  style: {
+                    borderRadius: '0px',
+                  },
+                }}
+              />
             </QueryProvider>
           </AuthProvider>
         </NextIntlClientProvider>

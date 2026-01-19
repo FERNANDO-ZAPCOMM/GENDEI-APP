@@ -48,10 +48,10 @@ const statusConfig: Record<AppointmentStatus, { label: string; color: string; ic
   pending: { label: 'Pendente', color: 'bg-yellow-100 text-yellow-700', icon: AlertCircle },
   confirmed: { label: 'Confirmado', color: 'bg-blue-100 text-blue-700', icon: CheckCircle },
   awaiting_confirmation: { label: 'Aguardando', color: 'bg-orange-100 text-orange-700', icon: Clock },
-  confirmed_presence: { label: 'Presenca Confirmada', color: 'bg-emerald-100 text-emerald-700', icon: CheckCircle },
-  completed: { label: 'Concluido', color: 'bg-green-100 text-green-700', icon: CheckCircle },
+  confirmed_presence: { label: 'Presença Confirmada', color: 'bg-emerald-100 text-emerald-700', icon: CheckCircle },
+  completed: { label: 'Concluído', color: 'bg-green-100 text-green-700', icon: CheckCircle },
   cancelled: { label: 'Cancelado', color: 'bg-red-100 text-red-700', icon: XCircle },
-  no_show: { label: 'Nao Compareceu', color: 'bg-gray-100 text-gray-700', icon: XCircle },
+  no_show: { label: 'Não Compareceu', color: 'bg-gray-100 text-gray-700', icon: XCircle },
 };
 
 // Format price for display
@@ -157,9 +157,9 @@ export default function AppointmentsPage() {
   const handleBlockTime = async (block: CreateTimeBlockInput) => {
     try {
       await createBlock.mutateAsync(block);
-      toast.success('Horario bloqueado!');
+      toast.success('Horário bloqueado!');
     } catch (error: any) {
-      toast.error(error.message || 'Erro ao bloquear horario');
+      toast.error(error.message || 'Erro ao bloquear horário');
     }
   };
 
@@ -197,7 +197,7 @@ export default function AppointmentsPage() {
     <div className="space-y-6 page-transition">
       {/* Header */}
       <div>
-        <h1 className="text-2xl sm:text-3xl font-semibold text-gray-900">Agenda</h1>
+        <h1 className="text-2xl sm:text-2xl font-semibold text-gray-900">Agenda</h1>
         <p className="text-sm sm:text-base text-gray-600 mt-1">Gerencie as consultas agendadas</p>
       </div>
 
@@ -270,8 +270,8 @@ export default function AppointmentsPage() {
           <CardHeader className="pb-3 flex-shrink-0">
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle className="text-base">Calendario</CardTitle>
-                <CardDescription>Visualize e gerencie horarios</CardDescription>
+                <CardTitle className="text-base">Calendário</CardTitle>
+                <CardDescription>Visualize e gerencie horários</CardDescription>
               </div>
               {/* Date Navigation */}
               <div className="flex items-center gap-2">
@@ -377,8 +377,8 @@ export default function AppointmentsPage() {
           <CardHeader className="pb-3 flex-shrink-0">
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle className="text-base">Calendario</CardTitle>
-                <CardDescription>Visualize e gerencie horarios</CardDescription>
+                <CardTitle className="text-base">Calendário</CardTitle>
+                <CardDescription>Visualize e gerencie horários</CardDescription>
               </div>
               <div className="flex items-center gap-2">
                 <Button variant="outline" size="icon" onClick={handlePrevWeek}>
@@ -459,7 +459,7 @@ export default function AppointmentsPage() {
                   <p className="font-medium">{selectedAppointment.professionalName}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Servico</p>
+                  <p className="text-sm text-muted-foreground">Serviço</p>
                   <p className="font-medium">{selectedAppointment.serviceName || '-'}</p>
                 </div>
                 <div>
@@ -469,7 +469,7 @@ export default function AppointmentsPage() {
                   </p>
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Horario</p>
+                  <p className="text-sm text-muted-foreground">Horário</p>
                   <p className="font-medium">{selectedAppointment.time} ({selectedAppointment.duration}min)</p>
                 </div>
               </div>
@@ -483,7 +483,7 @@ export default function AppointmentsPage() {
 
               {selectedAppointment.notes && (
                 <div>
-                  <p className="text-sm text-muted-foreground">Observacoes</p>
+                  <p className="text-sm text-muted-foreground">Observações</p>
                   <p className="text-sm">{selectedAppointment.notes}</p>
                 </div>
               )}
@@ -500,13 +500,13 @@ export default function AppointmentsPage() {
             {selectedAppointment && (selectedAppointment.status === 'confirmed' || selectedAppointment.status === 'confirmed_presence') && (
               <Button onClick={() => handleStatusChange(selectedAppointment.id, 'completed')}>
                 <CheckCircle className="w-4 h-4 mr-2" />
-                Marcar Concluido
+                Marcar Concluído
               </Button>
             )}
             {selectedAppointment && selectedAppointment.status !== 'cancelled' && selectedAppointment.status !== 'completed' && (
               <>
                 <Button variant="outline" onClick={() => handleStatusChange(selectedAppointment.id, 'no_show')}>
-                  Nao Compareceu
+                  Não Compareceu
                 </Button>
                 <Button variant="destructive" onClick={() => handleCancel(selectedAppointment.id)}>
                   Cancelar

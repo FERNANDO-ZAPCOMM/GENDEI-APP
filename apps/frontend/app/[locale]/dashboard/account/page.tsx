@@ -142,7 +142,7 @@ export default function AccountPage() {
     <div className="space-y-6 page-transition">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-semibold text-gray-900">{t('settings.user.title')}</h1>
+        <h1 className="text-2xl font-semibold text-gray-900">{t('settings.user.title')}</h1>
         <p className="text-gray-600 mt-1">{t('settings.user.description')}</p>
       </div>
 

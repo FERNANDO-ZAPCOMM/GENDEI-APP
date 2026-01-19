@@ -531,9 +531,10 @@ class GendeiDatabase:
         message_type: str,
         content: str,
         source: str = "patient",
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
+        phone_number_id: Optional[str] = None
     ) -> bool:
-        """Log a conversation message"""
+        """Log a conversation message with schema matching frontend expectations"""
         try:
             conv_ref = self.db.collection(CLINICS).document(clinic_id).collection(
                 "conversations"
@@ -542,20 +543,39 @@ class GendeiDatabase:
             # Create conversation doc if not exists
             conv_doc = conv_ref.get()
             if not conv_doc.exists:
+                now = datetime.now().isoformat()
                 conv_ref.set({
+                    "id": phone,
+                    "clinicId": clinic_id,
                     "phone": phone,
-                    "createdAt": datetime.now().isoformat(),
-                    "updatedAt": datetime.now().isoformat(),
+                    "waUserId": phone,
+                    "waUserPhone": phone,
+                    "state": "novo",
                     "lastMessage": content[:100],
-                    "messageCount": 0
+                    "messageCount": 0,
+                    "isHumanTakeover": False,
+                    "aiPaused": False,
+                    "createdAt": now,
+                    "updatedAt": now,
+                    "lastMessageAt": now
                 })
 
-            # Add message to subcollection
+            # Determine direction based on source
+            is_outbound = source in ["ai", "human", "system", "clinic"]
+            direction = "out" if is_outbound else "in"
+
+            # Add message to subcollection with schema matching frontend
             msg_data = {
-                "type": message_type,
-                "content": content,
-                "source": source,
-                "timestamp": datetime.now().isoformat()
+                "conversationId": phone,
+                "clinicId": clinic_id,
+                "direction": direction,
+                "from": phone_number_id if is_outbound else phone,
+                "to": phone if is_outbound else phone_number_id,
+                "body": content,
+                "messageType": message_type,
+                "timestamp": datetime.now(),  # Firestore Timestamp
+                "isAiGenerated": source == "ai",
+                "isHumanSent": source == "human",
             }
             if metadata:
                 msg_data["metadata"] = metadata
@@ -563,12 +583,15 @@ class GendeiDatabase:
             conv_ref.collection("messages").add(msg_data)
 
             # Update conversation last message
+            now = datetime.now().isoformat()
             conv_ref.update({
                 "lastMessage": content[:100],
-                "updatedAt": datetime.now().isoformat(),
+                "updatedAt": now,
+                "lastMessageAt": now,
                 "messageCount": firestore.Increment(1)
             })
 
+            logger.debug(f"📝 Logged {direction} message for {phone}")
             return True
         except Exception as e:
             logger.error(f"Error logging conversation message: {e}")
@@ -850,10 +873,14 @@ class GendeiDatabase:
                     "id": phone,
                     "clinicId": clinic_id,
                     "phone": phone,
-                    "state": "new",
+                    "waUserId": phone,  # For frontend compatibility
+                    "waUserPhone": phone,  # Phone number for display
+                    "state": "novo",  # Portuguese state name for frontend
                     "context": {},
                     "lastMessageAt": now,
                     "isSessionActive": True,
+                    "isHumanTakeover": False,
+                    "aiPaused": False,
                     "createdAt": now,
                     "updatedAt": now
                 }
@@ -867,9 +894,13 @@ class GendeiDatabase:
             return {
                 "phone": phone,
                 "clinicId": clinic_id,
-                "state": "new",
+                "waUserId": phone,
+                "waUserPhone": phone,
+                "state": "novo",
                 "context": {},
-                "isSessionActive": True
+                "isSessionActive": True,
+                "isHumanTakeover": False,
+                "aiPaused": False
             }
 
     def save_conversation_state(self, clinic_id: str, phone: str, state: Dict[str, Any]) -> bool:

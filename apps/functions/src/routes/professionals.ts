@@ -102,18 +102,22 @@ router.post('/', verifyAuth, async (req: Request, res: Response) => {
       workingHours = {},
       appointmentDuration = 30,
       bufferTime = 0,
-      serviceIds = []
+      serviceIds = [],
+      consultationPrice = 0,
+      photoUrl = '',
+      bio = '',
+      active = true
     } = req.body;
 
-    if (!name || !specialty) {
-      return res.status(400).json({ message: 'Name and specialty are required' });
+    if (!name) {
+      return res.status(400).json({ message: 'Name is required' });
     }
 
     const professionalId = `prof_${uuidv4().slice(0, 8)}`;
 
     const professionalData = {
       name,
-      specialty,
+      specialty: specialty || '',
       title,
       crm: crm || null,
       email: email || null,
@@ -122,7 +126,10 @@ router.post('/', verifyAuth, async (req: Request, res: Response) => {
       appointmentDuration,
       bufferTime,
       serviceIds,
-      active: true,
+      consultationPrice,
+      photoUrl,
+      bio,
+      active,
       createdAt: FieldValue.serverTimestamp()
     };
 
@@ -173,7 +180,7 @@ router.put('/:professionalId', verifyAuth, async (req: Request, res: Response) =
     const allowedFields = [
       'name', 'specialty', 'title', 'crm', 'email', 'phone',
       'workingHours', 'appointmentDuration', 'bufferTime',
-      'serviceIds', 'active'
+      'serviceIds', 'active', 'consultationPrice', 'photoUrl', 'bio'
     ];
 
     const updateData: any = {

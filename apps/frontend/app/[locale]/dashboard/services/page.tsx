@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 
 import { useClinic } from '@/hooks/use-clinic';
 import { useServices } from '@/hooks/use-services';
+import { getSuggestedServices, ServiceTemplate } from '@/lib/clinic-categories';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -75,6 +76,61 @@ const defaultFormData: ServiceFormData = {
   modality: 'presencial',
   active: true,
 };
+
+// Suggested Services Section Component (convênio-style UI)
+function SuggestedServicesSection({
+  clinicCategory,
+  onAddService,
+  onAddCustom,
+}: {
+  clinicCategory?: string;
+  onAddService: (template: ServiceTemplate) => void;
+  onAddCustom: () => void;
+}) {
+  const suggestedServices = getSuggestedServices(clinicCategory || 'outro');
+
+  return (
+    <div className="py-8">
+      <div className="text-center mb-6">
+        <div className="w-16 h-16 rounded-full bg-muted/50 flex items-center justify-center mb-4 mx-auto">
+          <ClipboardList className="w-8 h-8 text-muted-foreground/50" />
+        </div>
+        <p className="text-muted-foreground text-sm">Adicione serviços à sua clínica</p>
+      </div>
+
+      {/* Suggested Services */}
+      <div className="space-y-4">
+        <div>
+          <Label className="text-sm text-muted-foreground">Serviços sugeridos para sua clínica:</Label>
+          <div className="flex flex-wrap gap-2 mt-2">
+            {suggestedServices.map((template, index) => (
+              <Button
+                key={index}
+                variant="outline"
+                size="sm"
+                onClick={() => onAddService(template)}
+                className="rounded-full hover:bg-primary/10 hover:border-primary"
+              >
+                <Plus className="w-3 h-3 mr-1" />
+                {template.name}
+                <span className="text-xs text-muted-foreground ml-1">
+                  ({template.duration}min)
+                </span>
+              </Button>
+            ))}
+          </div>
+        </div>
+
+        <div className="border-t pt-4">
+          <Button onClick={onAddCustom} variant="default" className="w-full sm:w-auto">
+            <Plus className="w-4 h-4 mr-2" />
+            Criar serviço personalizado
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function ServicesPage() {
   const t = useTranslations();
@@ -160,7 +216,7 @@ export default function ServicesPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-semibold text-gray-900">Serviços</h1>
+          <h1 className="text-2xl sm:text-2xl font-semibold text-gray-900">Serviços</h1>
           <p className="text-sm sm:text-base text-gray-600 mt-1">Configure os serviços oferecidos pela sua clínica</p>
         </div>
         <Button onClick={() => handleOpenDialog()} className="w-full sm:w-auto">
@@ -187,16 +243,19 @@ export default function ServicesPage() {
               <Skeleton className="h-12 w-full" />
             </div>
           ) : services.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <div className="w-16 h-16 rounded-full bg-muted/50 flex items-center justify-center mb-4">
-                <ClipboardList className="w-8 h-8 text-muted-foreground/50" />
-              </div>
-              <p className="text-muted-foreground text-sm mb-4">Adicione seu primeiro serviço</p>
-              <Button onClick={() => handleOpenDialog()}>
-                <Plus className="w-4 h-4 mr-2" />
-                Novo Serviço
-              </Button>
-            </div>
+            <SuggestedServicesSection
+              clinicCategory={(clinic as any).categories?.[0] || clinic.category}
+              onAddService={(template) => {
+                setFormData({
+                  ...defaultFormData,
+                  name: template.name,
+                  duration: template.duration,
+                  price: template.price,
+                });
+                setIsDialogOpen(true);
+              }}
+              onAddCustom={() => handleOpenDialog()}
+            />
           ) : (
             <>
               {/* Mobile Card View */}

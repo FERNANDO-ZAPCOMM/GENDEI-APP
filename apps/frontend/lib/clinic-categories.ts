@@ -1,11 +1,18 @@
 // Clinic Categories for Gendei Platform
-// Each category maps to relevant professional specialties
+// MVP: 5 core categories covering most common clinic types
+
+export interface ServiceTemplate {
+  name: string;
+  duration: number; // minutes
+  price: number; // suggested price in BRL (0 = user sets)
+}
 
 export interface ClinicCategory {
   id: string;
   name: string;
   description: string;
   specialties: string[]; // IDs from specialties.ts
+  suggestedServices: ServiceTemplate[]; // Pre-filled service suggestions
 }
 
 export const clinicCategories: ClinicCategory[] = [
@@ -25,48 +32,61 @@ export const clinicCategories: ClinicCategory[] = [
       'endocrinologia',
       'gastroenterologia',
     ],
+    suggestedServices: [
+      { name: 'Consulta Médica', duration: 30, price: 0 },
+      { name: 'Retorno', duration: 20, price: 0 },
+      { name: 'Check-up Geral', duration: 60, price: 0 },
+      { name: 'Consulta de Emergência', duration: 30, price: 0 },
+    ],
   },
   {
     id: 'odontologia',
     name: 'Consultório Odontológico',
     description: 'Clínicas e consultórios de odontologia',
     specialties: ['odontologia_geral', 'ortodontia', 'implantodontia', 'endodontia'],
+    suggestedServices: [
+      { name: 'Avaliação Odontológica', duration: 30, price: 0 },
+      { name: 'Limpeza Dental', duration: 45, price: 0 },
+      { name: 'Clareamento Dental', duration: 60, price: 0 },
+      { name: 'Restauração', duration: 45, price: 0 },
+      { name: 'Extração', duration: 30, price: 0 },
+    ],
   },
   {
     id: 'estetica',
     name: 'Clínica de Estética',
     description: 'Tratamentos estéticos faciais e corporais',
     specialties: ['estetica', 'dermatologia'],
-  },
-  {
-    id: 'fisioterapia',
-    name: 'Clínica de Fisioterapia',
-    description: 'Reabilitação física e tratamentos musculares',
-    specialties: ['fisioterapia'],
+    suggestedServices: [
+      { name: 'Avaliação Estética', duration: 30, price: 0 },
+      { name: 'Limpeza de Pele', duration: 60, price: 0 },
+      { name: 'Botox', duration: 30, price: 0 },
+      { name: 'Preenchimento Facial', duration: 45, price: 0 },
+      { name: 'Peeling', duration: 45, price: 0 },
+    ],
   },
   {
     id: 'psicologia',
     name: 'Clínica de Psicologia',
     description: 'Atendimento psicológico e psicoterapia',
     specialties: ['psicologia', 'psiquiatria'],
-  },
-  {
-    id: 'nutricao',
-    name: 'Consultório de Nutrição',
-    description: 'Acompanhamento nutricional e dietas',
-    specialties: ['nutricao'],
-  },
-  {
-    id: 'oftalmologia',
-    name: 'Clínica de Oftalmologia',
-    description: 'Exames e tratamentos oculares',
-    specialties: ['oftalmologia'],
+    suggestedServices: [
+      { name: 'Sessão de Psicoterapia', duration: 50, price: 0 },
+      { name: 'Avaliação Psicológica', duration: 60, price: 0 },
+      { name: 'Terapia de Casal', duration: 60, price: 0 },
+      { name: 'Orientação Vocacional', duration: 50, price: 0 },
+    ],
   },
   {
     id: 'outro',
     name: 'Outro Tipo',
-    description: 'Tipo de estabelecimento não listado',
+    description: 'Fisioterapia, nutrição, oftalmologia e outros',
     specialties: [], // Empty means all specialties are available
+    suggestedServices: [
+      { name: 'Consulta', duration: 30, price: 0 },
+      { name: 'Avaliação', duration: 45, price: 0 },
+      { name: 'Retorno', duration: 20, price: 0 },
+    ],
   },
 ];
 
@@ -79,6 +99,12 @@ export function getCategoryById(id: string): ClinicCategory | undefined {
 export function getCategoryName(id: string): string {
   const category = getCategoryById(id);
   return category?.name || id;
+}
+
+// Get suggested services for a clinic category
+export function getSuggestedServices(categoryId: string): ServiceTemplate[] {
+  const category = getCategoryById(categoryId);
+  return category?.suggestedServices || [];
 }
 
 // Get all specialty IDs for given clinic categories

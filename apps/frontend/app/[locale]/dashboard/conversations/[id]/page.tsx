@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useTranslations } from 'next-intl';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, Bot, User, Send, Play, Pause, Clock } from 'lucide-react';
+import { ArrowLeft, Bot, User, Send, Play, Pause, Clock, Archive, Trash2, MoreVertical } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 
@@ -16,6 +16,8 @@ import {
   useTakeoverConversation,
   useReleaseConversation,
   useSendMessage,
+  useArchiveConversation,
+  useDeleteConversation,
 } from '@/hooks/use-conversations';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -24,6 +26,23 @@ import { Badge } from '@/components/ui/badge';
 import { PageLoader } from '@/components/PageLoader';
 import { ChatBubble } from '@/components/chat/ChatBubble';
 import type { Message as BubbleMessage } from '@/components/chat/types';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 export default function ConversationDetailPage() {
   const t = useTranslations();
@@ -46,8 +65,11 @@ export default function ConversationDetailPage() {
   const takeoverMutation = useTakeoverConversation();
   const releaseMutation = useReleaseConversation();
   const sendMessageMutation = useSendMessage();
+  const archiveMutation = useArchiveConversation();
+  const deleteMutation = useDeleteConversation();
 
   const [messageInput, setMessageInput] = useState('');
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom when new messages arrive
@@ -110,6 +132,36 @@ export default function ConversationDetailPage() {
     }
   };
 
+  const handleArchive = async () => {
+    if (!clinic?.id) return;
+
+    try {
+      await archiveMutation.mutateAsync({
+        clinicId: clinic.id,
+        conversationId,
+      });
+      toast.success('Conversa arquivada');
+      router.push('/dashboard/conversations');
+    } catch (error) {
+      toast.error('Erro ao arquivar conversa');
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!clinic?.id) return;
+
+    try {
+      await deleteMutation.mutateAsync({
+        clinicId: clinic.id,
+        conversationId,
+      });
+      toast.success('Conversa excluída');
+      router.push('/dashboard/conversations');
+    } catch (error) {
+      toast.error('Erro ao excluir conversa');
+    }
+  };
+
   if (isLoading || !conversation) {
     return <PageLoader message={t('conversations.loading')} />;
   }
@@ -145,8 +197,52 @@ export default function ConversationDetailPage() {
               {t('conversations.handler.human')}
             </Badge>
           )}
+
+          {/* Actions Menu */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon">
+                <MoreVertical className="h-5 w-5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={handleArchive}>
+                <Archive className="h-4 w-4 mr-2" />
+                Arquivar
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={() => setShowDeleteDialog(true)}
+                className="text-red-600 focus:text-red-600"
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Excluir
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir conversa?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta ação não pode ser desfeita. A conversa e todas as mensagens serão excluídas permanentemente.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Control Panel */}
       <Card className="flex-shrink-0">
