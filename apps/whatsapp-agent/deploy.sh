@@ -118,6 +118,9 @@ DOMAIN="${DOMAIN:-https://gendei-whatsapp-agent-647402645066.us-central1.run.app
 CLINICA_MEDICA_FORMULARIO_FLOW_ID="${CLINICA_MEDICA_FORMULARIO_FLOW_ID:-}"
 CLINICA_MEDICA_AGENDAMENTO_FLOW_ID="${CLINICA_MEDICA_AGENDAMENTO_FLOW_ID:-}"
 
+# WhatsApp Flows Encryption (private key for decryption)
+FLOWS_PRIVATE_KEY="${FLOWS_PRIVATE_KEY:-}"
+
 echo "Configuration loaded:"
 echo "  Mode: ${TEST_CREATOR_ID:+Testing (TEST_CREATOR_ID=$TEST_CREATOR_ID)}${TEST_CREATOR_ID:-Multi-clinic (Firestore lookup)}"
 echo "  Default Creator ID: ${DEFAULT_CREATOR_ID}"
@@ -254,7 +257,8 @@ gcloud run deploy "${SERVICE_NAME}" \
     --set-env-vars="AI_PROVIDER=${AI_PROVIDER}" \
     --set-env-vars="ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}" \
     --set-env-vars="CLINICA_MEDICA_FORMULARIO_FLOW_ID=${CLINICA_MEDICA_FORMULARIO_FLOW_ID:-}" \
-    --set-env-vars="CLINICA_MEDICA_AGENDAMENTO_FLOW_ID=${CLINICA_MEDICA_AGENDAMENTO_FLOW_ID:-}"
+    --set-env-vars="CLINICA_MEDICA_AGENDAMENTO_FLOW_ID=${CLINICA_MEDICA_AGENDAMENTO_FLOW_ID:-}" \
+    --set-env-vars="FLOWS_PRIVATE_KEY=${FLOWS_PRIVATE_KEY:-}"
 
 echo "Deployment complete!"
 echo "Use the URL below as your WhatsApp webhook:"

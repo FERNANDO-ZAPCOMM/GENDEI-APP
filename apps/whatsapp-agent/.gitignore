@@ -35,3 +35,10 @@ htmlcov/
 # Temporary files
 /tmp/
 *.tmp
+
+# Cryptographic keys (WhatsApp Flows encryption)
+*.pem
+flows_private_key*
+flows_public_key*
+*_private_key*
+*_public_key*

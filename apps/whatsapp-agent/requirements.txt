@@ -29,3 +29,6 @@ pydantic>=2.10,<3.0
 
 # Image Processing (optional)
 pillow==10.4.0
+
+# Cryptography (WhatsApp Flows encryption)
+cryptography>=42.0.0

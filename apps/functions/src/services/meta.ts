@@ -23,6 +23,7 @@ const getFrontendUrl = () => process.env.GENDEI_FRONTEND_URL || 'https://gendei.
 const getMetaRedirectUri = () => process.env.GENDEI_REDIRECT_URI || `${getFrontendUrl()}/meta/callback`;
 const getWhatsAppAgentUrl = () => process.env.GENDEI_WHATSAPP_AGENT_URL || '';
 const getMetaWebhookVerifyToken = () => process.env.META_WEBHOOK_VERIFY_TOKEN || 'gendei_verify_token';
+const getFlowsPublicKey = () => process.env.FLOWS_PUBLIC_KEY || '';
 
 export interface WhatsAppConnectionStatus {
   meta?: {
@@ -351,6 +352,60 @@ export async function exchangeCodeForToken(
 }
 
 /**
+ * Upload Flows public key to WhatsApp Business Account
+ * This enables encrypted data exchange for WhatsApp Flows
+ */
+export async function uploadFlowsPublicKey(phoneNumberId: string): Promise<boolean> {
+  const publicKey = getFlowsPublicKey();
+  const bisuToken = getMetaBisuToken();
+  const apiVersion = getMetaApiVersion();
+
+  if (!publicKey) {
+    console.log('⚠️ FLOWS_PUBLIC_KEY not configured, skipping public key upload');
+    return false;
+  }
+
+  if (!bisuToken) {
+    console.warn('⚠️ META_BISU_ACCESS_TOKEN not configured, cannot upload public key');
+    return false;
+  }
+
+  try {
+    console.log(`📤 Uploading Flows public key for phone ${phoneNumberId}...`);
+
+    const response = await fetch(
+      `https://graph.facebook.com/${apiVersion}/${phoneNumberId}/whatsapp_business_encryption`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${bisuToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          business_public_key: publicKey,
+        }),
+      }
+    );
+
+    if (response.ok) {
+      const data = await response.json();
+      console.log(`✅ Flows public key uploaded successfully for phone ${phoneNumberId}:`, data);
+      return true;
+    } else {
+      const error = await response.json();
+      console.warn(
+        `⚠️ Failed to upload Flows public key for phone ${phoneNumberId}:`,
+        error.error?.message || error
+      );
+      return false;
+    }
+  } catch (error) {
+    console.error('❌ Error uploading Flows public key:', error);
+    return false;
+  }
+}
+
+/**
  * Complete embedded signup with provided WABA IDs
  */
 export async function saveConnectionWithIds(options: {
@@ -470,6 +525,22 @@ export async function saveConnectionWithIds(options: {
     }
   } catch (error) {
     console.warn('⚠️ Could not subscribe to webhooks:', error);
+  }
+
+  // Upload Flows public key for encrypted data exchange (if configured)
+  if (phoneNumberId) {
+    try {
+      const keyUploaded = await uploadFlowsPublicKey(phoneNumberId);
+      if (keyUploaded) {
+        // Update clinic with flows encryption status
+        await db.collection(CLINICS).doc(clinicId).update({
+          'whatsappConfig.flowsEncryptionEnabled': true,
+          'whatsappConfig.flowsKeyUploadedAt': new Date(),
+        });
+      }
+    } catch (error) {
+      console.warn('⚠️ Could not upload Flows public key:', error);
+    }
   }
 
   return {

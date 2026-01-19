@@ -49,7 +49,12 @@ try:
     )
     from src.flows.handler import FlowsHandler, CLINICA_MEDICA_SPECIALTIES
     from src.flows.manager import send_whatsapp_flow, send_booking_flow, generate_flow_token
+    from src.flows.crypto import handle_encrypted_flow_request, prepare_flow_response, is_encryption_configured
     logger.info("✅ Gendei modules imported successfully")
+    if is_encryption_configured():
+        logger.info("🔐 WhatsApp Flows encryption is configured")
+    else:
+        logger.info("⚠️ WhatsApp Flows encryption NOT configured (FLOWS_PRIVATE_KEY not set)")
 except Exception as e:
     logger.error(f"❌ Failed to import Gendei modules: {e}")
     raise
@@ -2992,10 +2997,27 @@ async def flows_endpoint(request: Request):
     """
     WhatsApp Flows data endpoint.
     Handles INIT, data_exchange, and BACK actions for dynamic flows.
+    Supports both encrypted and unencrypted requests.
     """
+    aes_key = None
+    initial_vector = None
+    is_encrypted = False
+
     try:
-        body = await request.json()
-        logger.info(f"📱 Flow request received: {json.dumps(body)[:500]}")
+        # Get raw body for encryption handling
+        raw_body = await request.body()
+
+        # Handle encrypted or unencrypted request
+        body, aes_key, initial_vector, is_encrypted = handle_encrypted_flow_request(raw_body)
+
+        if "error" in body:
+            error_response = {"data": {"error_message": "Erro de criptografia"}}
+            return prepare_flow_response(error_response, aes_key, initial_vector, is_encrypted)
+
+        if is_encrypted:
+            logger.info(f"🔐 Encrypted flow request received and decrypted")
+        else:
+            logger.info(f"📱 Flow request received: {json.dumps(body)[:500]}")
 
         action = body.get("action", "")
         screen = body.get("screen")
@@ -3004,12 +3026,14 @@ async def flows_endpoint(request: Request):
 
         # Handle ping (health check)
         if action == "ping":
-            return {"data": {"status": "active"}}
+            response = {"data": {"status": "active"}}
+            return prepare_flow_response(response, aes_key, initial_vector, is_encrypted)
 
         # Handle error notifications
         if action == "error":
             logger.error(f"Flow error: {data}")
-            return {"data": {"acknowledged": True}}
+            response = {"data": {"acknowledged": True}}
+            return prepare_flow_response(response, aes_key, initial_vector, is_encrypted)
 
         # Extract clinic_id from flow_token (format: clinic_id:phone:timestamp)
         # Or from the initial data
@@ -3027,7 +3051,8 @@ async def flows_endpoint(request: Request):
 
         if not clinic_id:
             logger.error("No clinic_id in flow request")
-            return {"data": {"error_message": "Erro: clínica não identificada"}}
+            response = {"data": {"error_message": "Erro: clínica não identificada"}}
+            return prepare_flow_response(response, aes_key, initial_vector, is_encrypted)
 
         # Add patient phone to data for appointment creation
         data["patient_phone"] = patient_phone
@@ -3042,14 +3067,16 @@ async def flows_endpoint(request: Request):
                 clinic_id=clinic_id,
             )
             logger.info(f"📤 Flow response: {json.dumps(result)[:500]}")
-            return result
+            return prepare_flow_response(result, aes_key, initial_vector, is_encrypted)
         else:
             logger.error("Flows handler not initialized")
-            return {"data": {"error_message": "Erro interno"}}
+            response = {"data": {"error_message": "Erro interno"}}
+            return prepare_flow_response(response, aes_key, initial_vector, is_encrypted)
 
     except Exception as e:
         logger.error(f"❌ Flow endpoint error: {e}")
-        return {"data": {"error_message": "Erro ao processar solicitação"}}
+        response = {"data": {"error_message": "Erro ao processar solicitação"}}
+        return prepare_flow_response(response, aes_key, initial_vector, is_encrypted)
 
 
 # ============================================

@@ -47,3 +47,8 @@ coverage/
 firebase-debug.log
 firestore-debug.log
 ui-debug.log
+
+# Cryptographic keys (WhatsApp Flows)
+*.pem
+*_private_key*
+*_public_key*
