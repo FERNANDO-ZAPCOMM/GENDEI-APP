@@ -120,6 +120,10 @@
         "NOT_A_BIZ": "Não é um negócio"
       },
       "completed": "completo"
+    },
+    "flows": {
+      "title": "WhatsApp Flows",
+      "description": "Fluxos interativos de agendamento"
     }
   },
   "onboarding": {

@@ -26,7 +26,8 @@ interface ConnectionStatusCardProps {
   isSyncing?: boolean;
 }
 
-export function ConnectionStatusCard({
+// Content-only version for use inside CollapsibleCard
+export function ConnectionStatusCardContent({
   status,
   onSync,
   isSyncing = false,
@@ -43,33 +44,20 @@ export function ConnectionStatusCard({
   const displayPhoneNumber = formatPhoneForDisplay(rawPhoneNumber);
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <div>
-            <CardTitle>
-              {t('settings.whatsapp.connection.title') || 'Connection Status'}
-            </CardTitle>
-            <CardDescription>
-              {t('settings.whatsapp.connection.subtitle') ||
-                'Your WhatsApp Business Account connection details'}
-            </CardDescription>
-          </div>
-          <div className="flex items-center gap-2">
-            {onSync && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={onSync}
-                disabled={isSyncing}
-              >
-                <RefreshCw className={`h-4 w-4 ${isSyncing ? 'animate-spin' : ''}`} />
-              </Button>
-            )}
-          </div>
+    <div className="space-y-4 pt-4">
+      {/* Sync button */}
+      {onSync && (
+        <div className="flex justify-end -mt-2 mb-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onSync}
+            disabled={isSyncing}
+          >
+            <RefreshCw className={`h-4 w-4 ${isSyncing ? 'animate-spin' : ''}`} />
+          </Button>
         </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
+      )}
         {/* Business Manager Status */}
         <div className="flex items-start justify-between border-b pb-3">
           <div>
@@ -195,6 +183,35 @@ export function ConnectionStatusCard({
             </p>
           </div>
         )}
+    </div>
+  );
+}
+
+// Full card version (for backwards compatibility)
+export function ConnectionStatusCard({
+  status,
+  onSync,
+  isSyncing = false,
+}: ConnectionStatusCardProps) {
+  const t = useTranslations();
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle>
+              {t('settings.whatsapp.connection.title') || 'Connection Status'}
+            </CardTitle>
+            <CardDescription>
+              {t('settings.whatsapp.connection.subtitle') ||
+                'Your WhatsApp Business Account connection details'}
+            </CardDescription>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <ConnectionStatusCardContent status={status} onSync={onSync} isSyncing={isSyncing} />
       </CardContent>
     </Card>
   );

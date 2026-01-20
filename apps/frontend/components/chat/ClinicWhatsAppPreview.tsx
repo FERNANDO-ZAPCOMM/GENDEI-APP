@@ -11,6 +11,7 @@ interface ClinicPreviewData {
   openingHours?: string;
   address?: string;
   addressData?: ClinicAddress;
+  greetingSummary?: string;
 }
 
 interface ClinicWhatsAppPreviewProps {
@@ -69,11 +70,13 @@ export function ClinicWhatsAppPreview({ clinicData, className }: ClinicWhatsAppP
     if (scenario === 'location') {
       messages.push({
         who: 'patient',
-        text: 'Olá, onde fica a clínica?',
+        text: 'Oi, onde fica a clínica?',
       });
       messages.push({
         who: 'bot',
-        text: `Olá! Bem-vindo à ${clinicName}! 😊`,
+        text: clinicData.greetingSummary
+          ? `👋 Bem-vindo(a) à ${clinicName}!\n\n${clinicData.greetingSummary}`
+          : `👋 Bem-vindo(a) à ${clinicName}!`,
       });
       messages.push({
         who: 'bot',
@@ -100,7 +103,9 @@ export function ClinicWhatsAppPreview({ clinicData, className }: ClinicWhatsAppP
       });
       messages.push({
         who: 'bot',
-        text: `Olá! Bem-vindo à ${clinicName}! 😊`,
+        text: clinicData.greetingSummary
+          ? `👋 Bem-vindo(a) à ${clinicName}!\n\n${clinicData.greetingSummary}`
+          : `👋 Bem-vindo(a) à ${clinicName}!`,
       });
       messages.push({
         who: 'bot',
@@ -121,11 +126,13 @@ export function ClinicWhatsAppPreview({ clinicData, className }: ClinicWhatsAppP
     if (scenario === 'contact') {
       messages.push({
         who: 'patient',
-        text: 'Preciso de mais informações',
+        text: 'Oi, preciso de informações',
       });
       messages.push({
         who: 'bot',
-        text: `Olá! Bem-vindo à ${clinicName}! 😊 Como posso ajudar?`,
+        text: clinicData.greetingSummary
+          ? `👋 Bem-vindo(a) à ${clinicName}!\n\n${clinicData.greetingSummary}\n\nComo posso ajudar?`
+          : `👋 Bem-vindo(a) à ${clinicName}!\n\nComo posso ajudar?`,
       });
       messages.push({
         who: 'patient',
@@ -149,11 +156,13 @@ export function ClinicWhatsAppPreview({ clinicData, className }: ClinicWhatsAppP
     if (scenario === 'complete') {
       messages.push({
         who: 'patient',
-        text: 'Olá, gostaria de agendar uma consulta',
+        text: 'Oi',
       });
       messages.push({
         who: 'bot',
-        text: `Olá! Bem-vindo à ${clinicName}! 🎉`,
+        text: clinicData.greetingSummary
+          ? `👋 Bem-vindo(a) à ${clinicName}!\n\n${clinicData.greetingSummary}\n\nComo posso ajudar?`
+          : `👋 Bem-vindo(a) à ${clinicName}!\n\nComo posso ajudar?`,
       });
       messages.push({
         who: 'patient',
@@ -185,23 +194,29 @@ export function ClinicWhatsAppPreview({ clinicData, className }: ClinicWhatsAppP
     // SCENARIO: Name-only (default greeting)
     messages.push({
       who: 'patient',
-      text: 'Olá, gostaria de agendar uma consulta',
+      text: 'Oi',
     });
-    messages.push({
-      who: 'bot',
-      text: `Olá! Bem-vindo à ${clinicName}! 🎉 Sou o assistente virtual e estou aqui para ajudar você.`,
-    });
-    messages.push({
-      who: 'bot',
-      text: 'Me conta, qual especialidade você procura? 🤔',
-    });
+
+    // Use greetingSummary if available, otherwise use generic greeting
+    if (clinicData.greetingSummary) {
+      messages.push({
+        who: 'bot',
+        text: `👋 Bem-vindo(a) à ${clinicName}!\n\n${clinicData.greetingSummary}\n\nComo posso ajudar?`,
+      });
+    } else {
+      messages.push({
+        who: 'bot',
+        text: `👋 Bem-vindo(a) à ${clinicName}!\n\nComo posso ajudar?`,
+      });
+    }
+
     messages.push({
       who: 'patient',
-      text: 'Quero agendar para amanhã',
+      text: 'Quero agendar',
     });
     messages.push({
       who: 'bot',
-      text: 'Show! Deixa eu verificar os horários disponíveis! ✨',
+      text: 'Ótimo! Deixa eu verificar os horários disponíveis! ✨',
     });
 
     return messages;

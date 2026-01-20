@@ -51,7 +51,7 @@ export default function PaymentsPage() {
     acceptsConvenio: false,
     convenioList: [],
     acceptsParticular: true,
-    requiresDeposit: false,
+    requiresDeposit: true, // Always enabled - business model charges 6% from signal
     depositPercentage: 30,
     pixKey: '',
   });
@@ -65,7 +65,11 @@ export default function PaymentsPage() {
     if (currentClinic) {
       const existingSettings = (currentClinic as unknown as { paymentSettings?: PaymentSettings }).paymentSettings;
       if (existingSettings) {
-        setSettings(existingSettings);
+        // Always ensure requiresDeposit is true (business model requirement)
+        setSettings({
+          ...existingSettings,
+          requiresDeposit: true,
+        });
         // Pre-fill confirm field if pixKey already exists
         if (existingSettings.pixKey) {
           setConfirmPixKey(existingSettings.pixKey);
@@ -73,7 +77,7 @@ export default function PaymentsPage() {
       } else if (currentClinic.depositPercentage !== undefined) {
         setSettings((prev) => ({
           ...prev,
-          requiresDeposit: currentClinic.depositPercentage! > 0,
+          requiresDeposit: true, // Always true
           depositPercentage: currentClinic.depositPercentage || 30,
         }));
       }
@@ -107,8 +111,15 @@ export default function PaymentsPage() {
   };
 
   const handleSave = async () => {
+    // Validate PIX key is required
+    if (!settings.pixKey || !settings.pixKey.trim()) {
+      setPixKeyError('A chave PIX é obrigatória');
+      toast.error('A chave PIX é obrigatória para receber pagamentos.');
+      return;
+    }
+
     // Validate PIX key confirmation
-    if (settings.pixKey && settings.pixKey !== confirmPixKey) {
+    if (settings.pixKey !== confirmPixKey) {
       setPixKeyError('As chaves PIX não coincidem');
       toast.error('As chaves PIX não coincidem. Por favor, verifique.');
       return;
@@ -117,10 +128,15 @@ export default function PaymentsPage() {
 
     setIsSaving(true);
     try {
+      // Always ensure requiresDeposit is true (business model requirement)
+      const settingsToSave = {
+        ...settings,
+        requiresDeposit: true,
+      };
       await updateClinic.mutateAsync({
-        paymentSettings: settings,
+        paymentSettings: settingsToSave,
         pixKey: settings.pixKey, // Also save at root level for easier access
-        depositPercentage: settings.requiresDeposit ? settings.depositPercentage : 0,
+        depositPercentage: settings.depositPercentage, // Always save since deposit is always required
       } as Record<string, unknown>);
       toast.success('Configurações de pagamento salvas!');
 
@@ -276,58 +292,47 @@ export default function PaymentsPage() {
             <Percent className="w-4 h-4" />
             Sinal / Depósito
           </CardTitle>
-          <CardDescription>Configure se deseja solicitar um sinal para confirmar agendamentos</CardDescription>
+          <CardDescription>Configure o sinal para confirmar agendamentos</CardDescription>
         </CardHeader>
         <CardContent>
-          <div
-            className={cn(
-              'p-4 border rounded-lg transition-all',
-              settings.requiresDeposit ? 'border-green-200 bg-green-50/30' : ''
-            )}
-          >
+          <div className="p-4 border rounded-lg border-green-200 bg-green-50/30">
             <div className="flex items-center justify-between">
               <div>
-                <Label className="font-medium">Exigir Sinal</Label>
+                <Label className="font-medium">Sinal Obrigatório</Label>
                 <p className="text-sm text-muted-foreground">
-                  Solicitar pagamento antecipado para confirmar consulta
+                  Pagamento antecipado para confirmar consulta
                 </p>
               </div>
-              <Switch
-                checked={settings.requiresDeposit}
-                onCheckedChange={(checked) => updateSettings({ requiresDeposit: checked })}
-                disabled={isSaving}
-              />
+              <Badge variant="default" className="bg-green-600">Ativo</Badge>
             </div>
 
-            {settings.requiresDeposit && (
-              <div className="mt-4 pt-4 border-t space-y-4">
-                <div className="space-y-2">
-                  <Label className="text-sm">Porcentagem do Sinal</Label>
-                  <Select
-                    value={String(settings.depositPercentage)}
-                    onValueChange={(value) => updateSettings({ depositPercentage: Number(value) })}
-                    disabled={isSaving}
-                  >
-                    <SelectTrigger className="w-full max-w-[200px]">
-                      <SelectValue placeholder="Selecione a porcentagem" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="10">10%</SelectItem>
-                      <SelectItem value="20">20%</SelectItem>
-                      <SelectItem value="25">25%</SelectItem>
-                      <SelectItem value="30">30%</SelectItem>
-                      <SelectItem value="40">40%</SelectItem>
-                      <SelectItem value="50">50%</SelectItem>
-                      <SelectItem value="75">75%</SelectItem>
-                      <SelectItem value="100">100%</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground">
-                    Porcentagem do valor da consulta a ser cobrada como sinal
-                  </p>
-                </div>
+            <div className="mt-4 pt-4 border-t space-y-4">
+              <div className="space-y-2">
+                <Label className="text-sm">Porcentagem do Sinal</Label>
+                <Select
+                  value={String(settings.depositPercentage)}
+                  onValueChange={(value) => updateSettings({ depositPercentage: Number(value) })}
+                  disabled={isSaving}
+                >
+                  <SelectTrigger className="w-full max-w-[200px]">
+                    <SelectValue placeholder="Selecione a porcentagem" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="10">10%</SelectItem>
+                    <SelectItem value="20">20%</SelectItem>
+                    <SelectItem value="25">25%</SelectItem>
+                    <SelectItem value="30">30%</SelectItem>
+                    <SelectItem value="40">40%</SelectItem>
+                    <SelectItem value="50">50%</SelectItem>
+                    <SelectItem value="75">75%</SelectItem>
+                    <SelectItem value="100">100%</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Porcentagem do valor da consulta a ser cobrada como sinal
+                </p>
               </div>
-            )}
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -338,12 +343,15 @@ export default function PaymentsPage() {
           <CardTitle className="flex items-center gap-2 text-base">
             <Key className="w-4 h-4" />
             Chave PIX
+            <span className="text-red-500">*</span>
           </CardTitle>
           <CardDescription>Informe a chave PIX para recebimento de pagamentos</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="pixKey">Chave PIX</Label>
+            <Label htmlFor="pixKey">
+              Chave PIX <span className="text-red-500">*</span>
+            </Label>
             <Input
               id="pixKey"
               placeholder="CPF, CNPJ, e-mail, telefone ou chave aleatória"
@@ -354,10 +362,13 @@ export default function PaymentsPage() {
               }}
               disabled={isSaving}
               className={pixKeyError ? 'border-red-500' : ''}
+              required
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="confirmPixKey">Confirme a Chave PIX</Label>
+            <Label htmlFor="confirmPixKey">
+              Confirme a Chave PIX <span className="text-red-500">*</span>
+            </Label>
             <Input
               id="confirmPixKey"
               placeholder="Digite a chave PIX novamente"
@@ -368,6 +379,7 @@ export default function PaymentsPage() {
               }}
               disabled={isSaving}
               className={pixKeyError ? 'border-red-500' : ''}
+              required
             />
             {pixKeyError && (
               <p className="text-sm text-red-500">{pixKeyError}</p>

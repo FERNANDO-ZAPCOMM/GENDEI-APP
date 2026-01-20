@@ -55,11 +55,29 @@ export function useClinic() {
     },
   });
 
+  const generateSummary = useMutation({
+    mutationFn: async (data: { description: string; clinicName: string }) => {
+      const token = await getIdToken();
+      if (!token) throw new Error('Not authenticated');
+
+      return apiClient<{ summary: string }>('/clinics/me/generate-summary', {
+        method: 'POST',
+        token,
+        body: JSON.stringify(data),
+      });
+    },
+    onSuccess: () => {
+      // Refetch clinic data to get updated greetingSummary
+      queryClient.invalidateQueries({ queryKey: ['clinic', currentUser?.uid] });
+    },
+  });
+
   return {
     ...query,
     currentClinic: query.data ?? null,
     isLoading: authLoading || query.isLoading,
     updateClinic,
+    generateSummary,
   };
 }
 

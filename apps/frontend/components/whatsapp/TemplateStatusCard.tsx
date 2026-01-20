@@ -128,7 +128,8 @@ const GENDEI_TEMPLATES = [
   },
 ];
 
-export function TemplateStatusCard({ wabaId }: TemplateStatusCardProps) {
+// Content-only version for use inside CollapsibleCard
+export function TemplateStatusCardContent({ wabaId }: TemplateStatusCardProps) {
   const t = useTranslations();
   const { currentUser } = useAuth();
 
@@ -158,17 +159,7 @@ export function TemplateStatusCard({ wabaId }: TemplateStatusCardProps) {
       .every(t => t.status?.toUpperCase() === 'APPROVED');
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base flex items-center gap-2">
-          <FileText className="w-4 h-4" />
-          Templates de Mensagem
-        </CardTitle>
-        <CardDescription className="text-sm mt-1">
-          Templates para lembretes e confirmações de consultas
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
+    <div className="space-y-4 pt-4">
         {/* Loading state */}
         {isLoading && (
           <div className="flex items-center justify-center py-6">
@@ -263,6 +254,25 @@ export function TemplateStatusCard({ wabaId }: TemplateStatusCardProps) {
             </p>
           </div>
         )}
+    </div>
+  );
+}
+
+// Full card version (for backwards compatibility)
+export function TemplateStatusCard({ wabaId }: TemplateStatusCardProps) {
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base flex items-center gap-2">
+          <FileText className="w-4 h-4" />
+          Templates de Mensagem
+        </CardTitle>
+        <CardDescription className="text-sm mt-1">
+          Templates para lembretes e confirmações de consultas
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <TemplateStatusCardContent wabaId={wabaId} />
       </CardContent>
     </Card>
   );

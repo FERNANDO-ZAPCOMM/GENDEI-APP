@@ -49,7 +49,8 @@ const VERTICAL_OPTIONS = [
 
 type TabKey = 'photo' | 'status' | 'description' | 'category' | 'website';
 
-export function BusinessProfileCard({ phoneNumberId }: BusinessProfileCardProps) {
+// Content-only version for use inside CollapsibleCard
+export function BusinessProfileCardContent({ phoneNumberId }: BusinessProfileCardProps) {
   const t = useTranslations();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [activeTab, setActiveTab] = useState<TabKey>('photo');
@@ -97,22 +98,6 @@ export function BusinessProfileCard({ phoneNumberId }: BusinessProfileCardProps)
       websites[index] = value;
       return { ...prev, websites };
     });
-  };
-
-  const addWebsite = () => {
-    if ((formData.websites?.length || 0) < 2) {
-      setFormData((prev) => ({
-        ...prev,
-        websites: [...(prev.websites || []), ''],
-      }));
-    }
-  };
-
-  const removeWebsite = (index: number) => {
-    setFormData((prev) => ({
-      ...prev,
-      websites: (prev.websites || []).filter((_, i) => i !== index),
-    }));
   };
 
   const handleSave = async () => {
@@ -178,47 +163,31 @@ export function BusinessProfileCard({ phoneNumberId }: BusinessProfileCardProps)
 
   if (isLoading) {
     return (
-      <Card>
-        <CardContent className="flex items-center justify-center py-8">
-          <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
-        </CardContent>
-      </Card>
+      <div className="flex items-center justify-center py-8">
+        <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+      </div>
     );
   }
 
   if (error) {
     return (
-      <Card>
-        <CardContent className="pt-6">
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>
-              {t('whatsapp.businessProfile.loadError') || 'Failed to load business profile'}
-            </AlertDescription>
-          </Alert>
-        </CardContent>
-      </Card>
+      <div className="pt-4">
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            {t('whatsapp.businessProfile.loadError') || 'Failed to load business profile'}
+          </AlertDescription>
+        </Alert>
+      </div>
     );
   }
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <div>
-            <CardTitle>
-              {t('whatsapp.businessProfile.title') || 'Business Profile'}
-            </CardTitle>
-            <CardDescription>
-              {t('whatsapp.businessProfile.description') || 'Customize how your business appears to customers on WhatsApp'}
-            </CardDescription>
-          </div>
-          <div className="text-xs text-gray-500">
-            {completedSteps}/{totalSteps} {t('whatsapp.businessProfile.completed') || 'completed'}
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
+    <div className="space-y-4 pt-4">
+      {/* Progress indicator */}
+      <div className="text-xs text-gray-500 text-right">
+        {completedSteps}/{totalSteps} {t('whatsapp.businessProfile.completed') || 'completed'}
+      </div>
         {/* Horizontal Tabs */}
         <div className="flex flex-row gap-1 pb-2 border-b overflow-x-auto">
           {tabs.map((tab) => (
@@ -395,6 +364,26 @@ export function BusinessProfileCard({ phoneNumberId }: BusinessProfileCardProps)
             </>
           )}
         </Button>
+    </div>
+  );
+}
+
+// Full card version (for backwards compatibility)
+export function BusinessProfileCard({ phoneNumberId }: BusinessProfileCardProps) {
+  const t = useTranslations();
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle>
+          {t('whatsapp.businessProfile.title') || 'Business Profile'}
+        </CardTitle>
+        <CardDescription>
+          {t('whatsapp.businessProfile.description') || 'Customize how your business appears to customers on WhatsApp'}
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <BusinessProfileCardContent phoneNumberId={phoneNumberId} />
       </CardContent>
     </Card>
   );

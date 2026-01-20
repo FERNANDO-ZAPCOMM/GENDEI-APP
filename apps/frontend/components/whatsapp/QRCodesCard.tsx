@@ -25,7 +25,8 @@ interface QRCodesCardProps {
   phoneNumberId: string;
 }
 
-export function QRCodesCard({ phoneNumberId }: QRCodesCardProps) {
+// Content-only version for use inside CollapsibleCard
+export function QRCodesCardContent({ phoneNumberId }: QRCodesCardProps) {
   const t = useTranslations();
   const { getIdToken } = useAuth();
   const queryClient = useQueryClient();
@@ -160,17 +161,7 @@ export function QRCodesCard({ phoneNumberId }: QRCodesCardProps) {
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <QrCode className="h-5 w-5" />
-          {t('whatsapp.qrCodes.title') || 'QR Codes & Short Links'}
-        </CardTitle>
-        <CardDescription>
-          {t('whatsapp.qrCodes.description') || 'Create QR codes with pre-filled messages for customers to scan'}
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
+    <div className="space-y-6 pt-4">
         {/* Create new QR code */}
         <div className="space-y-3">
           <Label htmlFor="prefilled-message">
@@ -284,6 +275,27 @@ export function QRCodesCard({ phoneNumberId }: QRCodesCardProps) {
             </p>
           </div>
         )}
+    </div>
+  );
+}
+
+// Full card version (for backwards compatibility)
+export function QRCodesCard({ phoneNumberId }: QRCodesCardProps) {
+  const t = useTranslations();
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <QrCode className="h-5 w-5" />
+          {t('whatsapp.qrCodes.title') || 'QR Codes & Short Links'}
+        </CardTitle>
+        <CardDescription>
+          {t('whatsapp.qrCodes.description') || 'Create QR codes with pre-filled messages for customers to scan'}
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <QRCodesCardContent phoneNumberId={phoneNumberId} />
       </CardContent>
     </Card>
   );

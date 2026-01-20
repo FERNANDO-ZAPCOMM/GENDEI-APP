@@ -23,6 +23,7 @@ import { FaWhatsapp } from 'react-icons/fa';
 
 import { useAuth } from '@/hooks/use-auth';
 import { useClinic, useClinicStats } from '@/hooks/use-clinic';
+import { useSidebarNotifications, SidebarNotification } from '@/hooks/use-sidebar-notifications';
 import { Badge } from '@/components/ui/badge';
 import {
   DropdownMenu,
@@ -35,12 +36,63 @@ import {
 import { TypingDots } from '@/components/PageLoader';
 import { cn } from '@/lib/utils';
 
+// Pulsing dot indicator component
+function NotificationDot({ notification, size = 'sm' }: { notification: SidebarNotification | null; size?: 'sm' | 'md' }) {
+  if (!notification) return null;
+
+  const sizeClasses = size === 'sm' ? 'w-2 h-2' : 'w-2.5 h-2.5';
+
+  // Color based on notification type
+  const colorClasses = {
+    onboarding: 'bg-orange-500', // Orange for onboarding items
+    action: 'bg-blue-500',       // Blue for pending actions
+    alert: 'bg-red-500',         // Red for alerts/escalations
+  }[notification.type];
+
+  return (
+    <span className="relative flex">
+      <span
+        className={cn(
+          sizeClasses,
+          colorClasses,
+          'rounded-full animate-pulse'
+        )}
+      />
+      <span
+        className={cn(
+          sizeClasses,
+          colorClasses,
+          'absolute rounded-full animate-ping opacity-75'
+        )}
+      />
+    </span>
+  );
+}
+
+// Badge with count for action items
+function NotificationBadge({ notification }: { notification: SidebarNotification | null }) {
+  if (!notification || !notification.count) return null;
+
+  const colorClasses = {
+    onboarding: 'bg-orange-100 text-orange-700',
+    action: 'bg-blue-100 text-blue-700',
+    alert: 'bg-red-100 text-red-700',
+  }[notification.type];
+
+  return (
+    <Badge variant="secondary" className={cn('text-xs ml-auto', colorClasses)}>
+      {notification.count}
+    </Badge>
+  );
+}
+
 interface NavItem {
   name: string;
   href: string;
   icon: any;
   children?: NavItem[];
   badge?: number;
+  notificationKey?: keyof ReturnType<typeof useSidebarNotifications>; // Key to lookup notification
 }
 
 // Gendei clinic navigation structure
@@ -52,7 +104,7 @@ const navigation: NavItem[] = [
     href: '#',
     icon: Calendar,
     children: [
-      { name: 'agenda', href: '/dashboard/appointments', icon: Calendar },
+      { name: 'agenda', href: '/dashboard/appointments', icon: Calendar, notificationKey: 'appointments' },
     ],
   },
   {
@@ -60,7 +112,7 @@ const navigation: NavItem[] = [
     href: '#',
     icon: UserPlus,
     children: [
-      { name: 'professionals', href: '/dashboard/professionals', icon: UserPlus },
+      { name: 'professionals', href: '/dashboard/professionals', icon: UserPlus, notificationKey: 'professionals' },
     ],
   },
   {
@@ -68,8 +120,8 @@ const navigation: NavItem[] = [
     href: '#',
     icon: Users,
     children: [
-      { name: 'patients', href: '/dashboard/patients', icon: Users },
-      { name: 'conversations', href: '/dashboard/conversations', icon: MessageSquare },
+      { name: 'patients', href: '/dashboard/patients', icon: Users, notificationKey: 'patients' },
+      { name: 'conversations', href: '/dashboard/conversations', icon: MessageSquare, notificationKey: 'conversations' },
     ],
   },
   {
@@ -77,9 +129,9 @@ const navigation: NavItem[] = [
     href: '#',
     icon: Settings,
     children: [
-      { name: 'clinic', href: '/dashboard/clinic', icon: Stethoscope },
-      { name: 'payments', href: '/dashboard/payments', icon: CreditCard },
-      { name: 'whatsapp', href: '/dashboard/whatsapp', icon: FaWhatsapp },
+      { name: 'clinic', href: '/dashboard/clinic', icon: Stethoscope, notificationKey: 'clinic' },
+      { name: 'payments', href: '/dashboard/payments', icon: CreditCard, notificationKey: 'payments' },
+      { name: 'whatsapp', href: '/dashboard/whatsapp', icon: FaWhatsapp, notificationKey: 'whatsapp' },
       { name: 'account', href: '/dashboard/account', icon: User },
     ],
   },
@@ -91,12 +143,14 @@ function NavigationItems({
   t,
   collapsed,
   todayCount,
+  notifications,
 }: {
   navigation: NavItem[];
   pathname: string;
   t: any;
   collapsed: boolean;
   todayCount: number;
+  notifications: ReturnType<typeof useSidebarNotifications>;
 }) {
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     agendaSection: true,
@@ -149,6 +203,19 @@ function NavigationItems({
 
     // Show today count badge on agenda
     const showBadge = item.name === 'agenda' && todayCount > 0;
+
+    // Get notification for this item
+    const notification = item.notificationKey
+      ? notifications[item.notificationKey] as SidebarNotification | null
+      : null;
+
+    // Check if any children have notifications (for section headers)
+    const hasChildNotifications = hasChildren && visibleChildren.some((child) => {
+      const childNotification = child.notificationKey
+        ? notifications[child.notificationKey] as SidebarNotification | null
+        : null;
+      return childNotification !== null;
+    });
 
     if (collapsed && level === 0) {
       // Collapsed view - icons only
@@ -227,6 +294,10 @@ function NavigationItems({
               <div className="flex items-center gap-3">
                 {level > 0 && <Icon className="w-4 h-4" />}
                 {t(`dashboard.${item.name}`)}
+                {/* Show dot on section header if any children have notifications */}
+                {hasChildNotifications && !isExpanded && (
+                  <NotificationDot notification={{ type: 'onboarding', priority: 1 }} size="sm" />
+                )}
               </div>
               {isExpanded ? (
                 <ChevronDown className="w-4 h-4" />
@@ -251,13 +322,24 @@ function NavigationItems({
             )}
             style={{ paddingLeft: `${level * 12 + 16}px` }}
           >
-            <Icon className="w-4 h-4" />
+            <div className="relative">
+              <Icon className="w-4 h-4" />
+              {/* Notification dot on icon */}
+              {notification && (
+                <span className="absolute -top-1 -right-1">
+                  <NotificationDot notification={notification} size="sm" />
+                </span>
+              )}
+            </div>
             <span className="flex-1">{t(`dashboard.${item.name}`)}</span>
-            {showBadge && (
+            {/* Show count badge for action notifications */}
+            {notification?.count ? (
+              <NotificationBadge notification={notification} />
+            ) : showBadge ? (
               <Badge variant="secondary" className="bg-blue-100 text-blue-700 text-xs">
                 {todayCount}
               </Badge>
-            )}
+            ) : null}
           </Link>
         )}
       </div>
@@ -268,12 +350,20 @@ function NavigationItems({
 }
 
 // Mobile Bottom Navigation
-function MobileBottomNav({ pathname, locale }: { pathname: string; locale: string }) {
+function MobileBottomNav({
+  pathname,
+  locale,
+  notifications,
+}: {
+  pathname: string;
+  locale: string;
+  notifications: ReturnType<typeof useSidebarNotifications>;
+}) {
   const bottomNavItems = [
-    { name: 'Início', href: '/dashboard', icon: LayoutDashboard },
-    { name: 'Agenda', href: '/dashboard/appointments', icon: Calendar },
-    { name: 'Pacientes', href: '/dashboard/patients', icon: Users },
-    { name: 'Config', href: '/dashboard/clinic', icon: Settings },
+    { name: 'Início', href: '/dashboard', icon: LayoutDashboard, notificationKey: null },
+    { name: 'Agenda', href: '/dashboard/appointments', icon: Calendar, notificationKey: 'appointments' as const },
+    { name: 'Pacientes', href: '/dashboard/patients', icon: Users, notificationKey: 'patients' as const },
+    { name: 'Config', href: '/dashboard/clinic', icon: Settings, notificationKey: 'clinic' as const },
   ];
 
   const isActive = (href: string) => {
@@ -282,22 +372,41 @@ function MobileBottomNav({ pathname, locale }: { pathname: string; locale: strin
     return pathname.startsWith(fullPath);
   };
 
+  // Check if config section has any notifications (clinic, payments, whatsapp)
+  const configHasNotification = notifications.clinic || notifications.payments || notifications.whatsapp;
+
   return (
     <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-200 safe-area-bottom">
       <div className="flex items-center justify-around py-2">
         {bottomNavItems.map((item) => {
           const Icon = item.icon;
           const active = isActive(item.href);
+          // Get notification - for Config, check all config items
+          const notification = item.name === 'Config'
+            ? configHasNotification
+              ? { type: 'onboarding' as const, priority: 1 }
+              : null
+            : item.notificationKey
+              ? notifications[item.notificationKey] as SidebarNotification | null
+              : null;
+
           return (
             <Link
               key={item.name}
               href={`/${locale}${item.href}`}
               className={cn(
-                'flex flex-col items-center gap-1 px-3 py-2 rounded-lg transition-colors min-w-[64px]',
+                'flex flex-col items-center gap-1 px-3 py-2 rounded-lg transition-colors min-w-[64px] relative',
                 active ? 'text-blue-600' : 'text-gray-500'
               )}
             >
-              <Icon className={cn('w-5 h-5', active && 'text-blue-600')} />
+              <div className="relative">
+                <Icon className={cn('w-5 h-5', active && 'text-blue-600')} />
+                {notification && (
+                  <span className="absolute -top-1 -right-1">
+                    <NotificationDot notification={notification} size="sm" />
+                  </span>
+                )}
+              </div>
               <span className="text-xs font-medium">{item.name}</span>
             </Link>
           );
@@ -314,6 +423,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const { currentUser, signOut, loading: authLoading } = useAuth();
   const { currentClinic: clinic, isLoading: clinicLoading } = useClinic();
   const { data: stats } = useClinicStats(clinic?.id || '');
+  const notifications = useSidebarNotifications();
 
   const locale = pathname.split('/')[1];
   const todayCount = stats?.todayAppointments || 0;
@@ -367,6 +477,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             t={t}
             collapsed={false}
             todayCount={todayCount}
+            notifications={notifications}
           />
         </nav>
 
@@ -394,7 +505,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </main>
 
       {/* Mobile Bottom Navigation */}
-      <MobileBottomNav pathname={pathname} locale={locale} />
+      <MobileBottomNav pathname={pathname} locale={locale} notifications={notifications} />
     </div>
   );
 }

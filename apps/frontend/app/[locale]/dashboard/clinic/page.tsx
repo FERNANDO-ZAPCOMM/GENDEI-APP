@@ -15,7 +15,8 @@ import {
   Info,
   CheckCircle2,
   Save,
-  Loader2
+  Loader2,
+  Sparkles
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
@@ -89,7 +90,7 @@ export default function ClinicSettingsPage() {
   const router = useRouter();
   const params = useParams();
   const locale = (params?.locale as string) || 'pt-BR';
-  const { currentClinic, isLoading, updateClinic } = useClinic();
+  const { currentClinic, isLoading, updateClinic, generateSummary } = useClinic();
 
   const [activeTab, setActiveTab] = useState<TabKey>('basic');
   const [formData, setFormData] = useState({
@@ -101,6 +102,7 @@ export default function ClinicSettingsPage() {
     email: '',
     website: '',
     openingHours: '',
+    greetingSummary: '',
   });
   const [openTime, setOpenTime] = useState('08:00');
   const [closeTime, setCloseTime] = useState('18:00');
@@ -131,6 +133,7 @@ export default function ClinicSettingsPage() {
         email: currentClinic.email || '',
         website: clinicData.website || '',
         openingHours: currentClinic.openingHours || '',
+        greetingSummary: clinicData.greetingSummary || '',
       });
       setAddressData(currentClinic.addressData);
 
@@ -142,14 +145,20 @@ export default function ClinicSettingsPage() {
         }
         // Parse selected days from openingHours string
         const hoursStr = currentClinic.openingHours;
+
+        // Check for range formats first
+        const isSegSex = hoursStr.includes('Seg-Sex'); // Mon-Fri
+        const isSegSab = hoursStr.includes('Seg-Sáb') || hoursStr.includes('Seg-Sab'); // Mon-Sat
+        const isTodos = hoursStr.includes('Todos');
+
         const newDays = {
-          seg: hoursStr.includes('Seg') || hoursStr.includes('Todos'),
-          ter: hoursStr.includes('Ter') || hoursStr.includes('Todos'),
-          qua: hoursStr.includes('Qua') || hoursStr.includes('Todos'),
-          qui: hoursStr.includes('Qui') || hoursStr.includes('Todos'),
-          sex: hoursStr.includes('Sex') || hoursStr.includes('Todos'),
-          sab: hoursStr.includes('Sáb') || hoursStr.includes('Sab') || hoursStr.includes('Todos'),
-          dom: hoursStr.includes('Dom') || hoursStr.includes('Todos'),
+          seg: hoursStr.includes('Seg') || isTodos,
+          ter: hoursStr.includes('Ter') || isSegSex || isSegSab || isTodos,
+          qua: hoursStr.includes('Qua') || isSegSex || isSegSab || isTodos,
+          qui: hoursStr.includes('Qui') || isSegSex || isSegSab || isTodos,
+          sex: hoursStr.includes('Sex') || isSegSex || isSegSab || isTodos,
+          sab: hoursStr.includes('Sáb') || hoursStr.includes('Sab') || isSegSab || isTodos,
+          dom: hoursStr.includes('Dom') || isTodos,
         };
         setSelectedDays(newDays);
         setHoursConfigured(true);
@@ -238,7 +247,7 @@ export default function ClinicSettingsPage() {
   // Check completion status for each tab
   const hasBasicInfo = !!(formData.name && formData.categories.length > 0);
   const hasContact = !!(formData.phone);
-  const hasLocation = !!(formData.address);
+  const hasLocation = !!(formData.address || addressData?.formatted || currentClinic?.addressData?.formatted);
   const hasHours = hoursConfigured && Object.values(selectedDays).some(Boolean);
 
   const completedTabs = [hasBasicInfo, hasContact, hasLocation, hasHours].filter(Boolean).length;
@@ -437,6 +446,51 @@ export default function ClinicSettingsPage() {
                       {formData.description.length}/750
                     </p>
                   </div>
+
+                  {/* AI Summary Generation */}
+                  {formData.description.length >= 50 && (
+                    <div className="space-y-2 p-3 bg-gray-50 rounded-lg border">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-sm font-medium">
+                          Resumo para Saudação (IA)
+                        </Label>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={async () => {
+                            try {
+                              const result = await generateSummary.mutateAsync({
+                                description: formData.description,
+                                clinicName: formData.name,
+                              });
+                              setFormData({ ...formData, greetingSummary: result.summary });
+                              toast.success('Resumo gerado com sucesso!');
+                            } catch (error) {
+                              toast.error('Erro ao gerar resumo');
+                            }
+                          }}
+                          disabled={generateSummary.isPending}
+                        >
+                          {generateSummary.isPending ? (
+                            <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                          ) : (
+                            <Sparkles className="h-3 w-3 mr-1" />
+                          )}
+                          Gerar
+                        </Button>
+                      </div>
+                      {formData.greetingSummary ? (
+                        <div className="p-2 bg-white rounded border text-sm text-gray-700">
+                          {formData.greetingSummary}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">
+                          Clique em "Gerar" para criar um resumo automático da sua descrição para a saudação do bot.
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -503,7 +557,8 @@ export default function ClinicSettingsPage() {
                     <p className="text-xs text-muted-foreground">
                       Selecione da lista para obter as coordenadas automaticamente
                     </p>
-                    <AddressDetails addressData={addressData} />
+                    {/* Show address details from local state OR from saved clinic data */}
+                    <AddressDetails addressData={addressData || currentClinic?.addressData} />
                   </div>
                 </div>
               )}
@@ -607,7 +662,8 @@ export default function ClinicSettingsPage() {
                     email: formData.email,
                     openingHours: formData.openingHours || (formatDaysString(selectedDays) ? `${formatDaysString(selectedDays)}: ${openTime}-${closeTime}` : ''),
                     address: formData.address,
-                    addressData: addressData,
+                    addressData: addressData || currentClinic?.addressData,
+                    greetingSummary: formData.greetingSummary,
                   }}
                 />
               </CardContent>

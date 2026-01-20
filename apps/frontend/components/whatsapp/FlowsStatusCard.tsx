@@ -91,7 +91,8 @@ function FlowRow({
   );
 }
 
-export function FlowsStatusCard({ wabaId }: FlowsStatusCardProps) {
+// Content-only version for use inside CollapsibleCard
+export function FlowsStatusCardContent({ wabaId }: FlowsStatusCardProps) {
   const { currentClinic: clinic, refetch } = useClinic();
   const { getIdToken } = useAuth();
   const [isUpdating, setIsUpdating] = useState(false);
@@ -151,17 +152,7 @@ export function FlowsStatusCard({ wabaId }: FlowsStatusCardProps) {
   };
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base flex items-center gap-2">
-          <Workflow className="w-4 h-4" />
-          WhatsApp Flows
-        </CardTitle>
-        <CardDescription className="text-sm mt-1">
-          Formulários interativos para agendamento de consultas
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
+    <div className="space-y-4 pt-4">
         {/* Flows list */}
         <div className="space-y-3">
           {GENDEI_FLOWS.map((flowDef) => {
@@ -181,13 +172,24 @@ export function FlowsStatusCard({ wabaId }: FlowsStatusCardProps) {
           })}
         </div>
 
-        {/* Info about flows */}
+        {/* Info about flows - with create button */}
         {!anyFlowInstalled && (
-          <div className="bg-amber-50 rounded-lg p-3">
-            <p className="text-xs text-amber-700">
-              Os Flows serão criados automaticamente durante a conexão do WhatsApp.
-              Se não aparecerem, reconecte sua conta.
-            </p>
+          <div className="space-y-3">
+            <div className="bg-amber-50 rounded-lg p-3">
+              <p className="text-xs text-amber-700">
+                Os Flows serão criados automaticamente durante a conexão do WhatsApp.
+                Se não aparecerem, clique no botão abaixo para criar.
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleUpdateFlows}
+              disabled={isUpdating}
+            >
+              <RefreshCw className={`w-4 h-4 mr-2 ${isUpdating ? 'animate-spin' : ''}`} />
+              {isUpdating ? 'Criando Flows...' : 'Criar Flows'}
+            </Button>
           </div>
         )}
 
@@ -237,6 +239,25 @@ export function FlowsStatusCard({ wabaId }: FlowsStatusCardProps) {
             </a>
           </div>
         )}
+    </div>
+  );
+}
+
+// Full card version (for backwards compatibility)
+export function FlowsStatusCard({ wabaId }: FlowsStatusCardProps) {
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base flex items-center gap-2">
+          <Workflow className="w-4 h-4" />
+          WhatsApp Flows
+        </CardTitle>
+        <CardDescription className="text-sm mt-1">
+          Formulários interativos para agendamento de consultas
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <FlowsStatusCardContent wabaId={wabaId} />
       </CardContent>
     </Card>
   );

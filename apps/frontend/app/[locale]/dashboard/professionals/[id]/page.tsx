@@ -173,8 +173,35 @@ export default function ProfessionalEditPage() {
   };
 
   const handleSubmit = async () => {
-    if (!formData.name) {
+    // Validate all required fields
+    if (!formData.name.trim()) {
       toast.error('Nome é obrigatório');
+      return;
+    }
+    if (!formData.specialty) {
+      toast.error('Especialidade é obrigatória');
+      return;
+    }
+    if (!formData.email.trim()) {
+      toast.error('E-mail é obrigatório');
+      return;
+    }
+    if (!formData.phone.trim()) {
+      toast.error('Telefone é obrigatório');
+      return;
+    }
+    if (!formData.appointmentDuration || formData.appointmentDuration <= 0) {
+      toast.error('Duração da consulta é obrigatória');
+      return;
+    }
+    if (!formData.consultationPrice || formData.consultationPrice <= 0) {
+      toast.error('Valor da consulta é obrigatório');
+      return;
+    }
+    // Validate working hours - at least one day must be configured
+    const hasWorkingHours = Object.keys(formData.workingHours).length > 0;
+    if (!hasWorkingHours) {
+      toast.error('Configure pelo menos um dia de atendimento');
       return;
     }
 
@@ -254,29 +281,14 @@ export default function ProfessionalEditPage() {
           <h1 className="text-2xl font-semibold text-gray-900">Editar Profissional</h1>
           <p className="text-gray-600 mt-1">Atualize as informações do profissional</p>
         </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            onClick={() => setShowDeleteDialog(true)}
-            className="text-red-600 hover:text-red-700 hover:bg-red-50"
-          >
-            <Trash2 className="w-4 h-4 mr-2" />
-            Excluir
-          </Button>
-          <Button onClick={handleSubmit} disabled={isSaving || !formData.name}>
-            {isSaving ? (
-              <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Salvando...
-              </>
-            ) : (
-              <>
-                <Save className="w-4 h-4 mr-2" />
-                Salvar
-              </>
-            )}
-          </Button>
-        </div>
+        <Button
+          variant="outline"
+          onClick={() => setShowDeleteDialog(true)}
+          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+        >
+          <Trash2 className="w-4 h-4 mr-2" />
+          Excluir
+        </Button>
       </div>
 
       {/* Form Card */}
@@ -336,7 +348,7 @@ export default function ProfessionalEditPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="specialty">Especialidade</Label>
+                <Label htmlFor="specialty">Especialidade <span className="text-red-500">*</span></Label>
                 <Select
                   value={formData.specialty}
                   onValueChange={(value) => setFormData({ ...formData, specialty: value })}
@@ -382,7 +394,7 @@ export default function ProfessionalEditPage() {
           {/* Contact Info */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="email">E-mail</Label>
+              <Label htmlFor="email">E-mail <span className="text-red-500">*</span></Label>
               <Input
                 id="email"
                 type="email"
@@ -393,7 +405,7 @@ export default function ProfessionalEditPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="phone">Telefone</Label>
+              <Label htmlFor="phone">Telefone <span className="text-red-500">*</span></Label>
               <Input
                 id="phone"
                 value={formData.phone}
@@ -407,7 +419,7 @@ export default function ProfessionalEditPage() {
           {/* Appointment Settings */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="duration">Duração da Consulta</Label>
+              <Label htmlFor="duration">Duração da Consulta <span className="text-red-500">*</span></Label>
               <Select
                 value={String(formData.appointmentDuration)}
                 onValueChange={(value) => setFormData({ ...formData, appointmentDuration: parseInt(value) })}
@@ -430,7 +442,7 @@ export default function ProfessionalEditPage() {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="price">Valor da Consulta (R$)</Label>
+              <Label htmlFor="price">Valor da Consulta (R$) <span className="text-red-500">*</span></Label>
               <div className="relative">
                 <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
                 <Input
@@ -523,6 +535,28 @@ export default function ProfessionalEditPage() {
           </p>
         </CardContent>
       </Card>
+
+      {/* Save Button - Fixed at bottom */}
+      <div className="flex justify-end pt-4 pb-6">
+        <Button
+          onClick={handleSubmit}
+          disabled={isSaving || !formData.name || !formData.specialty || !formData.email || !formData.phone || !formData.consultationPrice}
+          size="lg"
+          className="min-w-[200px]"
+        >
+          {isSaving ? (
+            <>
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              Salvando...
+            </>
+          ) : (
+            <>
+              <Save className="w-4 h-4 mr-2" />
+              Salvar Alterações
+            </>
+          )}
+        </Button>
+      </div>
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>

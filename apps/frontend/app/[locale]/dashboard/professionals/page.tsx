@@ -50,6 +50,10 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 
+interface WorkingHoursBackend {
+  [dayKey: string]: { start: string; end: string }[];
+}
+
 interface ProfessionalFormData {
   name: string;
   specialty: string;
@@ -60,7 +64,17 @@ interface ProfessionalFormData {
   active: boolean;
   photoUrl: string;
   bio: string;
+  workingHours: WorkingHoursBackend;
 }
+
+// Default working hours: Monday to Friday 9-18
+const defaultWorkingHours: WorkingHoursBackend = {
+  '0': [{ start: '09:00', end: '18:00' }],
+  '1': [{ start: '09:00', end: '18:00' }],
+  '2': [{ start: '09:00', end: '18:00' }],
+  '3': [{ start: '09:00', end: '18:00' }],
+  '4': [{ start: '09:00', end: '18:00' }],
+};
 
 const defaultFormData: ProfessionalFormData = {
   name: '',
@@ -72,7 +86,18 @@ const defaultFormData: ProfessionalFormData = {
   active: true,
   photoUrl: '',
   bio: '',
+  workingHours: { ...defaultWorkingHours },
 };
+
+const DAYS_OF_WEEK = [
+  { key: '0', label: 'Segunda-feira' },
+  { key: '1', label: 'Terça-feira' },
+  { key: '2', label: 'Quarta-feira' },
+  { key: '3', label: 'Quinta-feira' },
+  { key: '4', label: 'Sexta-feira' },
+  { key: '5', label: 'Sábado' },
+  { key: '6', label: 'Domingo' },
+];
 
 // Format price for display
 const formatPrice = (price: number) => {
@@ -116,6 +141,7 @@ export default function ProfessionalsPage() {
         active: professional.active,
         photoUrl: professional.photoUrl || '',
         bio: professional.bio || '',
+        workingHours: professional.workingHours || { ...defaultWorkingHours },
       });
     } else {
       setEditingProfessional(null);
@@ -157,11 +183,43 @@ export default function ProfessionalsPage() {
     }
   };
 
-  const handleSubmit = async () => {
-    if (!formData.name) {
+  // Validate all required fields
+  const validateForm = (): boolean => {
+    if (!formData.name.trim()) {
       toast.error('Nome é obrigatório');
-      return;
+      return false;
     }
+    if (!formData.specialty) {
+      toast.error('Especialidade é obrigatória');
+      return false;
+    }
+    if (!formData.email.trim()) {
+      toast.error('E-mail é obrigatório');
+      return false;
+    }
+    if (!formData.phone.trim()) {
+      toast.error('Telefone é obrigatório');
+      return false;
+    }
+    if (!formData.appointmentDuration || formData.appointmentDuration <= 0) {
+      toast.error('Duração da consulta é obrigatória');
+      return false;
+    }
+    if (!formData.consultationPrice || formData.consultationPrice <= 0) {
+      toast.error('Valor da consulta é obrigatório');
+      return false;
+    }
+    // Validate working hours - at least one day must be configured
+    const hasWorkingHours = Object.keys(formData.workingHours).length > 0;
+    if (!hasWorkingHours) {
+      toast.error('Configure pelo menos um dia de atendimento');
+      return false;
+    }
+    return true;
+  };
+
+  const handleSubmit = async () => {
+    if (!validateForm()) return;
 
     setIsSaving(true);
     try {
@@ -186,10 +244,7 @@ export default function ProfessionalsPage() {
 
   // Handle inline form submission (when no professionals exist)
   const handleInlineSubmit = async () => {
-    if (!formData.name) {
-      toast.error('Nome é obrigatório');
-      return;
-    }
+    if (!validateForm()) return;
 
     setIsSaving(true);
     try {
@@ -230,6 +285,30 @@ export default function ProfessionalsPage() {
       .join('')
       .toUpperCase()
       .slice(0, 2);
+  };
+
+  // Toggle working day on/off
+  const toggleWorkingDay = (dayKey: string) => {
+    setFormData(prev => {
+      const newWorkingHours = { ...prev.workingHours };
+      if (newWorkingHours[dayKey]) {
+        delete newWorkingHours[dayKey];
+      } else {
+        newWorkingHours[dayKey] = [{ start: '09:00', end: '18:00' }];
+      }
+      return { ...prev, workingHours: newWorkingHours };
+    });
+  };
+
+  // Update working hours for a day
+  const updateWorkingHours = (dayKey: string, field: 'start' | 'end', value: string) => {
+    setFormData(prev => {
+      const newWorkingHours = { ...prev.workingHours };
+      if (newWorkingHours[dayKey] && newWorkingHours[dayKey][0]) {
+        newWorkingHours[dayKey] = [{ ...newWorkingHours[dayKey][0], [field]: value }];
+      }
+      return { ...prev, workingHours: newWorkingHours };
+    });
   };
 
   // Filters state
@@ -406,7 +485,7 @@ export default function ProfessionalsPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="specialty">Especialidade</Label>
+              <Label htmlFor="specialty">Especialidade <span className="text-red-500">*</span></Label>
               <Select
                 value={formData.specialty}
                 onValueChange={(value) => setFormData({ ...formData, specialty: value })}
@@ -449,7 +528,7 @@ export default function ProfessionalsPage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="email">E-mail</Label>
+                <Label htmlFor="email">E-mail <span className="text-red-500">*</span></Label>
                 <Input
                   id="email"
                   type="email"
@@ -460,7 +539,7 @@ export default function ProfessionalsPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="phone">Telefone</Label>
+                <Label htmlFor="phone">Telefone <span className="text-red-500">*</span></Label>
                 <Input
                   id="phone"
                   value={formData.phone}
@@ -473,7 +552,7 @@ export default function ProfessionalsPage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="duration">Duração da Consulta</Label>
+                <Label htmlFor="duration">Duração da Consulta <span className="text-red-500">*</span></Label>
                 <Select
                   value={String(formData.appointmentDuration)}
                   onValueChange={(value) => setFormData({ ...formData, appointmentDuration: parseInt(value) })}
@@ -496,7 +575,7 @@ export default function ProfessionalsPage() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="price">Valor da Consulta (R$)</Label>
+                <Label htmlFor="price">Valor da Consulta (R$) <span className="text-red-500">*</span></Label>
                 <div className="relative">
                   <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
                   <Input
@@ -527,7 +606,55 @@ export default function ProfessionalsPage() {
               />
             </div>
 
-            <Button onClick={handleInlineSubmit} disabled={isSaving || !formData.name}>
+            {/* Working Hours Section */}
+            <div className="space-y-3">
+              <Label className="font-medium">
+                Horários de Atendimento <span className="text-red-500">*</span>
+              </Label>
+              <div className="space-y-2">
+                {DAYS_OF_WEEK.map((day) => {
+                  const isActive = !!formData.workingHours[day.key];
+                  const hours = formData.workingHours[day.key]?.[0];
+
+                  return (
+                    <div key={day.key} className="flex items-center gap-3 p-2 border rounded-lg">
+                      <Switch
+                        checked={isActive}
+                        onCheckedChange={() => toggleWorkingDay(day.key)}
+                        disabled={isSaving}
+                      />
+                      <span className={`text-sm font-medium w-28 ${!isActive ? 'text-muted-foreground' : ''}`}>
+                        {day.label}
+                      </span>
+                      {isActive && hours && (
+                        <div className="flex items-center gap-2 ml-auto">
+                          <Input
+                            type="time"
+                            value={hours.start}
+                            onChange={(e) => updateWorkingHours(day.key, 'start', e.target.value)}
+                            className="w-24 h-8 text-sm"
+                            disabled={isSaving}
+                          />
+                          <span className="text-muted-foreground text-sm">até</span>
+                          <Input
+                            type="time"
+                            value={hours.end}
+                            onChange={(e) => updateWorkingHours(day.key, 'end', e.target.value)}
+                            className="w-24 h-8 text-sm"
+                            disabled={isSaving}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Selecione os dias e horários de atendimento do profissional
+              </p>
+            </div>
+
+            <Button onClick={handleInlineSubmit} disabled={isSaving}>
               {isSaving ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -742,7 +869,7 @@ export default function ProfessionalsPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="dialog-specialty">Especialidade</Label>
+              <Label htmlFor="dialog-specialty">Especialidade <span className="text-red-500">*</span></Label>
               <Select
                 value={formData.specialty}
                 onValueChange={(value) => setFormData({ ...formData, specialty: value })}
@@ -780,7 +907,7 @@ export default function ProfessionalsPage() {
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="dialog-email">E-mail</Label>
+                <Label htmlFor="dialog-email">E-mail <span className="text-red-500">*</span></Label>
                 <Input
                   id="dialog-email"
                   type="email"
@@ -790,7 +917,7 @@ export default function ProfessionalsPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="dialog-phone">Telefone</Label>
+                <Label htmlFor="dialog-phone">Telefone <span className="text-red-500">*</span></Label>
                 <Input
                   id="dialog-phone"
                   value={formData.phone}
@@ -802,7 +929,7 @@ export default function ProfessionalsPage() {
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="dialog-duration">Duração</Label>
+                <Label htmlFor="dialog-duration">Duração <span className="text-red-500">*</span></Label>
                 <Select
                   value={String(formData.appointmentDuration)}
                   onValueChange={(value) => setFormData({ ...formData, appointmentDuration: parseInt(value) })}
@@ -824,7 +951,7 @@ export default function ProfessionalsPage() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="dialog-price">Valor (R$)</Label>
+                <Label htmlFor="dialog-price">Valor (R$) <span className="text-red-500">*</span></Label>
                 <div className="relative">
                   <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
                   <Input
@@ -847,6 +974,48 @@ export default function ProfessionalsPage() {
                 checked={formData.active}
                 onCheckedChange={(checked) => setFormData({ ...formData, active: checked })}
               />
+            </div>
+
+            {/* Working Hours Section in Dialog */}
+            <div className="space-y-3 pt-2 border-t">
+              <Label className="font-medium">
+                Horários de Atendimento <span className="text-red-500">*</span>
+              </Label>
+              <div className="space-y-2 max-h-[200px] overflow-y-auto">
+                {DAYS_OF_WEEK.map((day) => {
+                  const isActive = !!formData.workingHours[day.key];
+                  const hours = formData.workingHours[day.key]?.[0];
+
+                  return (
+                    <div key={day.key} className="flex items-center gap-2 p-2 border rounded-lg">
+                      <Switch
+                        checked={isActive}
+                        onCheckedChange={() => toggleWorkingDay(day.key)}
+                      />
+                      <span className={`text-xs font-medium w-16 ${!isActive ? 'text-muted-foreground' : ''}`}>
+                        {day.label.substring(0, 3)}
+                      </span>
+                      {isActive && hours && (
+                        <div className="flex items-center gap-1 ml-auto">
+                          <Input
+                            type="time"
+                            value={hours.start}
+                            onChange={(e) => updateWorkingHours(day.key, 'start', e.target.value)}
+                            className="w-20 h-7 text-xs"
+                          />
+                          <span className="text-muted-foreground text-xs">-</span>
+                          <Input
+                            type="time"
+                            value={hours.end}
+                            onChange={(e) => updateWorkingHours(day.key, 'end', e.target.value)}
+                            className="w-20 h-7 text-xs"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
 
