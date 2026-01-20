@@ -1035,10 +1035,38 @@ export async function createReminderTemplates(
  */
 const PATIENT_INFO_FLOW_JSON = {
   version: '6.2',
+  data_api_version: '3.0',
+  routing_model: {
+    ESPECIALIDADE: ['TIPO_ATENDIMENTO'],
+    TIPO_ATENDIMENTO: ['INFO_CONVENIO'],
+    INFO_CONVENIO: ['DADOS_PACIENTE'],
+    DADOS_PACIENTE: [],
+  },
   screens: [
     {
       id: 'ESPECIALIDADE',
       title: 'Agendar Consulta',
+      data: {
+        especialidades: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'string' },
+              title: { type: 'string' },
+              description: { type: 'string' },
+            },
+          },
+          __example__: [
+            { id: 'prof_1', title: 'Cardiologia', description: 'Dr. João Silva' },
+            { id: 'prof_2', title: 'Dermatologia', description: 'Dra. Maria Santos' },
+          ],
+        },
+        error_message: {
+          type: 'string',
+          __example__: '',
+        },
+      },
       layout: {
         type: 'SingleColumnLayout',
         children: [
@@ -1049,21 +1077,15 @@ const PATIENT_INFO_FLOW_JSON = {
               {
                 type: 'RadioButtonsGroup',
                 name: 'especialidade',
-                label: 'Especialidade',
+                label: 'Escolha o profissional',
                 required: true,
-                'data-source': [
-                  { id: 'derma_clinica', title: 'Dermatologia Clínica', description: 'Dr. Ricardo Mendes' },
-                  { id: 'derma_cirurgica', title: 'Dermatologia Cirúrgica', description: 'Dra. Camila Santos' },
-                  { id: 'derma_estetica', title: 'Cosmiatria', description: 'Dr. Felipe Oliveira' },
-                  { id: 'derma_oncologica', title: 'Dermatologia Oncológica', description: 'Dra. Ana Beatriz Costa' },
-                ],
+                'data-source': '${data.especialidades}',
               },
               {
                 type: 'Footer',
                 label: 'Continuar',
                 'on-click-action': {
-                  name: 'navigate',
-                  next: { type: 'screen', name: 'TIPO_ATENDIMENTO' },
+                  name: 'data_exchange',
                   payload: { especialidade: '${form.especialidade}' },
                 },
               },
@@ -1076,7 +1098,26 @@ const PATIENT_INFO_FLOW_JSON = {
       id: 'TIPO_ATENDIMENTO',
       title: 'Tipo de Atendimento',
       data: {
-        especialidade: { type: 'string', __example__: 'cardiologia' },
+        especialidade: { type: 'string', __example__: 'prof_1' },
+        professional_id: { type: 'string', __example__: 'prof_1' },
+        professional_name: { type: 'string', __example__: 'Dr. João Silva' },
+        specialty_name: { type: 'string', __example__: 'Cardiologia' },
+        tipos_pagamento: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'string' },
+              title: { type: 'string' },
+              description: { type: 'string' },
+            },
+          },
+          __example__: [
+            { id: 'convenio', title: 'Convênio', description: 'Tenho plano de saúde' },
+            { id: 'particular', title: 'Particular', description: 'Pagamento direto' },
+          ],
+        },
+        error_message: { type: 'string', __example__: '' },
       },
       layout: {
         type: 'SingleColumnLayout',
@@ -1086,23 +1127,30 @@ const PATIENT_INFO_FLOW_JSON = {
             name: 'form_pagamento',
             children: [
               {
+                type: 'TextHeading',
+                text: '${data.specialty_name}',
+              },
+              {
+                type: 'TextSubheading',
+                text: '${data.professional_name}',
+              },
+              {
                 type: 'RadioButtonsGroup',
                 name: 'tipo_pagamento',
                 label: 'Tipo de atendimento',
                 required: true,
-                'data-source': [
-                  { id: 'convenio', title: 'Convênio', description: 'Tenho plano de saúde' },
-                  { id: 'particular', title: 'Particular', description: 'Pagamento direto (PIX/Cartão)' },
-                ],
+                'data-source': '${data.tipos_pagamento}',
               },
               {
                 type: 'Footer',
                 label: 'Continuar',
                 'on-click-action': {
-                  name: 'navigate',
-                  next: { type: 'screen', name: 'INFO_CONVENIO' },
+                  name: 'data_exchange',
                   payload: {
                     especialidade: '${data.especialidade}',
+                    professional_id: '${data.professional_id}',
+                    professional_name: '${data.professional_name}',
+                    specialty_name: '${data.specialty_name}',
                     tipo_pagamento: '${form.tipo_pagamento}',
                   },
                 },
@@ -1116,8 +1164,27 @@ const PATIENT_INFO_FLOW_JSON = {
       id: 'INFO_CONVENIO',
       title: 'Dados do Convênio',
       data: {
-        especialidade: { type: 'string', __example__: 'cardiologia' },
+        especialidade: { type: 'string', __example__: 'prof_1' },
+        professional_id: { type: 'string', __example__: 'prof_1' },
+        professional_name: { type: 'string', __example__: 'Dr. João Silva' },
+        specialty_name: { type: 'string', __example__: 'Cardiologia' },
         tipo_pagamento: { type: 'string', __example__: 'convenio' },
+        convenios: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'string' },
+              title: { type: 'string' },
+            },
+          },
+          __example__: [
+            { id: 'unimed', title: 'Unimed' },
+            { id: 'bradesco', title: 'Bradesco Saúde' },
+          ],
+        },
+        show_convenio_fields: { type: 'boolean', __example__: true },
+        error_message: { type: 'string', __example__: '' },
       },
       layout: {
         type: 'SingleColumnLayout',
@@ -1131,16 +1198,8 @@ const PATIENT_INFO_FLOW_JSON = {
                 name: 'convenio_nome',
                 label: 'Seu convênio',
                 required: false,
-                'data-source': [
-                  { id: 'unimed', title: 'Unimed' },
-                  { id: 'bradesco_saude', title: 'Bradesco Saúde' },
-                  { id: 'sulamerica', title: 'SulAmérica' },
-                  { id: 'amil', title: 'Amil' },
-                  { id: 'notredame', title: 'NotreDame Intermédica' },
-                  { id: 'hapvida', title: 'Hapvida' },
-                  { id: 'porto_seguro', title: 'Porto Seguro Saúde' },
-                  { id: 'outro', title: 'Outro' },
-                ],
+                visible: '${data.show_convenio_fields}',
+                'data-source': '${data.convenios}',
               },
               {
                 type: 'TextInput',
@@ -1148,16 +1207,19 @@ const PATIENT_INFO_FLOW_JSON = {
                 label: 'Nº da carteirinha',
                 'input-type': 'text',
                 required: false,
+                visible: '${data.show_convenio_fields}',
                 'helper-text': 'Encontre no cartão do convênio',
               },
               {
                 type: 'Footer',
                 label: 'Continuar',
                 'on-click-action': {
-                  name: 'navigate',
-                  next: { type: 'screen', name: 'DADOS_PACIENTE' },
+                  name: 'data_exchange',
                   payload: {
                     especialidade: '${data.especialidade}',
+                    professional_id: '${data.professional_id}',
+                    professional_name: '${data.professional_name}',
+                    specialty_name: '${data.specialty_name}',
                     tipo_pagamento: '${data.tipo_pagamento}',
                     convenio_nome: '${form.convenio_nome}',
                     convenio_numero: '${form.convenio_numero}',
@@ -1174,10 +1236,14 @@ const PATIENT_INFO_FLOW_JSON = {
       title: 'Dados do Paciente',
       terminal: true,
       data: {
-        especialidade: { type: 'string', __example__: 'cardiologia' },
+        especialidade: { type: 'string', __example__: 'prof_1' },
+        professional_id: { type: 'string', __example__: 'prof_1' },
+        professional_name: { type: 'string', __example__: 'Dr. João Silva' },
+        specialty_name: { type: 'string', __example__: 'Cardiologia' },
         tipo_pagamento: { type: 'string', __example__: 'convenio' },
         convenio_nome: { type: 'string', __example__: 'unimed' },
         convenio_numero: { type: 'string', __example__: '123456789' },
+        error_message: { type: 'string', __example__: '' },
       },
       layout: {
         type: 'SingleColumnLayout',
@@ -1186,6 +1252,14 @@ const PATIENT_INFO_FLOW_JSON = {
             type: 'Form',
             name: 'form_paciente',
             children: [
+              {
+                type: 'TextHeading',
+                text: '${data.specialty_name}',
+              },
+              {
+                type: 'TextSubheading',
+                text: '${data.professional_name}',
+              },
               {
                 type: 'TextInput',
                 name: 'nome',
@@ -1208,7 +1282,7 @@ const PATIENT_INFO_FLOW_JSON = {
                 name: 'data_nascimento',
                 label: 'Data de nascimento',
                 required: true,
-                'max-date': '2025-12-31',
+                'max-date': '2026-12-31',
                 'helper-text': 'Selecione sua data de nascimento',
               },
               {
@@ -1218,6 +1292,9 @@ const PATIENT_INFO_FLOW_JSON = {
                   name: 'complete',
                   payload: {
                     especialidade: '${data.especialidade}',
+                    professional_id: '${data.professional_id}',
+                    professional_name: '${data.professional_name}',
+                    specialty_name: '${data.specialty_name}',
                     tipo_pagamento: '${data.tipo_pagamento}',
                     convenio_nome: '${data.convenio_nome}',
                     convenio_numero: '${data.convenio_numero}',
@@ -1241,6 +1318,10 @@ const PATIENT_INFO_FLOW_JSON = {
  */
 const BOOKING_FLOW_JSON = {
   version: '6.2',
+  data_api_version: '3.0',
+  routing_model: {
+    BOOKING: [],
+  },
   screens: [
     {
       id: 'BOOKING',
@@ -1249,11 +1330,33 @@ const BOOKING_FLOW_JSON = {
       data: {
         doctor_name: { type: 'string', __example__: 'Dr. Ricardo Mendes' },
         specialty_name: { type: 'string', __example__: 'Dermatologia Clínica' },
+        professional_id: { type: 'string', __example__: 'prof_1' },
+        patient_name: { type: 'string', __example__: 'Maria Silva' },
+        patient_cpf: { type: 'string', __example__: '123.456.789-00' },
+        min_date: { type: 'string', __example__: '2026-01-21' },
+        max_date: { type: 'string', __example__: '2026-02-20' },
+        available_times: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'string' },
+              title: { type: 'string' },
+            },
+          },
+          __example__: [
+            { id: '08:00', title: '08:00' },
+            { id: '09:00', title: '09:00' },
+            { id: '10:00', title: '10:00' },
+          ],
+        },
+        error_message: { type: 'string', __example__: '' },
       },
       layout: {
         type: 'SingleColumnLayout',
         children: [
-          { type: 'TextBody', text: 'Agenda de ${data.doctor_name}' },
+          { type: 'TextHeading', text: '${data.specialty_name}' },
+          { type: 'TextSubheading', text: '${data.doctor_name}' },
           {
             type: 'Form',
             name: 'booking_form',
@@ -1263,21 +1366,15 @@ const BOOKING_FLOW_JSON = {
                 name: 'date',
                 label: 'Data da consulta',
                 required: true,
+                'min-date': '${data.min_date}',
+                'max-date': '${data.max_date}',
               },
               {
                 type: 'Dropdown',
                 name: 'time',
                 label: 'Horário',
                 required: true,
-                'data-source': [
-                  { id: '08:00', title: '08:00' },
-                  { id: '09:00', title: '09:00' },
-                  { id: '10:00', title: '10:00' },
-                  { id: '11:00', title: '11:00' },
-                  { id: '14:00', title: '14:00' },
-                  { id: '15:00', title: '15:00' },
-                  { id: '16:00', title: '16:00' },
-                ],
+                'data-source': '${data.available_times}',
               },
               {
                 type: 'Footer',
@@ -1287,8 +1384,11 @@ const BOOKING_FLOW_JSON = {
                   payload: {
                     date: '${form.date}',
                     time: '${form.time}',
+                    professional_id: '${data.professional_id}',
                     doctor_name: '${data.doctor_name}',
                     specialty_name: '${data.specialty_name}',
+                    patient_name: '${data.patient_name}',
+                    patient_cpf: '${data.patient_cpf}',
                   },
                 },
               },
@@ -1445,6 +1545,93 @@ export async function createSchedulingFlows(
   }
 
   return { flowIds, errors };
+}
+
+/**
+ * Update existing WhatsApp Flows with latest JSON (for migration)
+ * Re-uploads the flow JSON and sets endpoint URI for dynamic data
+ */
+export async function updateExistingFlows(
+  wabaId: string,
+  patientInfoFlowId?: string,
+  bookingFlowId?: string
+): Promise<{ updated: string[]; errors: string[] }> {
+  const bisuToken = getMetaBisuToken();
+  const apiVersion = getMetaApiVersion();
+  const flowsEndpointUrl = getWhatsAppAgentUrl();
+
+  if (!bisuToken) {
+    throw new Error('BISU token required');
+  }
+
+  const updated: string[] = [];
+  const errors: string[] = [];
+
+  // Flows to update
+  const flowsToUpdate = [
+    { id: patientInfoFlowId, name: 'CLINICA_MEDICA_FORMULARIO', json: PATIENT_INFO_FLOW_JSON },
+    { id: bookingFlowId, name: 'CLINICA_MEDICA_AGENDAMENTO', json: BOOKING_FLOW_JSON },
+  ].filter((f) => f.id);
+
+  for (const flow of flowsToUpdate) {
+    try {
+      console.log(`📱 Updating flow: ${flow.name} (ID: ${flow.id})...`);
+
+      // Step 1: Upload the updated flow JSON
+      const flowJsonStr = JSON.stringify(flow.json);
+      const formData = new FormData();
+      formData.append('name', 'flow.json');
+      formData.append('asset_type', 'FLOW_JSON');
+      formData.append('file', new Blob([flowJsonStr], { type: 'application/json' }), 'flow.json');
+
+      const uploadResponse = await fetch(`https://graph.facebook.com/${apiVersion}/${flow.id}/assets`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${bisuToken}`,
+        },
+        body: formData,
+      });
+
+      if (!uploadResponse.ok) {
+        const error = await uploadResponse.json();
+        errors.push(`${flow.name}: ${error.error?.message || 'Failed to update flow JSON'}`);
+        console.error(`Failed to update flow JSON for ${flow.name}:`, error);
+        continue;
+      }
+
+      console.log(`✅ Flow JSON updated for ${flow.name} (ID: ${flow.id})`);
+
+      // Step 2: Set/update the endpoint URL for dynamic data
+      if (flowsEndpointUrl) {
+        const endpointUrl = `${flowsEndpointUrl}/flows`;
+        const updateResponse = await fetch(`https://graph.facebook.com/${apiVersion}/${flow.id}`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${bisuToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            endpoint_uri: endpointUrl,
+          }),
+        });
+
+        if (updateResponse.ok) {
+          console.log(`✅ Flow endpoint set: ${endpointUrl}`);
+        } else {
+          const error = await updateResponse.json();
+          // Don't fail the whole update, just log the warning
+          console.warn(`⚠️ Could not set flow endpoint (may already be published): ${error.error?.message}`);
+        }
+      }
+
+      updated.push(flow.name);
+    } catch (error: any) {
+      errors.push(`${flow.name}: ${error.message}`);
+      console.error(`Error updating flow ${flow.name}:`, error);
+    }
+  }
+
+  return { updated, errors };
 }
 
 /**

@@ -225,6 +225,7 @@ async def send_whatsapp_flow(
     flow_action: str = "data_exchange",
     initial_screen: str = "SELECT_PROFESSIONAL",
     initial_data: Dict[str, Any] = None,
+    mode: str = "draft",  # "draft" for unpublished flows, "published" for published flows
 ) -> bool:
     """
     Send a WhatsApp Flow message to a user.
@@ -272,13 +273,15 @@ async def send_whatsapp_flow(
                     "flow_id": flow_id,
                     "flow_cta": flow_cta,
                     "flow_action": flow_action,
+                    "mode": mode,  # "draft" for unpublished flows
                 }
             }
         }
     }
 
-    # Add initial screen and data for data_exchange flows
-    if flow_action == "data_exchange":
+    # Add initial screen and data for navigate/data_exchange flows
+    # Both actions support flow_action_payload with screen and data
+    if initial_screen:
         payload["interactive"]["action"]["parameters"]["flow_action_payload"] = {
             "screen": initial_screen,
             "data": initial_data or {}
@@ -333,6 +336,7 @@ async def send_booking_flow(
     available_times: list,
     min_date: str,
     max_date: str,
+    mode: str = "draft",  # "draft" for unpublished flows
 ) -> bool:
     """
     Send the Booking Flow (Flow 2) after Patient Info flow completes.
@@ -376,7 +380,8 @@ async def send_booking_flow(
         header_text="Agendar Consulta",
         body_text=f"Escolha a data e horário com {professional_name}",
         access_token=access_token,
-        flow_action="data_exchange",
+        flow_action="navigate",  # "navigate" for client-side flows
         initial_screen="BOOKING",
         initial_data=initial_data,
+        mode=mode,
     )

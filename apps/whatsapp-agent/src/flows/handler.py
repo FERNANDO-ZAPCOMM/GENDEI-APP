@@ -137,12 +137,14 @@ class FlowsHandler:
         # Group by specialty or show individual professionals
         especialidades = []
         for prof in professionals:
-            specialty_id = prof.get("specialty", "clinico_geral")
+            # Professional is a dataclass, use attribute access
+            specialty_id = getattr(prof, 'specialty', 'clinico_geral') or 'clinico_geral'
             specialty_name = CLINICA_MEDICA_SPECIALTIES.get(specialty_id, specialty_id)
+            prof_name = getattr(prof, 'name', '') or getattr(prof, 'full_name', '') or ''
             especialidades.append({
-                "id": prof["id"],  # Use professional ID as the specialty selection ID
+                "id": getattr(prof, 'id', ''),  # Use professional ID as the specialty selection ID
                 "title": specialty_name,
-                "description": prof.get("name", "")
+                "description": prof_name
             })
 
         logger.info(f"📋 Returning {len(especialidades)} especialidades for clinic {clinic_id}")
@@ -253,10 +255,10 @@ class FlowsHandler:
             return []
 
         professionals = self.db.get_professionals(clinic_id)
-        # Filter active professionals with working hours
+        # Filter active professionals with working hours (Professional is a dataclass)
         return [
             p for p in professionals
-            if p.get("active", True) and p.get("workingHours")
+            if getattr(p, 'active', True) and getattr(p, 'working_hours', None)
         ]
 
     async def _get_clinic_convenios(self, clinic_id: str) -> List[Dict[str, str]]:
@@ -268,8 +270,8 @@ class FlowsHandler:
         if not clinic:
             return DEFAULT_CONVENIOS
 
-        # Check if clinic has payment settings with convenio list
-        payment_settings = clinic.get("paymentSettings", {})
+        # Check if clinic has payment settings with convenio list (Clinic is a dataclass)
+        payment_settings = getattr(clinic, 'payment_settings', {}) or {}
         convenio_list = payment_settings.get("convenioList", [])
 
         if convenio_list:
@@ -301,9 +303,9 @@ class FlowsHandler:
         if not professional:
             return []
 
-        # Get working hours and generate time slots
-        working_hours = professional.get("workingHours", {})
-        duration = professional.get("appointmentDuration", 30)
+        # Get working hours and generate time slots (professional is a dataclass)
+        working_hours = getattr(professional, 'working_hours', {}) or {}
+        duration = getattr(professional, 'appointment_duration', 30) or 30
 
         # Generate slots based on working hours
         time_slots = set()
@@ -359,8 +361,10 @@ class FlowsHandler:
                 }
             }
 
-        specialty_id = professional.get("specialty", "")
+        # Professional is a dataclass, use attribute access
+        specialty_id = getattr(professional, 'specialty', '') or ''
         specialty_name = CLINICA_MEDICA_SPECIALTIES.get(specialty_id, specialty_id)
+        professional_name = getattr(professional, 'name', '') or getattr(professional, 'full_name', '') or ''
 
         # Payment type options
         tipos_pagamento = [
@@ -373,7 +377,7 @@ class FlowsHandler:
             "data": {
                 "especialidade": professional_id,
                 "professional_id": professional_id,
-                "professional_name": professional.get("name", ""),
+                "professional_name": professional_name,
                 "specialty_name": specialty_name,
                 "tipos_pagamento": tipos_pagamento,
                 "error_message": ""

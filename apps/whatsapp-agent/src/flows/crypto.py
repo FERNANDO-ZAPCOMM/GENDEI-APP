@@ -213,9 +213,13 @@ def prepare_flow_response(
         is_encrypted: Whether the original request was encrypted
 
     Returns:
-        Encrypted string if encrypted request, otherwise dict
+        FastAPI Response with encrypted string (text/plain) if encrypted,
+        otherwise dict (will be JSON-serialized by FastAPI)
     """
     if is_encrypted and aes_key and initial_vector:
-        return encrypt_response(response_data, aes_key, initial_vector)
+        from fastapi.responses import Response  # type: ignore
+        encrypted_str = encrypt_response(response_data, aes_key, initial_vector)
+        # WhatsApp expects plain text response for encrypted data
+        return Response(content=encrypted_str, media_type="text/plain")
     else:
         return response_data

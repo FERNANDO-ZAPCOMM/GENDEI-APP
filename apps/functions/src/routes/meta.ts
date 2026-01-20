@@ -1194,4 +1194,57 @@ router.post(
   }
 );
 
+// POST /meta/flows/update/:clinicId - Update flow JSONs to latest version (for migration)
+router.post(
+  '/flows/update/:clinicId',
+  verifyAuth,
+  verifyClinicAccess,
+  async (req: Request, res: Response) => {
+    try {
+      const { clinicId } = req.params;
+
+      // Get clinic data
+      const clinicDoc = await db.collection(CLINICS).doc(clinicId).get();
+      const clinicData = clinicDoc.data();
+
+      if (!clinicData) {
+        return res.status(404).json({ error: 'Clinic not found' });
+      }
+
+      const patientInfoFlowId = clinicData.whatsappConfig?.patientInfoFlowId;
+      const bookingFlowId = clinicData.whatsappConfig?.bookingFlowId;
+
+      if (!patientInfoFlowId && !bookingFlowId) {
+        return res.status(400).json({ error: 'No flows found for this clinic' });
+      }
+
+      const status = await metaService.getConnectionStatus(clinicId);
+      if (!status.meta?.wabaId) {
+        return res.status(400).json({ error: 'No WhatsApp Business Account connected' });
+      }
+
+      // Update flows with latest JSON
+      const result = await metaService.updateExistingFlows(
+        status.meta.wabaId,
+        patientInfoFlowId,
+        bookingFlowId
+      );
+
+      // Update clinic document with update timestamp
+      await db.collection(CLINICS).doc(clinicId).update({
+        'whatsappConfig.flowsUpdatedAt': new Date(),
+        'whatsappConfig.flowsUpdateResult': result,
+      });
+
+      return res.json({
+        success: true,
+        ...result,
+      });
+    } catch (error: any) {
+      console.error('Error updating flows:', error);
+      return res.status(500).json({ error: error.message || 'Failed to update flows' });
+    }
+  }
+);
+
 export default router;

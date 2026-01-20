@@ -1,6 +1,9 @@
 'use client';
 
+import { useState } from 'react';
 import { useClinic } from '@/hooks/use-clinic';
+import { useAuth } from '@/hooks/use-auth';
+import { apiClient } from '@/lib/api';
 import {
   Card,
   CardContent,
@@ -9,6 +12,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import {
   CheckCircle2,
   XCircle,
@@ -16,7 +20,9 @@ import {
   FileText,
   CalendarCheck,
   ExternalLink,
+  RefreshCw,
 } from 'lucide-react';
+import { toast } from 'sonner';
 
 interface FlowsStatusCardProps {
   wabaId?: string;
@@ -86,7 +92,9 @@ function FlowRow({
 }
 
 export function FlowsStatusCard({ wabaId }: FlowsStatusCardProps) {
-  const { currentClinic: clinic } = useClinic();
+  const { currentClinic: clinic, refetch } = useClinic();
+  const { getIdToken } = useAuth();
+  const [isUpdating, setIsUpdating] = useState(false);
 
   // Don't show if WABA is not connected
   if (!wabaId) {
@@ -98,10 +106,49 @@ export function FlowsStatusCard({ wabaId }: FlowsStatusCardProps) {
   const flowsCreated = whatsappConfig.flowsCreated === true;
   const patientInfoFlowId = whatsappConfig.patientInfoFlowId;
   const bookingFlowId = whatsappConfig.bookingFlowId;
+  const flowsUpdatedAt = whatsappConfig.flowsUpdatedAt;
 
   // Check if all flows are installed
   const allFlowsInstalled = !!patientInfoFlowId && !!bookingFlowId;
   const anyFlowInstalled = !!patientInfoFlowId || !!bookingFlowId;
+
+  // Handler to update flows
+  const handleUpdateFlows = async () => {
+    if (!clinic?.id) return;
+
+    setIsUpdating(true);
+    try {
+      const token = await getIdToken();
+      if (!token) {
+        throw new Error('Not authenticated');
+      }
+
+      const response = await apiClient<{ success: boolean; updated?: string[]; error?: string }>(
+        `/meta/flows/update/${clinic.id}`,
+        {
+          method: 'POST',
+          token,
+        }
+      );
+
+      if (response.success) {
+        toast.success('Flows atualizados com sucesso!', {
+          description: `${response.updated?.length || 0} flow(s) atualizado(s)`,
+        });
+        // Refresh clinic data
+        await refetch();
+      } else {
+        throw new Error(response.error || 'Erro ao atualizar flows');
+      }
+    } catch (error: any) {
+      console.error('Error updating flows:', error);
+      toast.error('Erro ao atualizar flows', {
+        description: error.message || 'Erro desconhecido',
+      });
+    } finally {
+      setIsUpdating(false);
+    }
+  };
 
   return (
     <Card>
@@ -162,9 +209,23 @@ export function FlowsStatusCard({ wabaId }: FlowsStatusCardProps) {
           </div>
         )}
 
-        {/* Link to Meta Business Manager */}
+        {/* Update button and Meta Business Manager link */}
         {anyFlowInstalled && (
-          <div className="pt-2 border-t">
+          <div className="pt-3 border-t space-y-3">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleUpdateFlows}
+              disabled={isUpdating}
+            >
+              <RefreshCw className={`w-4 h-4 mr-2 ${isUpdating ? 'animate-spin' : ''}`} />
+              {isUpdating ? 'Atualizando...' : 'Atualizar Flows'}
+            </Button>
+            {flowsUpdatedAt && (
+              <p className="text-xs text-muted-foreground text-center">
+                Última atualização: {new Date(flowsUpdatedAt).toLocaleString('pt-BR')}
+              </p>
+            )}
             <a
               href="https://business.facebook.com/latest/whatsapp_manager/flows"
               target="_blank"

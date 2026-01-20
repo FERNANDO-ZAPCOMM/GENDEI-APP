@@ -57,6 +57,9 @@ class Clinic:
     pix_key: Optional[str] = None   # PIX key for manual payments
     payment_settings: Dict[str, Any] = field(default_factory=dict)  # Full payment settings
 
+    # WhatsApp config (includes flow IDs, templates config, etc.)
+    whatsapp_config: Dict[str, Any] = field(default_factory=dict)
+
     # Settings
     admin_ids: List[str] = field(default_factory=list)
     timezone: str = "America/Sao_Paulo"
@@ -82,6 +85,7 @@ class Clinic:
             "signalPercentage": self.signal_percentage,
             "pixKey": self.pix_key,
             "paymentSettings": self.payment_settings,
+            "whatsappConfig": self.whatsapp_config,
             "adminIds": self.admin_ids,
             "timezone": self.timezone,
             "createdAt": self.created_at.isoformat() if self.created_at else None,
@@ -110,6 +114,7 @@ class Clinic:
             signal_percentage=data.get("signalPercentage", 15),
             pix_key=data.get("pixKey"),
             payment_settings=data.get("paymentSettings", {}),
+            whatsapp_config=data.get("whatsappConfig", {}),
             admin_ids=data.get("adminIds", []),
             timezone=data.get("timezone", "America/Sao_Paulo")
         )

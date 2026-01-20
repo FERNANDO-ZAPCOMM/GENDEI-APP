@@ -1278,8 +1278,9 @@ async def handle_flow_completion(
         if db and professional_id:
             professional = db.get_professional(clinic_id, professional_id)
             if professional:
-                working_hours = professional.get("workingHours", {})
-                duration = professional.get("appointmentDuration", 30)
+                # Professional is a dataclass, use attribute access
+                working_hours = getattr(professional, 'working_hours', {}) or {}
+                duration = getattr(professional, 'appointment_duration', 30) or 30
 
                 # Generate time slots from working hours
                 time_slots = set()
@@ -1452,14 +1453,11 @@ async def handle_scheduling_intent(
     # =============================================
     # Get clinic-specific flow ID from Firestore (created during Embedded Signup)
     # Falls back to environment variable for backward compatibility
-    whatsapp_config = getattr(clinic, 'whatsappConfig', None) or {}
-    if isinstance(whatsapp_config, dict):
-        flow_id_to_use = whatsapp_config.get('patientInfoFlowId', '') or CLINICA_MEDICA_FORMULARIO_FLOW_ID
-    else:
-        # Handle case where whatsappConfig is an object with attributes
-        flow_id_to_use = getattr(whatsapp_config, 'patientInfoFlowId', '') or CLINICA_MEDICA_FORMULARIO_FLOW_ID
+    whatsapp_config = clinic.whatsapp_config or {}
+    flow_id_to_use = whatsapp_config.get('patientInfoFlowId', '') or CLINICA_MEDICA_FORMULARIO_FLOW_ID
 
     logger.info(f"🔍 Flow ID for clinic {clinic_id}: {flow_id_to_use or 'NOT CONFIGURED'}")
+    logger.info(f"🔍 Clinic whatsapp_config: {whatsapp_config}")
 
     if flow_id_to_use and professionals:
         logger.info(f"📱 Using WhatsApp Flow for scheduling (flow_id: {flow_id_to_use})")
@@ -1486,6 +1484,7 @@ async def handle_scheduling_intent(
         }
 
         # Send Flow 1 (Patient Info)
+        # Use "navigate" for client-side flows (no server endpoint)
         success = await send_whatsapp_flow(
             phone_number_id=phone_number_id,
             to=phone,
@@ -1495,7 +1494,7 @@ async def handle_scheduling_intent(
             header_text="Agendar Consulta",
             body_text=f"Olá! Vamos agendar sua consulta na *{clinic.name}*.\n\nClique no botão abaixo para começar.",
             access_token=access_token,
-            flow_action="data_exchange",
+            flow_action="navigate",  # "navigate" for client-side flows
             initial_screen="ESPECIALIDADE",
             initial_data=initial_data,
         )
