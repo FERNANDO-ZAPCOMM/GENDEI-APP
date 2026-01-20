@@ -1,5 +1,6 @@
 // Gendei Appointments Route
 // CRUD operations for appointments
+// Appointments are stored under: gendei_clinics/{clinicId}/appointments/{appointmentId}
 
 import { Router, Request, Response } from 'express';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
@@ -8,9 +9,9 @@ import { verifyAuth } from '../middleware/auth';
 const router = Router();
 const db = getFirestore();
 
-const APPOINTMENTS = 'gendei_appointments';
+const CLINICS = 'gendei_clinics';
 
-// Helper function to get appointments
+// Helper function to get appointments from clinic subcollection
 async function getAppointmentsForClinic(
   clinicId: string,
   startDate?: string,
@@ -18,9 +19,10 @@ async function getAppointmentsForClinic(
   professionalId?: string,
   status?: string
 ) {
-  // Simple query - just filter by clinicId to avoid index requirements
-  const snapshot = await db.collection(APPOINTMENTS)
-    .where('clinicId', '==', clinicId)
+  // Query from nested subcollection: gendei_clinics/{clinicId}/appointments
+  const snapshot = await db.collection(CLINICS)
+    .doc(clinicId)
+    .collection('appointments')
     .get();
 
   let appointments = snapshot.docs.map((doc: any) => ({
@@ -115,8 +117,9 @@ router.get('/today', verifyAuth, async (req: Request, res: Response) => {
 
     const today = new Date().toISOString().split('T')[0];
 
-    const snapshot = await db.collection(APPOINTMENTS)
-      .where('clinicId', '==', clinicId)
+    const snapshot = await db.collection(CLINICS)
+      .doc(clinicId)
+      .collection('appointments')
       .where('date', '==', today)
       .orderBy('time')
       .get();
@@ -138,19 +141,24 @@ router.get('/:appointmentId', verifyAuth, async (req: Request, res: Response) =>
   try {
     const { appointmentId } = req.params;
     const user = (req as any).user;
+    const clinicId = user?.uid;
 
-    const doc = await db.collection(APPOINTMENTS).doc(appointmentId).get();
+    if (!clinicId) {
+      return res.status(401).json({ message: 'Not authenticated' });
+    }
+
+    // Query from nested path: gendei_clinics/{clinicId}/appointments/{appointmentId}
+    const doc = await db.collection(CLINICS)
+      .doc(clinicId)
+      .collection('appointments')
+      .doc(appointmentId)
+      .get();
 
     if (!doc.exists) {
       return res.status(404).json({ message: 'Appointment not found' });
     }
 
     const appointment = doc.data();
-
-    // Verify access
-    if (user?.uid !== appointment?.clinicId) {
-      return res.status(403).json({ message: 'Access denied' });
-    }
 
     return res.json({
       id: doc.id,
@@ -167,18 +175,21 @@ router.put('/:appointmentId', verifyAuth, async (req: Request, res: Response) =>
   try {
     const { appointmentId } = req.params;
     const user = (req as any).user;
+    const clinicId = user?.uid;
 
-    const docRef = db.collection(APPOINTMENTS).doc(appointmentId);
+    if (!clinicId) {
+      return res.status(401).json({ message: 'Not authenticated' });
+    }
+
+    // Query from nested path
+    const docRef = db.collection(CLINICS)
+      .doc(clinicId)
+      .collection('appointments')
+      .doc(appointmentId);
     const doc = await docRef.get();
 
     if (!doc.exists) {
       return res.status(404).json({ message: 'Appointment not found' });
-    }
-
-    const appointment = doc.data();
-
-    if (user?.uid !== appointment?.clinicId) {
-      return res.status(403).json({ message: 'Access denied' });
     }
 
     const allowedFields = [
@@ -225,6 +236,11 @@ router.put('/:appointmentId/status', verifyAuth, async (req: Request, res: Respo
     const { appointmentId } = req.params;
     const { status, reason } = req.body;
     const user = (req as any).user;
+    const clinicId = user?.uid;
+
+    if (!clinicId) {
+      return res.status(401).json({ message: 'Not authenticated' });
+    }
 
     if (!status) {
       return res.status(400).json({ message: 'Status is required' });
@@ -239,17 +255,14 @@ router.put('/:appointmentId/status', verifyAuth, async (req: Request, res: Respo
       return res.status(400).json({ message: 'Invalid status' });
     }
 
-    const docRef = db.collection(APPOINTMENTS).doc(appointmentId);
+    const docRef = db.collection(CLINICS)
+      .doc(clinicId)
+      .collection('appointments')
+      .doc(appointmentId);
     const doc = await docRef.get();
 
     if (!doc.exists) {
       return res.status(404).json({ message: 'Appointment not found' });
-    }
-
-    const appointment = doc.data();
-
-    if (user?.uid !== appointment?.clinicId) {
-      return res.status(403).json({ message: 'Access denied' });
     }
 
     const updateData: any = {
@@ -287,22 +300,24 @@ router.put('/:appointmentId/reschedule', verifyAuth, async (req: Request, res: R
     const { appointmentId } = req.params;
     const { date, time, professionalId } = req.body;
     const user = (req as any).user;
+    const clinicId = user?.uid;
+
+    if (!clinicId) {
+      return res.status(401).json({ message: 'Not authenticated' });
+    }
 
     if (!date || !time) {
       return res.status(400).json({ message: 'Date and time are required' });
     }
 
-    const docRef = db.collection(APPOINTMENTS).doc(appointmentId);
+    const docRef = db.collection(CLINICS)
+      .doc(clinicId)
+      .collection('appointments')
+      .doc(appointmentId);
     const doc = await docRef.get();
 
     if (!doc.exists) {
       return res.status(404).json({ message: 'Appointment not found' });
-    }
-
-    const appointment = doc.data();
-
-    if (user?.uid !== appointment?.clinicId) {
-      return res.status(403).json({ message: 'Access denied' });
     }
 
     const updateData: any = {
@@ -337,19 +352,21 @@ router.delete('/:appointmentId', verifyAuth, async (req: Request, res: Response)
   try {
     const { appointmentId } = req.params;
     const user = (req as any).user;
+    const clinicId = user?.uid;
     const reason = req.query.reason as string || 'Cancelado pela clínica';
 
-    const docRef = db.collection(APPOINTMENTS).doc(appointmentId);
+    if (!clinicId) {
+      return res.status(401).json({ message: 'Not authenticated' });
+    }
+
+    const docRef = db.collection(CLINICS)
+      .doc(clinicId)
+      .collection('appointments')
+      .doc(appointmentId);
     const doc = await docRef.get();
 
     if (!doc.exists) {
       return res.status(404).json({ message: 'Appointment not found' });
-    }
-
-    const appointment = doc.data();
-
-    if (user?.uid !== appointment?.clinicId) {
-      return res.status(403).json({ message: 'Access denied' });
     }
 
     await docRef.update({

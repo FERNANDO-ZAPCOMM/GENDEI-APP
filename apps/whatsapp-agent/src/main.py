@@ -1244,17 +1244,30 @@ async def handle_flow_completion(
 
     # Check if this is Flow 1 completion (has patient info, no date/time)
     # Flow 1 returns: professional_id, professional_name, specialty_name, tipo_pagamento,
-    #                 convenio_nome, convenio_numero, nome, cpf, data_nascimento
-    has_patient_info = "nome" in flow_response and "cpf" in flow_response
+    #                 convenio_nome, nome, email
+    has_patient_info = "nome" in flow_response and "email" in flow_response
     has_booking = "date" in flow_response and "time" in flow_response
 
     if has_patient_info and not has_booking:
         # Flow 1 completed - send Flow 2 (Booking)
         logger.info(f"📋 Flow 1 completed, sending Booking flow...")
 
-        if not CLINICA_MEDICA_AGENDAMENTO_FLOW_ID:
+        # Get clinic-specific booking flow ID from Firestore
+        booking_flow_id = None
+        if db:
+            clinic = db.get_clinic(clinic_id)
+            if clinic:
+                whatsapp_config = getattr(clinic, 'whatsapp_config', {}) or {}
+                booking_flow_id = whatsapp_config.get('bookingFlowId', '')
+                logger.info(f"📱 Using clinic-specific booking flow ID: {booking_flow_id}")
+
+        # Fallback to environment variable if not in clinic config
+        if not booking_flow_id:
+            booking_flow_id = CLINICA_MEDICA_AGENDAMENTO_FLOW_ID
+
+        if not booking_flow_id:
             # Fallback: create appointment with just the collected info
-            logger.warning("⚠️ CLINICA_MEDICA_AGENDAMENTO_FLOW_ID not configured, creating placeholder appointment")
+            logger.warning("⚠️ No booking flow ID configured (not in clinic config or env var)")
             await send_whatsapp_message(
                 phone_number_id, phone,
                 f"Obrigado {flow_response.get('nome', '')}! 📋\n\n"
@@ -1271,7 +1284,7 @@ async def handle_flow_completion(
         professional_name = flow_response.get("professional_name", "")
         specialty_name = flow_response.get("specialty_name", "")
         patient_name = flow_response.get("nome", "")
-        patient_cpf = flow_response.get("cpf", "")
+        patient_email = flow_response.get("email", "")
 
         # Get available times for the professional
         available_times = []
@@ -1326,14 +1339,14 @@ async def handle_flow_completion(
         success = await send_booking_flow(
             phone_number_id=phone_number_id,
             to=phone,
-            flow_id=CLINICA_MEDICA_AGENDAMENTO_FLOW_ID,
+            flow_id=booking_flow_id,
             flow_token=flow_token,
             access_token=access_token,
             professional_id=professional_id,
             professional_name=professional_name,
             specialty_name=specialty_name,
             patient_name=patient_name,
-            patient_cpf=patient_cpf,
+            patient_email=patient_email,
             available_times=available_times,
             min_date=min_date,
             max_date=max_date,
@@ -1341,14 +1354,18 @@ async def handle_flow_completion(
 
         if success:
             logger.info(f"✅ Booking flow sent to {phone}")
-            # Update conversation state
+            # Update conversation state - include payment info from Flow 1
+            tipo_pagamento = flow_response.get("tipo_pagamento", "particular")
+            convenio_nome = flow_response.get("convenio_nome", "")
             if db:
                 db.save_conversation_state(clinic_id, phone, {
                     "state": "in_booking_flow",
                     "professional_id": professional_id,
                     "professional_name": professional_name,
                     "patient_name": patient_name,
-                    "patient_cpf": patient_cpf,
+                    "patient_email": patient_email,
+                    "tipo_pagamento": tipo_pagamento,
+                    "convenio_nome": convenio_nome,
                 })
         else:
             logger.error(f"❌ Failed to send booking flow to {phone}")
@@ -1366,9 +1383,31 @@ async def handle_flow_completion(
         professional_id = flow_response.get("professional_id", "")
         professional_name = flow_response.get("doctor_name", "")
         patient_name = flow_response.get("patient_name", "")
-        patient_cpf = flow_response.get("patient_cpf", "")
+        patient_email = flow_response.get("patient_email", "")
         selected_date = flow_response.get("date", "")
         selected_time = flow_response.get("time", "")
+
+        # Retrieve payment info from conversation state (saved in Flow 1)
+        tipo_pagamento = "particular"
+        convenio_nome = ""
+        if db:
+            conv_state = db.get_conversation_state(clinic_id, phone)
+            if conv_state:
+                tipo_pagamento = conv_state.get("tipo_pagamento", "particular")
+                convenio_nome = conv_state.get("convenio_nome", "")
+
+        logger.info(f"💳 Payment type: {tipo_pagamento}, Convenio: {convenio_nome}")
+
+        # Get clinic settings for signal percentage and default price
+        clinic = db.get_clinic(clinic_id) if db else None
+        signal_percentage = 15  # Default 15%
+        default_price_cents = 20000  # Default R$ 200.00 for consultation
+
+        if clinic:
+            signal_percentage = getattr(clinic, 'signal_percentage', 15) or 15
+            # Check payment_settings for default consultation price
+            payment_settings = getattr(clinic, 'payment_settings', {}) or {}
+            default_price_cents = payment_settings.get('defaultConsultationPrice', 20000)
 
         # Format date for display
         try:
@@ -1382,31 +1421,122 @@ async def handle_flow_completion(
 
         # Create the appointment
         try:
-            appointment = await create_appointment(
+            appointment = create_appointment(
                 db=db,
                 clinic_id=clinic_id,
-                professional_id=professional_id,
-                professional_name=professional_name,
-                patient_name=patient_name,
                 patient_phone=phone,
-                date=selected_date,
-                time=selected_time,
-                duration=30,
-                notes=f"CPF: {patient_cpf}" if patient_cpf else "Agendado via WhatsApp Flow",
+                professional_id=professional_id,
+                date_str=selected_date,
+                time_str=selected_time,
+                patient_name=patient_name,
+                professional_name=professional_name,
+                duration_minutes=30,
+                payment_type=tipo_pagamento,
+                total_cents=default_price_cents if tipo_pagamento == "particular" else 0,
+                signal_percentage=signal_percentage,
+                convenio_name=convenio_nome if tipo_pagamento == "convenio" else None,
             )
 
-            logger.info(f"✅ Appointment created: {appointment.get('id') if appointment else 'N/A'}")
+            logger.info(f"✅ Appointment created: {appointment.id if appointment else 'N/A'}")
 
-            # Send confirmation message
-            confirmation_msg = (
-                f"✅ *Agendamento Confirmado!*\n\n"
-                f"📅 {weekday}, {formatted_date} às {selected_time}\n"
-                f"👨‍⚕️ {professional_name}\n"
-                f"👤 {patient_name}\n\n"
-                "Você receberá um lembrete 24h antes da consulta.\n\n"
-                "Para cancelar ou reagendar, basta enviar uma mensagem!"
+            # Check if payment signal is required (particular with signal > 0)
+            needs_payment = (
+                tipo_pagamento == "particular" and
+                appointment and
+                appointment.signal_cents > 0
             )
-            await send_whatsapp_message(phone_number_id, phone, confirmation_msg, access_token)
+
+            if needs_payment:
+                # Import payment utilities
+                from src.utils.payment import (
+                    create_pagseguro_pix_order,
+                    send_pix_payment_to_customer,
+                    format_payment_amount,
+                    is_pagseguro_configured,
+                    PAGSEGURO_MIN_PIX_AMOUNT_CENTS
+                )
+
+                logger.info(f"💰 Signal required: {format_payment_amount(appointment.signal_cents)}")
+
+                # Check if signal meets minimum PIX amount
+                if appointment.signal_cents >= PAGSEGURO_MIN_PIX_AMOUNT_CENTS and is_pagseguro_configured():
+                    # Create PIX payment order
+                    payment_info = await create_pagseguro_pix_order(
+                        order_id=appointment.id,
+                        amount=appointment.signal_cents,
+                        customer_name=patient_name,
+                        customer_phone=phone,
+                        product_name=f"Sinal - Consulta {professional_name}"
+                    )
+
+                    if payment_info:
+                        # Save payment ID to appointment
+                        if db:
+                            db.update_appointment(appointment.id, {
+                                "signalPaymentId": payment_info.get("payment_id")
+                            })
+
+                        # Send confirmation message with payment pending
+                        confirmation_msg = (
+                            f"📋 *Agendamento Registrado!*\n\n"
+                            f"📅 {weekday}, {formatted_date} às {selected_time}\n"
+                            f"👨‍⚕️ {professional_name}\n"
+                            f"👤 {patient_name}\n\n"
+                            f"💳 *Sinal necessário:* {format_payment_amount(appointment.signal_cents)}\n\n"
+                            "Seu agendamento será confirmado após o pagamento do sinal. "
+                            "Vou te enviar o PIX em seguida! 👇"
+                        )
+                        await send_whatsapp_message(phone_number_id, phone, confirmation_msg, access_token)
+
+                        # Send PIX payment
+                        await send_pix_payment_to_customer(
+                            phone=phone,
+                            payment_info=payment_info,
+                            amount=appointment.signal_cents,
+                            product_name="a confirmação da sua consulta",
+                            order_id=appointment.id
+                        )
+
+                        logger.info(f"💳 PIX payment sent to {phone}")
+                    else:
+                        # PagSeguro failed - send manual instructions
+                        logger.warning("⚠️ PagSeguro failed, sending confirmation without payment")
+                        confirmation_msg = (
+                            f"📋 *Agendamento Registrado!*\n\n"
+                            f"📅 {weekday}, {formatted_date} às {selected_time}\n"
+                            f"👨‍⚕️ {professional_name}\n"
+                            f"👤 {patient_name}\n\n"
+                            f"💳 *Sinal:* {format_payment_amount(appointment.signal_cents)}\n\n"
+                            "Entre em contato com a clínica para efetuar o pagamento do sinal e confirmar sua consulta."
+                        )
+                        await send_whatsapp_message(phone_number_id, phone, confirmation_msg, access_token)
+                else:
+                    # Signal too low or PagSeguro not configured
+                    logger.info(f"⚠️ Signal {appointment.signal_cents} cents below minimum or PagSeguro not configured")
+                    confirmation_msg = (
+                        f"✅ *Agendamento Confirmado!*\n\n"
+                        f"📅 {weekday}, {formatted_date} às {selected_time}\n"
+                        f"👨‍⚕️ {professional_name}\n"
+                        f"👤 {patient_name}\n\n"
+                        "Você receberá um lembrete 24h antes da consulta.\n\n"
+                        "Para cancelar ou reagendar, basta enviar uma mensagem!"
+                    )
+                    await send_whatsapp_message(phone_number_id, phone, confirmation_msg, access_token)
+            else:
+                # Convenio or no signal required - appointment confirmed directly
+                confirmation_msg = (
+                    f"✅ *Agendamento Confirmado!*\n\n"
+                    f"📅 {weekday}, {formatted_date} às {selected_time}\n"
+                    f"👨‍⚕️ {professional_name}\n"
+                    f"👤 {patient_name}\n"
+                )
+                if tipo_pagamento == "convenio" and convenio_nome:
+                    confirmation_msg += f"📋 Convênio: {convenio_nome}\n"
+                confirmation_msg += (
+                    "\nVocê receberá um lembrete 24h antes da consulta.\n\n"
+                    "Para cancelar ou reagendar, basta enviar uma mensagem!"
+                )
+                await send_whatsapp_message(phone_number_id, phone, confirmation_msg, access_token)
 
             # Reset conversation state
             if db:
@@ -1491,8 +1621,8 @@ async def handle_scheduling_intent(
             flow_id=flow_id_to_use,
             flow_token=flow_token,
             flow_cta="Agendar Consulta",
-            header_text="Agendar Consulta",
-            body_text=f"Olá! Vamos agendar sua consulta na *{clinic.name}*.\n\nClique no botão abaixo para começar.",
+            header_text="Seus Dados 👇",
+            body_text=f"Preencha seus dados para agendar sua consulta na *{clinic.name}*",
             access_token=access_token,
             flow_action="navigate",  # "navigate" for client-side flows
             initial_screen="ESPECIALIDADE",

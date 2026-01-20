@@ -213,37 +213,71 @@ class GendeiDatabase:
 
     # ============================================
     # APPOINTMENT OPERATIONS
+    # Now uses nested path: clinics/{clinicId}/appointments/{appointmentId}
     # ============================================
 
     def create_appointment(self, appointment: Appointment) -> str:
-        """Create a new appointment"""
+        """Create a new appointment under the clinic subcollection"""
         try:
-            doc_ref = self.db.collection(APPOINTMENTS).document(appointment.id)
+            # Save to clinics/{clinicId}/appointments/{appointmentId}
+            doc_ref = self.db.collection(CLINICS).document(appointment.clinic_id).collection(
+                "appointments"
+            ).document(appointment.id)
             doc_ref.set(appointment.to_dict())
-            logger.info(f"✅ Appointment {appointment.id} created for {appointment.patient_name}")
+            logger.info(f"✅ Appointment {appointment.id} created for {appointment.patient_name} in clinic {appointment.clinic_id}")
             return appointment.id
         except Exception as e:
             logger.error(f"Error creating appointment: {e}")
             raise
 
-    def get_appointment(self, appointment_id: str) -> Optional[Appointment]:
-        """Get appointment by ID"""
+    def get_appointment(self, appointment_id: str, clinic_id: Optional[str] = None) -> Optional[Appointment]:
+        """Get appointment by ID. If clinic_id provided, use direct path; otherwise search."""
         try:
-            doc = self.db.collection(APPOINTMENTS).document(appointment_id).get()
-            if doc.exists:
-                data = doc.to_dict()
-                data["id"] = doc.id
-                return Appointment.from_dict(data)
-            return None
+            if clinic_id:
+                # Direct lookup with known clinic_id
+                doc = self.db.collection(CLINICS).document(clinic_id).collection(
+                    "appointments"
+                ).document(appointment_id).get()
+                if doc.exists:
+                    data = doc.to_dict()
+                    data["id"] = doc.id
+                    return Appointment.from_dict(data)
+                return None
+            else:
+                # Search using collection group query (across all clinics)
+                docs = self.db.collection_group("appointments").where(
+                    "id", "==", appointment_id
+                ).limit(1).get()
+                for doc in docs:
+                    data = doc.to_dict()
+                    data["id"] = doc.id
+                    return Appointment.from_dict(data)
+                return None
         except Exception as e:
             logger.error(f"Error getting appointment {appointment_id}: {e}")
             return None
 
-    def update_appointment(self, appointment_id: str, data: Dict[str, Any]) -> bool:
-        """Update appointment fields"""
+    def update_appointment(self, appointment_id: str, data: Dict[str, Any], clinic_id: Optional[str] = None) -> bool:
+        """Update appointment fields. If clinic_id provided, use direct path."""
         try:
             data["updatedAt"] = datetime.now().isoformat()
-            self.db.collection(APPOINTMENTS).document(appointment_id).update(data)
+
+            if clinic_id:
+                # Direct update with known clinic_id
+                self.db.collection(CLINICS).document(clinic_id).collection(
+                    "appointments"
+                ).document(appointment_id).update(data)
+            else:
+                # Find the appointment first to get clinic_id
+                appointment = self.get_appointment(appointment_id)
+                if appointment:
+                    self.db.collection(CLINICS).document(appointment.clinic_id).collection(
+                        "appointments"
+                    ).document(appointment_id).update(data)
+                else:
+                    logger.error(f"Appointment {appointment_id} not found for update")
+                    return False
+
             logger.info(f"✅ Appointment {appointment_id} updated")
             return True
         except Exception as e:
@@ -259,14 +293,8 @@ class GendeiDatabase:
     ) -> List[Appointment]:
         """Get appointments for a clinic with optional filters"""
         try:
-            query = self.db.collection(APPOINTMENTS).where("clinicId", "==", clinic_id)
-
-            if start_date:
-                query = query.where("date", ">=", start_date)
-            if end_date:
-                query = query.where("date", "<=", end_date)
-            if professional_id:
-                query = query.where("professionalId", "==", professional_id)
+            # Query from clinics/{clinicId}/appointments subcollection
+            query = self.db.collection(CLINICS).document(clinic_id).collection("appointments")
 
             docs = query.get()
 
@@ -274,6 +302,15 @@ class GendeiDatabase:
             for doc in docs:
                 data = doc.to_dict()
                 data["id"] = doc.id
+
+                # Apply filters in memory (to avoid complex Firestore index requirements)
+                if start_date and data.get("date", "") < start_date:
+                    continue
+                if end_date and data.get("date", "") > end_date:
+                    continue
+                if professional_id and data.get("professionalId") != professional_id:
+                    continue
+
                 appointments.append(Appointment.from_dict(data))
 
             return appointments
@@ -299,9 +336,10 @@ class GendeiDatabase:
         start_date: str,
         end_date: str
     ) -> List[Appointment]:
-        """Get all appointments in a date range (for reminders)"""
+        """Get all appointments in a date range (for reminders) using collection group"""
         try:
-            docs = self.db.collection(APPOINTMENTS).where(
+            # Use collection group query to get appointments from all clinics
+            docs = self.db.collection_group("appointments").where(
                 "date", ">=", start_date
             ).where("date", "<=", end_date).get()
 
@@ -321,14 +359,18 @@ class GendeiDatabase:
         patient_id: str,
         clinic_id: Optional[str] = None
     ) -> List[Appointment]:
-        """Get appointments for a patient"""
+        """Get appointments for a patient using collection group query"""
         try:
-            query = self.db.collection(APPOINTMENTS).where("patientId", "==", patient_id)
-
             if clinic_id:
-                query = query.where("clinicId", "==", clinic_id)
-
-            docs = query.get()
+                # Query specific clinic's appointments
+                docs = self.db.collection(CLINICS).document(clinic_id).collection(
+                    "appointments"
+                ).where("patientId", "==", patient_id).get()
+            else:
+                # Query all clinics using collection group
+                docs = self.db.collection_group("appointments").where(
+                    "patientId", "==", patient_id
+                ).get()
 
             appointments = []
             for doc in docs:
@@ -343,25 +385,48 @@ class GendeiDatabase:
 
     # ============================================
     # PATIENT OPERATIONS
+    # Now uses nested path: clinics/{clinicId}/patients/{patientId}
     # ============================================
 
-    def get_patient(self, patient_id: str) -> Optional[Patient]:
-        """Get patient by ID (phone number)"""
+    def get_patient(self, patient_id: str, clinic_id: Optional[str] = None) -> Optional[Patient]:
+        """Get patient by ID (phone number). If clinic_id provided, use direct path."""
         try:
-            doc = self.db.collection(PATIENTS).document(patient_id).get()
-            if doc.exists:
-                data = doc.to_dict()
-                data["id"] = doc.id
-                return Patient.from_dict(data)
-            return None
+            if clinic_id:
+                # Direct lookup
+                doc = self.db.collection(CLINICS).document(clinic_id).collection(
+                    "patients"
+                ).document(patient_id).get()
+                if doc.exists:
+                    data = doc.to_dict()
+                    data["id"] = doc.id
+                    return Patient.from_dict(data)
+                return None
+            else:
+                # Search across all clinics using collection group
+                docs = self.db.collection_group("patients").where(
+                    "id", "==", patient_id
+                ).limit(1).get()
+                for doc in docs:
+                    data = doc.to_dict()
+                    data["id"] = doc.id
+                    return Patient.from_dict(data)
+                return None
         except Exception as e:
             logger.error(f"Error getting patient {patient_id}: {e}")
             return None
 
     def upsert_patient(self, patient: Patient) -> str:
-        """Create or update patient"""
+        """Create or update patient under clinic subcollection"""
         try:
-            doc_ref = self.db.collection(PATIENTS).document(patient.id)
+            # Patient should have at least one clinic_id
+            if not patient.clinic_ids:
+                raise ValueError("Patient must have at least one clinic_id")
+
+            clinic_id = patient.clinic_ids[0]  # Primary clinic
+
+            doc_ref = self.db.collection(CLINICS).document(clinic_id).collection(
+                "patients"
+            ).document(patient.id)
             existing = doc_ref.get()
 
             if existing.exists:
@@ -394,7 +459,7 @@ class GendeiDatabase:
                 # Create new patient
                 doc_ref.set(patient.to_dict())
 
-            logger.info(f"✅ Patient {patient.id} upserted: {patient.name}")
+            logger.info(f"✅ Patient {patient.id} upserted in clinic {clinic_id}: {patient.name}")
             return patient.id
         except Exception as e:
             logger.error(f"Error upserting patient: {e}")
@@ -430,37 +495,75 @@ class GendeiDatabase:
 
     # ============================================
     # ORDER OPERATIONS
+    # Now uses nested path: clinics/{clinicId}/orders/{orderId}
     # ============================================
 
-    def create_order(self, order_id: str, data: Dict[str, Any]) -> str:
-        """Create a new order"""
+    def create_order(self, order_id: str, data: Dict[str, Any], clinic_id: Optional[str] = None) -> str:
+        """Create a new order under clinic subcollection"""
         try:
             data["createdAt"] = datetime.now().isoformat()
-            self.db.collection(ORDERS).document(order_id).set(data)
-            logger.info(f"✅ Order {order_id} created")
+            # Use clinic_id from data if not provided as parameter
+            cid = clinic_id or data.get("clinicId")
+            if not cid:
+                raise ValueError("Order must have a clinicId")
+
+            self.db.collection(CLINICS).document(cid).collection(
+                "orders"
+            ).document(order_id).set(data)
+            logger.info(f"✅ Order {order_id} created in clinic {cid}")
             return order_id
         except Exception as e:
             logger.error(f"Error creating order: {e}")
             raise
 
-    def get_order(self, order_id: str) -> Optional[Dict[str, Any]]:
-        """Get order by ID"""
+    def get_order(self, order_id: str, clinic_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """Get order by ID. If clinic_id provided, use direct path; otherwise search."""
         try:
-            doc = self.db.collection(ORDERS).document(order_id).get()
-            if doc.exists:
-                data = doc.to_dict()
-                data["id"] = doc.id
-                return data
-            return None
+            if clinic_id:
+                # Direct lookup
+                doc = self.db.collection(CLINICS).document(clinic_id).collection(
+                    "orders"
+                ).document(order_id).get()
+                if doc.exists:
+                    data = doc.to_dict()
+                    data["id"] = doc.id
+                    return data
+                return None
+            else:
+                # Search across all clinics using collection group
+                docs = self.db.collection_group("orders").where(
+                    "id", "==", order_id
+                ).limit(1).get()
+                for doc in docs:
+                    data = doc.to_dict()
+                    data["id"] = doc.id
+                    return data
+                return None
         except Exception as e:
             logger.error(f"Error getting order: {e}")
             return None
 
-    def update_order(self, order_id: str, data: Dict[str, Any]) -> bool:
-        """Update order fields"""
+    def update_order(self, order_id: str, data: Dict[str, Any], clinic_id: Optional[str] = None) -> bool:
+        """Update order fields. If clinic_id provided, use direct path."""
         try:
             data["updatedAt"] = datetime.now().isoformat()
-            self.db.collection(ORDERS).document(order_id).update(data)
+
+            if clinic_id:
+                # Direct update
+                self.db.collection(CLINICS).document(clinic_id).collection(
+                    "orders"
+                ).document(order_id).update(data)
+            else:
+                # Find order first to get clinic_id
+                order = self.get_order(order_id)
+                if order and order.get("clinicId"):
+                    self.db.collection(CLINICS).document(order["clinicId"]).collection(
+                        "orders"
+                    ).document(order_id).update(data)
+                else:
+                    logger.error(f"Order {order_id} not found for update")
+                    return False
+
             return True
         except Exception as e:
             logger.error(f"Error updating order: {e}")
@@ -932,6 +1035,29 @@ class GendeiDatabase:
         except Exception as e:
             logger.error(f"Error saving conversation state: {e}")
             return False
+
+    def get_conversation_state(self, clinic_id: str, phone: str) -> Optional[Dict[str, Any]]:
+        """
+        Get conversation state.
+        Args:
+            clinic_id: Clinic ID
+            phone: WhatsApp user ID
+        Returns:
+            Conversation state dict or None if not found
+        """
+        try:
+            conv_ref = self.db.collection(CLINICS).document(clinic_id).collection(
+                "conversations"
+            ).document(phone)
+
+            doc = conv_ref.get()
+            if doc.exists:
+                return doc.to_dict()
+            return None
+
+        except Exception as e:
+            logger.error(f"Error getting conversation state: {e}")
+            return None
 
     # ============================================
     # MESSAGE DEDUPLICATION (Like Zapcomm - Firestore-backed)

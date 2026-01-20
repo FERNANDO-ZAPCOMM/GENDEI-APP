@@ -332,7 +332,7 @@ async def send_booking_flow(
     professional_name: str,
     specialty_name: str,
     patient_name: str,
-    patient_cpf: str,
+    patient_email: str,
     available_times: list,
     min_date: str,
     max_date: str,
@@ -351,7 +351,7 @@ async def send_booking_flow(
         professional_name: Professional's name
         specialty_name: Specialty name
         patient_name: Patient's name
-        patient_cpf: Patient's CPF
+        patient_email: Patient's email
         available_times: List of available time slots
         min_date: Minimum selectable date (YYYY-MM-DD)
         max_date: Maximum selectable date (YYYY-MM-DD)
@@ -364,7 +364,7 @@ async def send_booking_flow(
         "doctor_name": professional_name,
         "specialty_name": specialty_name,
         "patient_name": patient_name,
-        "patient_cpf": patient_cpf,
+        "patient_email": patient_email,
         "available_times": available_times,
         "min_date": min_date,
         "max_date": max_date,
@@ -377,8 +377,8 @@ async def send_booking_flow(
         flow_id=flow_id,
         flow_token=flow_token,
         flow_cta="Escolher Horário",
-        header_text="Agendar Consulta",
-        body_text=f"Escolha a data e horário com {professional_name}",
+        header_text="Escolher Horário 📅",
+        body_text=f"Selecione a data e horário com {professional_name}",
         access_token=access_token,
         flow_action="navigate",  # "navigate" for client-side flows
         initial_screen="BOOKING",

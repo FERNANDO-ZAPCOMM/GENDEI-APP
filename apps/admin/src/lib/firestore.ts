@@ -101,7 +101,7 @@ function toDateString(timestamp: any): string {
 // Fetch all clinics
 export async function fetchAllClinics(): Promise<Clinic[]> {
   const db = getFirestoreDb();
-  const clinicsRef = collection(db, 'clinics');
+  const clinicsRef = collection(db, 'gendei_clinics');
   const q = query(clinicsRef, orderBy('createdAt', 'desc'), limit(100));
   const snapshot = await getDocs(q);
 
@@ -116,7 +116,7 @@ export async function fetchAllClinics(): Promise<Clinic[]> {
 // Fetch single clinic by ID
 export async function fetchClinicById(clinicId: string): Promise<Clinic | null> {
   const db = getFirestoreDb();
-  const clinicRef = doc(db, 'clinics', clinicId);
+  const clinicRef = doc(db, 'gendei_clinics', clinicId);
   const clinicDoc = await getDoc(clinicRef);
 
   if (!clinicDoc.exists()) return null;
@@ -131,7 +131,7 @@ export async function fetchClinicById(clinicId: string): Promise<Clinic | null> 
 // Fetch professionals for a clinic
 export async function fetchClinicProfessionals(clinicId: string): Promise<Professional[]> {
   const db = getFirestoreDb();
-  const professionalsRef = collection(db, 'clinics', clinicId, 'professionals');
+  const professionalsRef = collection(db, 'gendei_clinics', clinicId, 'professionals');
   const snapshot = await getDocs(professionalsRef);
 
   return snapshot.docs.map(doc => ({
@@ -144,7 +144,7 @@ export async function fetchClinicProfessionals(clinicId: string): Promise<Profes
 // Fetch patients for a clinic
 export async function fetchClinicPatients(clinicId: string): Promise<Patient[]> {
   const db = getFirestoreDb();
-  const patientsRef = collection(db, 'clinics', clinicId, 'patients');
+  const patientsRef = collection(db, 'gendei_clinics', clinicId, 'patients');
   const q = query(patientsRef, limit(50));
   const snapshot = await getDocs(q);
 
@@ -158,7 +158,7 @@ export async function fetchClinicPatients(clinicId: string): Promise<Patient[]> 
 // Fetch appointments for a clinic
 export async function fetchClinicAppointments(clinicId: string, limitCount = 20): Promise<Appointment[]> {
   const db = getFirestoreDb();
-  const appointmentsRef = collection(db, 'clinics', clinicId, 'appointments');
+  const appointmentsRef = collection(db, 'gendei_clinics', clinicId, 'appointments');
   const q = query(appointmentsRef, orderBy('createdAt', 'desc'), limit(limitCount));
   const snapshot = await getDocs(q);
 

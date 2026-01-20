@@ -437,7 +437,6 @@ class FlowsHandler:
                 "specialty_name": data.get("specialty_name"),
                 "tipo_pagamento": data.get("tipo_pagamento"),
                 "convenio_nome": data.get("convenio_nome", ""),
-                "convenio_numero": data.get("convenio_numero", ""),
                 "error_message": ""
             }
         }
@@ -454,7 +453,7 @@ class FlowsHandler:
         """
 
         nome = data.get("nome", "").strip()
-        cpf = data.get("cpf", "").strip()
+        email = data.get("email", "").strip()
 
         if not nome:
             return {
@@ -465,12 +464,12 @@ class FlowsHandler:
                 }
             }
 
-        if not cpf:
+        if not email:
             return {
                 "screen": "DADOS_PACIENTE",
                 "data": {
                     **data,
-                    "error_message": "Por favor, informe seu CPF."
+                    "error_message": "Por favor, informe seu e-mail."
                 }
             }
 
@@ -485,10 +484,8 @@ class FlowsHandler:
                 "specialty_name": data.get("specialty_name"),
                 "tipo_pagamento": data.get("tipo_pagamento"),
                 "convenio_nome": data.get("convenio_nome", ""),
-                "convenio_numero": data.get("convenio_numero", ""),
                 "nome": nome,
-                "cpf": cpf,
-                "data_nascimento": data.get("data_nascimento", ""),
+                "email": email,
                 "error_message": ""
             }
         }
@@ -539,23 +536,22 @@ class FlowsHandler:
         professional_id = data.get("professional_id", "")
         professional_name = data.get("doctor_name", "")
         patient_name = data.get("patient_name", "")
-        patient_cpf = data.get("patient_cpf", "")
+        patient_email = data.get("patient_email", "")
 
         # Create the appointment
         try:
             from src.scheduler.appointments import create_appointment
 
-            appointment = await create_appointment(
+            appointment = create_appointment(
                 db=self.db,
                 clinic_id=clinic_id,
-                professional_id=professional_id,
-                professional_name=professional_name,
-                patient_name=patient_name,
                 patient_phone=patient_phone,
-                date=selected_date,
-                time=selected_time,
-                duration=30,
-                notes=f"CPF: {patient_cpf}" if patient_cpf else "Agendado via WhatsApp Flow",
+                professional_id=professional_id,
+                date_str=selected_date,
+                time_str=selected_time,
+                patient_name=patient_name,
+                professional_name=professional_name,
+                duration_minutes=30,
             )
 
             # Format date for display
@@ -565,7 +561,7 @@ class FlowsHandler:
             except ValueError:
                 formatted_date = selected_date
 
-            logger.info(f"✅ Appointment created via flow: {appointment.get('id') if appointment else 'N/A'}")
+            logger.info(f"✅ Appointment created via flow: {appointment.id if appointment else 'N/A'}")
 
             # Return completion response
             return {
@@ -574,7 +570,7 @@ class FlowsHandler:
                     "extension_message_response": {
                         "params": {
                             "flow_token": flow_token,
-                            "appointment_id": appointment.get("id") if appointment else "",
+                            "appointment_id": appointment.id if appointment else "",
                             "professional_name": professional_name,
                             "date": formatted_date,
                             "time": selected_time,
