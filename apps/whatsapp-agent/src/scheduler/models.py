@@ -43,6 +43,8 @@ class Clinic:
     state: str = ""
     zip_code: str = ""
     cnpj: Optional[str] = None
+    description: str = ""           # Clinic description
+    greeting_summary: str = ""      # AI-generated greeting summary
 
     # WhatsApp connection
     whatsapp_phone_number_id: Optional[str] = None
@@ -78,6 +80,8 @@ class Clinic:
             "state": self.state,
             "zipCode": self.zip_code,
             "cnpj": self.cnpj,
+            "description": self.description,
+            "greetingSummary": self.greeting_summary,
             "whatsappPhoneNumberId": self.whatsapp_phone_number_id,
             "whatsappWabaId": self.whatsapp_waba_id,
             "whatsappConnected": self.whatsapp_connected,
@@ -105,6 +109,8 @@ class Clinic:
             state=data.get("state", ""),
             zip_code=data.get("zipCode", ""),
             cnpj=data.get("cnpj"),
+            description=data.get("description", ""),
+            greeting_summary=data.get("greetingSummary", ""),
             whatsapp_phone_number_id=data.get("whatsappPhoneNumberId"),
             whatsapp_waba_id=data.get("whatsappWabaId"),
             whatsapp_access_token=data.get("whatsappAccessToken"),

@@ -4,9 +4,15 @@
 import { Router, Request, Response } from 'express';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { verifyAuth } from '../middleware/auth';
+import Anthropic from '@anthropic-ai/sdk';
 
 const router = Router();
 const db = getFirestore();
+
+// Initialize Anthropic client
+const anthropic = new Anthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY || '',
+});
 
 // Collection names
 const CLINICS = 'gendei_clinics';
@@ -126,7 +132,8 @@ router.patch('/me', verifyAuth, async (req: Request, res: Response) => {
     const allowedFields = [
       'name', 'phone', 'email', 'address', 'city', 'state',
       'zipCode', 'cnpj', 'categories', 'signalPercentage', 'timezone',
-      'paymentSettings', 'pixKey', 'depositPercentage', 'requiresDeposit'
+      'paymentSettings', 'pixKey', 'depositPercentage', 'requiresDeposit',
+      'description', 'website', 'openingHours', 'addressData', 'greetingSummary'
     ];
 
     const updateData: any = {
@@ -261,7 +268,8 @@ router.put('/:clinicId', verifyAuth, async (req: Request, res: Response) => {
     const allowedFields = [
       'name', 'phone', 'email', 'address', 'city', 'state',
       'zipCode', 'cnpj', 'signalPercentage', 'timezone',
-      'paymentSettings', 'pixKey', 'depositPercentage', 'requiresDeposit'
+      'paymentSettings', 'pixKey', 'depositPercentage', 'requiresDeposit',
+      'description', 'website', 'openingHours', 'addressData', 'greetingSummary', 'categories'
     ];
 
     const updateData: any = {
@@ -386,6 +394,76 @@ router.get('/:clinicId/stats', verifyAuth, async (req: Request, res: Response) =
   } catch (error: any) {
     console.error('Error getting clinic stats:', error);
     return res.status(500).json({ message: error.message });
+  }
+});
+
+// ============================================
+// AI SUMMARY GENERATION
+// ============================================
+
+// POST /clinics/me/generate-summary - Generate AI greeting summary from description
+router.post('/me/generate-summary', verifyAuth, async (req: Request, res: Response) => {
+  try {
+    const user = (req as any).user;
+    const clinicId = user?.uid;
+
+    if (!clinicId) {
+      return res.status(401).json({ message: 'Not authenticated' });
+    }
+
+    const { description, clinicName } = req.body;
+
+    if (!description || description.trim().length < 20) {
+      return res.status(400).json({ message: 'Description must be at least 20 characters' });
+    }
+
+    // Check if Anthropic API key is configured
+    if (!process.env.ANTHROPIC_API_KEY) {
+      return res.status(500).json({ message: 'AI service not configured' });
+    }
+
+    // Generate summary using Claude
+    const message = await anthropic.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 200,
+      messages: [
+        {
+          role: 'user',
+          content: `Você é um assistente de uma clínica de saúde. Crie uma mensagem de saudação curta e profissional (máximo 2 frases) para o bot do WhatsApp da clínica.
+
+Nome da clínica: ${clinicName || 'a clínica'}
+
+Descrição completa da clínica:
+${description}
+
+Regras:
+- Comece com "Olá" ou "Oi"
+- Mencione o nome da clínica
+- Resuma em 1-2 frases o que a clínica oferece
+- Use linguagem amigável e profissional
+- Não use emojis
+- Máximo 150 caracteres
+
+Exemplo de formato:
+"Olá, somos a [Nome]. [Breve descrição dos serviços em 1 frase]."
+
+Responda APENAS com a mensagem de saudação, sem explicações adicionais.`
+        }
+      ]
+    });
+
+    const summary = (message.content[0] as any).text?.trim() || '';
+
+    // Save the summary to the clinic document
+    await db.collection(CLINICS).doc(clinicId).update({
+      greetingSummary: summary,
+      updatedAt: FieldValue.serverTimestamp()
+    });
+
+    return res.json({ summary });
+  } catch (error: any) {
+    console.error('Error generating summary:', error);
+    return res.status(500).json({ message: error.message || 'Failed to generate summary' });
   }
 });
 

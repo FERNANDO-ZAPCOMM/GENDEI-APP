@@ -1214,21 +1214,42 @@ router.post(
       const patientInfoFlowId = clinicData.whatsappConfig?.patientInfoFlowId;
       const bookingFlowId = clinicData.whatsappConfig?.bookingFlowId;
 
-      if (!patientInfoFlowId && !bookingFlowId) {
-        return res.status(400).json({ error: 'No flows found for this clinic' });
-      }
-
       const status = await metaService.getConnectionStatus(clinicId);
       if (!status.meta?.wabaId) {
         return res.status(400).json({ error: 'No WhatsApp Business Account connected' });
       }
 
-      // Update flows with latest JSON
-      const result = await metaService.updateExistingFlows(
-        status.meta.wabaId,
-        patientInfoFlowId,
-        bookingFlowId
-      );
+      let result;
+
+      // If no flows exist, create them instead of updating
+      if (!patientInfoFlowId && !bookingFlowId) {
+        console.log(`No flows found for clinic ${clinicId}, creating new flows...`);
+        const flowsResult = await metaService.createSchedulingFlows(status.meta.wabaId);
+
+        // Update clinic with flow IDs
+        if (flowsResult.flowIds.patientInfo || flowsResult.flowIds.booking) {
+          await db.collection(CLINICS).doc(clinicId).update({
+            'whatsappConfig.flowsCreated': true,
+            ...(flowsResult.flowIds.patientInfo && { 'whatsappConfig.patientInfoFlowId': flowsResult.flowIds.patientInfo }),
+            ...(flowsResult.flowIds.booking && { 'whatsappConfig.bookingFlowId': flowsResult.flowIds.booking }),
+            'whatsappConfig.flowsResult': flowsResult,
+          });
+        }
+
+        result = {
+          created: true,
+          updated: [],
+          flowIds: flowsResult.flowIds,
+          errors: flowsResult.errors,
+        };
+      } else {
+        // Update existing flows with latest JSON
+        result = await metaService.updateExistingFlows(
+          status.meta.wabaId,
+          patientInfoFlowId,
+          bookingFlowId
+        );
+      }
 
       // Update clinic document with update timestamp
       await db.collection(CLINICS).doc(clinicId).update({

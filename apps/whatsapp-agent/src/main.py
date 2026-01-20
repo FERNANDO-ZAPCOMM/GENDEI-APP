@@ -301,6 +301,8 @@ def load_clinic_context(clinic_id: str) -> Dict[str, Any]:
                 "address": getattr(clinic, 'address', ''),
                 "phone": getattr(clinic, 'phone', ''),
                 "opening_hours": getattr(clinic, 'opening_hours', ''),
+                "description": getattr(clinic, 'description', ''),
+                "greeting_summary": getattr(clinic, 'greeting_summary', ''),
             }
 
         professionals = db.get_clinic_professionals(clinic_id)
@@ -1001,28 +1003,33 @@ async def send_initial_greeting(
             db.save_conversation_state(clinic_id, phone, state)
 
         buttons = [
-            {"id": "greeting_sim", "title": "Sim, agendar"},
-            {"id": "greeting_nao", "title": "Não, obrigado"},
+            {"id": "greeting_sim", "title": "Agendar"},
+            {"id": "greeting_nao", "title": "Dúvida"},
         ]
+
+        # Use greeting_summary if available, otherwise use default greeting
+        greeting_summary = getattr(clinic, 'greeting_summary', '') if clinic else ''
+        if greeting_summary:
+            greeting_message = f"👋 *Bem-vindo(a) a {clinic_name}!*\n\n{greeting_summary}\n\nComo posso ajudar?"
+        else:
+            greeting_message = f"👋 *Bem-vindo(a) a {clinic_name}!*\n\nComo posso ajudar?"
 
         await send_whatsapp_buttons(
             phone_number_id, phone,
-            f"👋 *Bem-vindo(a) a {clinic_name}!*\n\n"
-            f"Sou o assistente virtual e estou aqui para ajudar.\n\n"
-            f"Deseja agendar sua próxima consulta?",
+            greeting_message,
             buttons,
             access_token
         )
         logger.info(f"👋 Sent standard greeting to {phone} (no upcoming appointments)")
 
 
-async def handle_greeting_response_no(
+async def handle_greeting_response_duvida(
     clinic_id: str,
     phone: str,
     phone_number_id: str,
     access_token: str
 ) -> None:
-    """Handle when user says NO to scheduling - show clinic contact card."""
+    """Handle when user clicks 'Dúvida' - show clinic info and ask what they need."""
     clinic = db.get_clinic(clinic_id) if db else None
 
     # Update state to general chat
@@ -1031,20 +1038,23 @@ async def handle_greeting_response_no(
         state["state"] = "general_chat"
         db.save_conversation_state(clinic_id, phone, state)
 
-    # Build contact info message
-    contact_parts = ["Entendo! Sem problemas. 😊\n"]
+    # Build info message
+    info_parts = ["Claro! Vou te ajudar. 😊\n"]
 
     if clinic:
         clinic_name = getattr(clinic, 'name', None) or "Clínica"
-        contact_parts.append(f"Aqui está o contato da *{clinic_name}*:")
+        info_parts.append(f"Aqui estão algumas informações da *{clinic_name}*:\n")
 
         if hasattr(clinic, 'address') and clinic.address:
-            contact_parts.append(f"\n📍 Endereço: {clinic.address}")
+            info_parts.append(f"📍 Endereço: {clinic.address}")
 
         if hasattr(clinic, 'opening_hours') and clinic.opening_hours:
-            contact_parts.append(f"🕐 Horário: {clinic.opening_hours}")
+            info_parts.append(f"🕐 Horário: {clinic.opening_hours}")
 
-    contact_parts.append("\n\nSe mudar de ideia sobre agendar, é só enviar uma mensagem!")
+        if hasattr(clinic, 'phone') and clinic.phone:
+            info_parts.append(f"📞 Telefone: {clinic.phone}")
+
+    info_parts.append("\n\nQual é a sua dúvida?")
 
     await send_whatsapp_message(
         phone_number_id, phone,
@@ -1933,8 +1943,8 @@ async def process_message(
             return
 
         if button_payload == "greeting_nao":
-            logger.info(f"👋 User {phone} declined scheduling (greeting button)")
-            await handle_greeting_response_no(
+            logger.info(f"❓ User {phone} has a question (greeting button)")
+            await handle_greeting_response_duvida(
                 clinic_id, phone,
                 phone_number_id, access_token
             )
@@ -2052,7 +2062,7 @@ async def process_message(
     if current_state == "awaiting_greeting_response":
         # Check if they want to schedule based on text
         positive_responses = ["sim", "quero", "yes", "agendar", "marcar", "consulta"]
-        negative_responses = ["nao", "não", "no", "depois", "agora não", "obrigado"]
+        question_responses = ["duvida", "dúvida", "pergunta", "informação", "informacao", "nao", "não", "no", "depois", "agora não", "obrigado"]
 
         if any(resp in msg_lower for resp in positive_responses):
             logger.info(f"📅 User {phone} wants to schedule (text response)")
@@ -2062,9 +2072,9 @@ async def process_message(
             )
             return
 
-        if any(resp in msg_lower for resp in negative_responses):
-            logger.info(f"👋 User {phone} declined scheduling (text response)")
-            await handle_greeting_response_no(
+        if any(resp in msg_lower for resp in question_responses):
+            logger.info(f"❓ User {phone} has a question (text response)")
+            await handle_greeting_response_duvida(
                 clinic_id, phone, phone_number_id, access_token
             )
             return

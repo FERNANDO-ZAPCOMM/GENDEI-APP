@@ -230,7 +230,75 @@ router.put('/:appointmentId', verifyAuth, async (req: Request, res: Response) =>
   }
 });
 
-// PUT /appointments/:appointmentId/status - Update appointment status
+// PUT/PATCH /appointments/:appointmentId/status - Update appointment status
+router.patch('/:appointmentId/status', verifyAuth, async (req: Request, res: Response) => {
+  try {
+    const { appointmentId } = req.params;
+    const { status, reason, notes } = req.body;
+    const user = (req as any).user;
+    const clinicId = user?.uid;
+
+    if (!clinicId) {
+      return res.status(401).json({ message: 'Not authenticated' });
+    }
+
+    if (!status) {
+      return res.status(400).json({ message: 'Status is required' });
+    }
+
+    const validStatuses = [
+      'pending', 'confirmed', 'awaiting_confirmation',
+      'confirmed_presence', 'completed', 'cancelled', 'no_show'
+    ];
+
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({ message: 'Invalid status' });
+    }
+
+    const docRef = db.collection(CLINICS)
+      .doc(clinicId)
+      .collection('appointments')
+      .doc(appointmentId);
+    const doc = await docRef.get();
+
+    if (!doc.exists) {
+      return res.status(404).json({ message: 'Appointment not found' });
+    }
+
+    const updateData: any = {
+      status,
+      updatedAt: FieldValue.serverTimestamp()
+    };
+
+    if (status === 'confirmed') {
+      updateData.confirmedAt = FieldValue.serverTimestamp();
+    } else if (status === 'cancelled') {
+      updateData.cancelledAt = FieldValue.serverTimestamp();
+      if (reason) {
+        updateData.cancellationReason = reason;
+      }
+    } else if (status === 'completed') {
+      updateData.completedAt = FieldValue.serverTimestamp();
+    }
+
+    if (notes) {
+      updateData.notes = notes;
+    }
+
+    await docRef.update(updateData);
+
+    const updatedDoc = await docRef.get();
+
+    return res.json({
+      id: appointmentId,
+      ...updatedDoc.data()
+    });
+  } catch (error: any) {
+    console.error('Error updating appointment status:', error);
+    return res.status(500).json({ message: error.message });
+  }
+});
+
 router.put('/:appointmentId/status', verifyAuth, async (req: Request, res: Response) => {
   try {
     const { appointmentId } = req.params;
@@ -347,7 +415,48 @@ router.put('/:appointmentId/reschedule', verifyAuth, async (req: Request, res: R
   }
 });
 
-// DELETE /appointments/:appointmentId - Cancel appointment
+// POST /appointments/:appointmentId/cancel - Cancel appointment (used by frontend)
+router.post('/:appointmentId/cancel', verifyAuth, async (req: Request, res: Response) => {
+  try {
+    const { appointmentId } = req.params;
+    const user = (req as any).user;
+    const clinicId = user?.uid;
+    const reason = req.body.reason || 'Cancelado pela clínica';
+
+    if (!clinicId) {
+      return res.status(401).json({ message: 'Not authenticated' });
+    }
+
+    const docRef = db.collection(CLINICS)
+      .doc(clinicId)
+      .collection('appointments')
+      .doc(appointmentId);
+    const doc = await docRef.get();
+
+    if (!doc.exists) {
+      return res.status(404).json({ message: 'Appointment not found' });
+    }
+
+    await docRef.update({
+      status: 'cancelled',
+      cancellationReason: reason,
+      cancelledAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp()
+    });
+
+    const updatedDoc = await docRef.get();
+
+    return res.json({
+      id: appointmentId,
+      ...updatedDoc.data()
+    });
+  } catch (error: any) {
+    console.error('Error cancelling appointment:', error);
+    return res.status(500).json({ message: error.message });
+  }
+});
+
+// DELETE /appointments/:appointmentId - Cancel appointment (alternative method)
 router.delete('/:appointmentId', verifyAuth, async (req: Request, res: Response) => {
   try {
     const { appointmentId } = req.params;
