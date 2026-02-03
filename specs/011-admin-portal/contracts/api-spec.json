@@ -1,0 +1,493 @@
+{
+  "openapi": "3.0.0",
+  "info": { "title": "Gendei Admin Portal API", "version": "1.0.0" },
+  "paths": {
+    "/admin/clinics": {
+      "get": {
+        "summary": "List All Clinics",
+        "parameters": [
+          { "name": "status", "in": "query", "schema": { "type": "string" } },
+          { "name": "plan", "in": "query", "schema": { "type": "string" } },
+          { "name": "search", "in": "query", "schema": { "type": "string" } },
+          { "name": "sortBy", "in": "query", "schema": { "type": "string" } },
+          { "name": "sortOrder", "in": "query", "schema": { "type": "string", "enum": ["asc", "desc"] } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 50 } },
+          { "name": "cursor", "in": "query", "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Clinics list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "clinics": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/ClinicAdminView" }
+                    },
+                    "nextCursor": { "type": "string" },
+                    "totalCount": { "type": "integer" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/clinics/{clinicId}": {
+      "get": {
+        "summary": "Get Clinic Details",
+        "parameters": [
+          { "name": "clinicId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Clinic details",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ClinicAdminDetail" }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "summary": "Update Clinic",
+        "parameters": [
+          { "name": "clinicId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "subscription": {
+                    "type": "object",
+                    "properties": {
+                      "plan": { "type": "string" },
+                      "status": { "type": "string" }
+                    }
+                  },
+                  "quotas": { "type": "object" },
+                  "features": { "type": "object" },
+                  "admin": {
+                    "type": "object",
+                    "properties": {
+                      "notes": { "type": "string" },
+                      "verified": { "type": "boolean" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Clinic updated" } }
+      },
+      "delete": {
+        "summary": "Delete Clinic",
+        "parameters": [
+          { "name": "clinicId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["reason", "confirmation"],
+                "properties": {
+                  "reason": { "type": "string" },
+                  "confirmation": { "type": "string", "description": "Must match clinic name" }
+                }
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Clinic deleted" } }
+      }
+    },
+    "/admin/clinics/{clinicId}/suspend": {
+      "post": {
+        "summary": "Suspend Clinic",
+        "parameters": [
+          { "name": "clinicId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["reason"],
+                "properties": {
+                  "reason": { "type": "string", "minLength": 10 },
+                  "notifyOwner": { "type": "boolean", "default": true }
+                }
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Clinic suspended" } }
+      }
+    },
+    "/admin/clinics/{clinicId}/unsuspend": {
+      "post": {
+        "summary": "Unsuspend Clinic",
+        "parameters": [
+          { "name": "clinicId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "Clinic unsuspended" } }
+      }
+    },
+    "/admin/impersonate/{clinicId}": {
+      "post": {
+        "summary": "Start Impersonation Session",
+        "parameters": [
+          { "name": "clinicId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["reason"],
+                "properties": {
+                  "reason": { "type": "string", "minLength": 10 },
+                  "duration": { "type": "integer", "minimum": 15, "maximum": 60, "default": 60 }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Impersonation session started",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "sessionId": { "type": "string" },
+                    "token": { "type": "string" },
+                    "expiresAt": { "type": "string", "format": "date-time" },
+                    "redirectUrl": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/analytics/overview": {
+      "get": {
+        "summary": "Get Platform Overview",
+        "responses": {
+          "200": {
+            "description": "Platform overview metrics",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/PlatformOverview" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/analytics/usage": {
+      "get": {
+        "summary": "Get Usage Statistics",
+        "parameters": [
+          { "name": "from", "in": "query", "schema": { "type": "string", "format": "date" } },
+          { "name": "to", "in": "query", "schema": { "type": "string", "format": "date" } },
+          { "name": "granularity", "in": "query", "schema": { "type": "string", "enum": ["day", "week", "month"] } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Usage statistics",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/PlatformAnalytics" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/audit-logs": {
+      "get": {
+        "summary": "Get Audit Logs",
+        "parameters": [
+          { "name": "actorId", "in": "query", "schema": { "type": "string" } },
+          { "name": "resource", "in": "query", "schema": { "type": "string" } },
+          { "name": "action", "in": "query", "schema": { "type": "string" } },
+          { "name": "from", "in": "query", "schema": { "type": "string", "format": "date-time" } },
+          { "name": "to", "in": "query", "schema": { "type": "string", "format": "date-time" } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 100 } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Audit logs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "logs": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/AuditLog" }
+                    },
+                    "nextCursor": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/feature-flags": {
+      "get": {
+        "summary": "List Feature Flags",
+        "responses": {
+          "200": {
+            "description": "Feature flags list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "flags": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/FeatureFlag" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create Feature Flag",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/FeatureFlagInput" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Feature flag created",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/FeatureFlag" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/feature-flags/{flagId}": {
+      "put": {
+        "summary": "Update Feature Flag",
+        "parameters": [
+          { "name": "flagId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/FeatureFlagInput" }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Feature flag updated" } }
+      },
+      "delete": {
+        "summary": "Delete Feature Flag",
+        "parameters": [
+          { "name": "flagId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "Feature flag deleted" } }
+      }
+    },
+    "/admin/users": {
+      "get": {
+        "summary": "List Admin Users",
+        "responses": {
+          "200": {
+            "description": "Admin users list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "users": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/AdminUser" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create Admin User",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/AdminUserInput" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Admin user created",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/AdminUser" }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ClinicAdminView": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "ownerEmail": { "type": "string" },
+          "phone": { "type": "string" },
+          "subscriptionPlan": { "type": "string" },
+          "subscriptionStatus": { "type": "string" },
+          "suspended": { "type": "boolean" },
+          "appointmentsThisMonth": { "type": "integer" },
+          "messagesThisMonth": { "type": "integer" },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "lastActiveAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "ClinicAdminDetail": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "ownerEmail": { "type": "string" },
+          "phone": { "type": "string" },
+          "subscription": { "type": "object" },
+          "admin": { "type": "object" },
+          "quotas": { "type": "object" },
+          "features": { "type": "object" },
+          "whatsappConnection": { "type": "object" },
+          "recentActivity": { "type": "array" }
+        }
+      },
+      "PlatformOverview": {
+        "type": "object",
+        "properties": {
+          "totalClinics": { "type": "integer" },
+          "activeClinicLast30Days": { "type": "integer" },
+          "newClinicsThisMonth": { "type": "integer" },
+          "totalAppointmentsThisMonth": { "type": "integer" },
+          "totalMessagesThisMonth": { "type": "integer" },
+          "mrr": { "type": "integer" },
+          "arr": { "type": "integer" }
+        }
+      },
+      "PlatformAnalytics": {
+        "type": "object",
+        "properties": {
+          "date": { "type": "string", "format": "date" },
+          "clinics": { "type": "object" },
+          "appointments": { "type": "object" },
+          "messages": { "type": "object" },
+          "revenue": { "type": "object" }
+        }
+      },
+      "AuditLog": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "actorId": { "type": "string" },
+          "actorEmail": { "type": "string" },
+          "action": { "type": "string" },
+          "resource": { "type": "string" },
+          "resourceId": { "type": "string" },
+          "description": { "type": "string" },
+          "ipAddress": { "type": "string" },
+          "timestamp": { "type": "string", "format": "date-time" }
+        }
+      },
+      "FeatureFlag": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "description": { "type": "string" },
+          "enabled": { "type": "boolean" },
+          "targeting": { "type": "object" },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "FeatureFlagInput": {
+        "type": "object",
+        "required": ["name", "enabled"],
+        "properties": {
+          "name": { "type": "string" },
+          "description": { "type": "string" },
+          "enabled": { "type": "boolean" },
+          "targeting": {
+            "type": "object",
+            "properties": {
+              "type": { "type": "string", "enum": ["all", "none", "percentage", "clinicIds", "plans"] },
+              "percentage": { "type": "integer" },
+              "clinicIds": { "type": "array", "items": { "type": "string" } },
+              "plans": { "type": "array", "items": { "type": "string" } }
+            }
+          }
+        }
+      },
+      "AdminUser": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "email": { "type": "string" },
+          "name": { "type": "string" },
+          "role": { "type": "string", "enum": ["super_admin", "admin", "support"] },
+          "permissions": { "type": "array", "items": { "type": "string" } },
+          "active": { "type": "boolean" },
+          "lastLoginAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "AdminUserInput": {
+        "type": "object",
+        "required": ["email", "name", "role"],
+        "properties": {
+          "email": { "type": "string", "format": "email" },
+          "name": { "type": "string" },
+          "role": { "type": "string", "enum": ["super_admin", "admin", "support"] },
+          "permissions": { "type": "array", "items": { "type": "string" } },
+          "requires2FA": { "type": "boolean", "default": true }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,250 @@
+{
+  "openapi": "3.0.0",
+  "info": { "title": "Gendei Conversation Inbox API", "version": "1.0.0" },
+  "paths": {
+    "/conversations": {
+      "get": {
+        "summary": "List Conversations",
+        "parameters": [
+          { "name": "status", "in": "query", "schema": { "type": "string" } },
+          { "name": "assignedTo", "in": "query", "schema": { "type": "string" } },
+          { "name": "unreadOnly", "in": "query", "schema": { "type": "boolean" } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 50 } },
+          { "name": "cursor", "in": "query", "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Conversations list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "conversations": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/Conversation" }
+                    },
+                    "nextCursor": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/conversations/{conversationId}": {
+      "get": {
+        "summary": "Get Conversation with Messages",
+        "parameters": [
+          { "name": "conversationId", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "messageLimit", "in": "query", "schema": { "type": "integer", "default": 50 } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Conversation details",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "conversation": { "$ref": "#/components/schemas/Conversation" },
+                    "messages": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/Message" }
+                    },
+                    "patient": { "$ref": "#/components/schemas/Patient" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "summary": "Update Conversation",
+        "parameters": [
+          { "name": "conversationId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "status": { "type": "string", "enum": ["active", "waiting", "resolved", "spam"] },
+                  "assignedTo": { "type": "string", "nullable": true },
+                  "tags": { "type": "array", "items": { "type": "string" } },
+                  "priority": { "type": "string", "enum": ["low", "normal", "high", "urgent"] }
+                }
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Conversation updated" } }
+      }
+    },
+    "/conversations/{conversationId}/messages": {
+      "get": {
+        "summary": "Get Messages (paginated)",
+        "parameters": [
+          { "name": "conversationId", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 50 } },
+          { "name": "before", "in": "query", "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Messages list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "messages": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/Message" }
+                    },
+                    "hasMore": { "type": "boolean" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Send Message",
+        "parameters": [
+          { "name": "conversationId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["content"],
+                "properties": {
+                  "content": { "type": "string", "maxLength": 4096 },
+                  "type": { "type": "string", "enum": ["text", "image", "document"], "default": "text" },
+                  "replyTo": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Message sent",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Message" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/conversations/{conversationId}/handoff": {
+      "post": {
+        "summary": "Take Over from AI",
+        "parameters": [
+          { "name": "conversationId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Handoff successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "assignedTo": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/conversations/{conversationId}/release": {
+      "post": {
+        "summary": "Return Control to AI",
+        "parameters": [
+          { "name": "conversationId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Released to AI",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "aiEnabled": { "type": "boolean" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/conversations/{conversationId}/read": {
+      "post": {
+        "summary": "Mark Conversation as Read",
+        "parameters": [
+          { "name": "conversationId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "Marked as read" } }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Conversation": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "clinicId": { "type": "string" },
+          "patientId": { "type": "string" },
+          "patientPhone": { "type": "string" },
+          "patientName": { "type": "string" },
+          "status": { "type": "string", "enum": ["active", "waiting", "resolved", "spam"] },
+          "priority": { "type": "string", "enum": ["low", "normal", "high", "urgent"] },
+          "aiEnabled": { "type": "boolean" },
+          "assignedTo": { "type": "string" },
+          "unreadCount": { "type": "integer" },
+          "messageCount": { "type": "integer" },
+          "lastMessageAt": { "type": "string", "format": "date-time" },
+          "lastMessagePreview": { "type": "string" },
+          "tags": { "type": "array", "items": { "type": "string" } }
+        }
+      },
+      "Message": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "conversationId": { "type": "string" },
+          "direction": { "type": "string", "enum": ["inbound", "outbound"] },
+          "sender": { "type": "string", "enum": ["patient", "ai", "staff", "system"] },
+          "type": { "type": "string" },
+          "content": { "type": "string" },
+          "status": { "type": "string", "enum": ["pending", "sent", "delivered", "read", "failed"] },
+          "timestamp": { "type": "string", "format": "date-time" }
+        }
+      },
+      "Patient": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "phone": { "type": "string" },
+          "email": { "type": "string" }
+        }
+      }
+    }
+  }
+}

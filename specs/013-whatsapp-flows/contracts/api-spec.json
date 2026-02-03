@@ -1,0 +1,299 @@
+{
+  "openapi": "3.0.0",
+  "info": { "title": "Gendei WhatsApp Flows API", "version": "1.0.0" },
+  "paths": {
+    "/flows": {
+      "get": {
+        "summary": "List Clinic Flows",
+        "parameters": [
+          { "name": "type", "in": "query", "schema": { "type": "string" } },
+          { "name": "status", "in": "query", "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Flows list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "flows": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/Flow" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/flows/trigger": {
+      "post": {
+        "summary": "Trigger Flow for Patient",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["flowType", "patientPhone"],
+                "properties": {
+                  "flowType": { "$ref": "#/components/schemas/FlowType" },
+                  "patientPhone": { "type": "string" },
+                  "patientId": { "type": "string" },
+                  "appointmentId": { "type": "string" },
+                  "prefill": { "type": "object" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Flow triggered",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "sessionId": { "type": "string" },
+                    "waMessageId": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/flows/data": {
+      "post": {
+        "summary": "Flow Data Exchange Endpoint",
+        "description": "Endpoint called by WhatsApp for dynamic flow data",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": { "type": "string" },
+                  "action": { "type": "string", "enum": ["ping", "INIT", "data_exchange"] },
+                  "screen": { "type": "string" },
+                  "data": { "type": "object" },
+                  "flow_token": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Flow data response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "version": { "type": "string" },
+                    "screen": { "type": "string" },
+                    "data": { "type": "object" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/flows/complete": {
+      "post": {
+        "summary": "Flow Completion Webhook",
+        "description": "Called when a flow is completed",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "flow_token": { "type": "string" },
+                  "responses": { "type": "object" }
+                }
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Completion acknowledged" } }
+      }
+    },
+    "/flows/responses": {
+      "get": {
+        "summary": "List Flow Responses",
+        "parameters": [
+          { "name": "flowType", "in": "query", "schema": { "type": "string" } },
+          { "name": "status", "in": "query", "schema": { "type": "string" } },
+          { "name": "patientPhone", "in": "query", "schema": { "type": "string" } },
+          { "name": "from", "in": "query", "schema": { "type": "string", "format": "date-time" } },
+          { "name": "to", "in": "query", "schema": { "type": "string", "format": "date-time" } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 50 } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Flow responses",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "responses": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/FlowResponse" }
+                    },
+                    "nextCursor": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/flows/responses/{responseId}": {
+      "get": {
+        "summary": "Get Flow Response",
+        "parameters": [
+          { "name": "responseId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Flow response details",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/FlowResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/flows/analytics": {
+      "get": {
+        "summary": "Get Flow Analytics",
+        "parameters": [
+          { "name": "period", "in": "query", "schema": { "type": "string", "example": "2026-02" } },
+          { "name": "flowType", "in": "query", "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Flow analytics",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/FlowAnalytics" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/flows/{flowId}/publish": {
+      "post": {
+        "summary": "Publish Flow",
+        "parameters": [
+          { "name": "flowId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "Flow published" } }
+      }
+    },
+    "/flows/{flowId}/deprecate": {
+      "post": {
+        "summary": "Deprecate Flow",
+        "parameters": [
+          { "name": "flowId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "Flow deprecated" } }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "FlowType": {
+        "type": "string",
+        "enum": ["booking", "registration", "intake", "satisfaction", "reschedule", "cancellation", "custom"]
+      },
+      "FlowResponseStatus": {
+        "type": "string",
+        "enum": ["in_progress", "completed", "abandoned", "expired", "error"]
+      },
+      "Flow": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "clinicId": { "type": "string" },
+          "whatsappFlowId": { "type": "string" },
+          "type": { "$ref": "#/components/schemas/FlowType" },
+          "name": { "type": "string" },
+          "description": { "type": "string" },
+          "version": { "type": "string" },
+          "status": { "type": "string", "enum": ["draft", "published", "deprecated"] },
+          "config": { "type": "object" },
+          "stats": {
+            "type": "object",
+            "properties": {
+              "totalStarted": { "type": "integer" },
+              "totalCompleted": { "type": "integer" },
+              "completionRate": { "type": "number" },
+              "averageDurationSeconds": { "type": "number" }
+            }
+          }
+        }
+      },
+      "FlowResponse": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "clinicId": { "type": "string" },
+          "flowId": { "type": "string" },
+          "flowType": { "$ref": "#/components/schemas/FlowType" },
+          "patientPhone": { "type": "string" },
+          "patientId": { "type": "string" },
+          "sessionId": { "type": "string" },
+          "responses": { "type": "object" },
+          "screensCompleted": { "type": "array", "items": { "type": "string" } },
+          "status": { "$ref": "#/components/schemas/FlowResponseStatus" },
+          "startedAt": { "type": "string", "format": "date-time" },
+          "completedAt": { "type": "string", "format": "date-time" },
+          "durationSeconds": { "type": "number" },
+          "appointmentId": { "type": "string" }
+        }
+      },
+      "FlowAnalytics": {
+        "type": "object",
+        "properties": {
+          "clinicId": { "type": "string" },
+          "period": { "type": "string" },
+          "overall": {
+            "type": "object",
+            "properties": {
+              "totalStarted": { "type": "integer" },
+              "totalCompleted": { "type": "integer" },
+              "totalAbandoned": { "type": "integer" },
+              "completionRate": { "type": "number" },
+              "averageDurationSeconds": { "type": "number" }
+            }
+          },
+          "byType": { "type": "object" },
+          "dropOff": { "type": "object" },
+          "satisfaction": {
+            "type": "object",
+            "properties": {
+              "averageRating": { "type": "number" },
+              "npsScore": { "type": "number" },
+              "totalResponses": { "type": "integer" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

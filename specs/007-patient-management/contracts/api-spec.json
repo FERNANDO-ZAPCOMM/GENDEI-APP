@@ -1,0 +1,108 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Gendei Patient Management API",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/patients": {
+      "get": {
+        "summary": "List Patients",
+        "parameters": [
+          { "name": "search", "in": "query", "schema": { "type": "string" } },
+          { "name": "tag", "in": "query", "schema": { "type": "string" } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 50 } },
+          { "name": "cursor", "in": "query", "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Patient list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "patients": { "type": "array", "items": { "$ref": "#/components/schemas/Patient" } },
+                    "nextCursor": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create Patient",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreatePatient" }
+            }
+          }
+        },
+        "responses": { "201": { "description": "Patient created" } }
+      }
+    },
+    "/patients/{id}": {
+      "get": { "summary": "Get Patient" },
+      "patch": { "summary": "Update Patient" },
+      "delete": { "summary": "Delete Patient (soft)" }
+    },
+    "/patients/{id}/appointments": {
+      "get": {
+        "summary": "Get Patient Appointments",
+        "responses": {
+          "200": {
+            "description": "Appointment history"
+          }
+        }
+      }
+    },
+    "/patients/search": {
+      "get": {
+        "summary": "Search Patients",
+        "parameters": [
+          { "name": "q", "in": "query", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Search results" }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Patient": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "phone": { "type": "string" },
+          "email": { "type": "string" },
+          "dateOfBirth": { "type": "string" },
+          "cpf": { "type": "string" },
+          "tags": { "type": "array", "items": { "type": "string" } },
+          "totalAppointments": { "type": "integer" },
+          "lastAppointmentAt": { "type": "string" }
+        }
+      },
+      "CreatePatient": {
+        "type": "object",
+        "required": ["name", "phone"],
+        "properties": {
+          "name": { "type": "string", "minLength": 2 },
+          "phone": { "type": "string", "minLength": 10 },
+          "email": { "type": "string", "format": "email" },
+          "dateOfBirth": { "type": "string" },
+          "cpf": { "type": "string" },
+          "address": { "type": "string" },
+          "city": { "type": "string" },
+          "state": { "type": "string" },
+          "zipCode": { "type": "string" },
+          "notes": { "type": "string" },
+          "tags": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    }
+  }
+}

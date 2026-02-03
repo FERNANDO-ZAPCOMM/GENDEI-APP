@@ -1,0 +1,348 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Gendei AI Agent API",
+    "version": "1.0.0",
+    "description": "Python FastAPI agent endpoints for WhatsApp AI processing"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8000",
+      "description": "Local development"
+    },
+    {
+      "url": "https://agent.gendei.com.br",
+      "description": "Production"
+    }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "summary": "Health Check",
+        "description": "Check if the agent service is running",
+        "operationId": "healthCheck",
+        "tags": ["System"],
+        "responses": {
+          "200": {
+            "description": "Service is healthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": { "type": "string", "enum": ["ok"] },
+                    "version": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/whatsapp": {
+      "get": {
+        "summary": "WhatsApp Webhook Verification",
+        "description": "Meta webhook verification endpoint",
+        "operationId": "verifyWhatsAppWebhook",
+        "tags": ["Webhooks"],
+        "parameters": [
+          {
+            "name": "hub.mode",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string", "enum": ["subscribe"] }
+          },
+          {
+            "name": "hub.verify_token",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "hub.challenge",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Challenge response",
+            "content": {
+              "text/plain": {
+                "schema": { "type": "integer" }
+              }
+            }
+          },
+          "403": {
+            "description": "Verification failed"
+          }
+        }
+      },
+      "post": {
+        "summary": "WhatsApp Webhook",
+        "description": "Receives WhatsApp messages and routes to AI agents",
+        "operationId": "handleWhatsAppWebhook",
+        "tags": ["Webhooks"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WhatsAppWebhookPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Webhook processed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": { "type": "string", "enum": ["ok"] }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/flow-data-exchange": {
+      "post": {
+        "summary": "WhatsApp Flow Data Exchange",
+        "description": "Handle WhatsApp Flows data exchange",
+        "operationId": "handleFlowDataExchange",
+        "tags": ["WhatsApp Flows"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FlowDataExchangeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Flow response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FlowDataExchangeResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/internal/process": {
+      "post": {
+        "summary": "Process Message (Internal)",
+        "description": "Internal endpoint to process a message through the agent",
+        "operationId": "processMessage",
+        "tags": ["Internal"],
+        "security": [{ "InternalKey": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProcessMessageRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Message processed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProcessMessageResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/internal/context/{clinic_id}/{user_phone}": {
+      "get": {
+        "summary": "Get Conversation Context",
+        "description": "Get the current conversation context for debugging",
+        "operationId": "getContext",
+        "tags": ["Internal"],
+        "security": [{ "InternalKey": [] }],
+        "parameters": [
+          {
+            "name": "clinic_id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "user_phone",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Context retrieved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationContext"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Context not found"
+          }
+        }
+      },
+      "delete": {
+        "summary": "Reset Conversation Context",
+        "description": "Reset the conversation context to start fresh",
+        "operationId": "resetContext",
+        "tags": ["Internal"],
+        "security": [{ "InternalKey": [] }],
+        "parameters": [
+          {
+            "name": "clinic_id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "user_phone",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Context reset"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "InternalKey": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Internal-Key"
+      }
+    },
+    "schemas": {
+      "WhatsAppWebhookPayload": {
+        "type": "object",
+        "properties": {
+          "object": { "type": "string", "enum": ["whatsapp_business_account"] },
+          "entry": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WebhookEntry"
+            }
+          }
+        }
+      },
+      "WebhookEntry": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "changes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WebhookChange"
+            }
+          }
+        }
+      },
+      "WebhookChange": {
+        "type": "object",
+        "properties": {
+          "field": { "type": "string" },
+          "value": { "type": "object" }
+        }
+      },
+      "FlowDataExchangeRequest": {
+        "type": "object",
+        "properties": {
+          "encrypted_flow_data": { "type": "string" },
+          "encrypted_aes_key": { "type": "string" },
+          "initial_vector": { "type": "string" }
+        }
+      },
+      "FlowDataExchangeResponse": {
+        "type": "object",
+        "properties": {
+          "encrypted_response": { "type": "string" }
+        }
+      },
+      "ProcessMessageRequest": {
+        "type": "object",
+        "required": ["clinic_id", "user_phone", "message"],
+        "properties": {
+          "clinic_id": { "type": "string" },
+          "user_phone": { "type": "string" },
+          "message": { "type": "string" },
+          "message_type": {
+            "type": "string",
+            "enum": ["text", "interactive", "image", "audio"],
+            "default": "text"
+          },
+          "button_payload": { "type": "string" }
+        }
+      },
+      "ProcessMessageResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" },
+          "response": { "type": "string" },
+          "agent": { "type": "string" },
+          "tools_called": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      },
+      "ConversationContext": {
+        "type": "object",
+        "properties": {
+          "clinic_id": { "type": "string" },
+          "user_phone": { "type": "string" },
+          "user_name": { "type": "string" },
+          "current_agent": { "type": "string" },
+          "agent_state": { "type": "object" },
+          "messages": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "role": { "type": "string" },
+                "content": { "type": "string" },
+                "timestamp": { "type": "string" }
+              }
+            }
+          },
+          "is_human_takeover": { "type": "boolean" },
+          "created_at": { "type": "string", "format": "date-time" },
+          "updated_at": { "type": "string", "format": "date-time" }
+        }
+      }
+    }
+  }
+}

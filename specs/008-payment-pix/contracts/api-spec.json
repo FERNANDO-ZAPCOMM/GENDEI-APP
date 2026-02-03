@@ -1,0 +1,96 @@
+{
+  "openapi": "3.0.0",
+  "info": { "title": "Gendei Payment PIX API", "version": "1.0.0" },
+  "paths": {
+    "/clinics/{clinicId}/settings/paymentSettings": {
+      "put": {
+        "summary": "Update Payment Settings",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/PaymentSettings" }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Settings updated" } }
+      }
+    },
+    "/payments/generate-pix": {
+      "post": {
+        "summary": "Generate PIX Code",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["appointmentId"],
+                "properties": {
+                  "appointmentId": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "PIX code generated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "pixCode": { "type": "string" },
+                    "amount": { "type": "integer" },
+                    "amountFormatted": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/payments/confirm": {
+      "post": {
+        "summary": "Confirm Payment",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["appointmentId"],
+                "properties": {
+                  "appointmentId": { "type": "string" },
+                  "method": { "type": "string", "enum": ["pix", "card", "cash", "other"] }
+                }
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Payment confirmed" } }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "PaymentSettings": {
+        "type": "object",
+        "properties": {
+          "acceptsConvenio": { "type": "boolean" },
+          "convenioList": { "type": "array", "items": { "type": "string" } },
+          "acceptsParticular": { "type": "boolean" },
+          "requiresDeposit": { "type": "boolean" },
+          "depositPercentage": { "type": "integer", "minimum": 10, "maximum": 100 },
+          "pix": { "$ref": "#/components/schemas/PixKeyConfig" }
+        }
+      },
+      "PixKeyConfig": {
+        "type": "object",
+        "properties": {
+          "type": { "type": "string", "enum": ["cpf", "cnpj", "email", "phone", "random"] },
+          "key": { "type": "string" }
+        }
+      }
+    }
+  }
+}

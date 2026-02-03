@@ -1,0 +1,248 @@
+{
+  "openapi": "3.0.0",
+  "info": { "title": "Gendei Calendar API", "version": "1.0.0" },
+  "paths": {
+    "/calendar/events": {
+      "get": {
+        "summary": "Get Calendar Events",
+        "parameters": [
+          { "name": "from", "in": "query", "required": true, "schema": { "type": "string", "format": "date-time" } },
+          { "name": "to", "in": "query", "required": true, "schema": { "type": "string", "format": "date-time" } },
+          { "name": "professionalIds", "in": "query", "schema": { "type": "array", "items": { "type": "string" } } },
+          { "name": "serviceIds", "in": "query", "schema": { "type": "array", "items": { "type": "string" } } },
+          { "name": "includeCancelled", "in": "query", "schema": { "type": "boolean", "default": false } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Calendar events",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "events": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/CalendarEvent" }
+                    },
+                    "professionals": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/ProfessionalSummary" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/calendar/quick-appointment": {
+      "post": {
+        "summary": "Create Quick Appointment",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["professionalId", "startTime", "durationMinutes", "serviceId"],
+                "properties": {
+                  "professionalId": { "type": "string" },
+                  "startTime": { "type": "string", "format": "date-time" },
+                  "durationMinutes": { "type": "integer", "minimum": 15 },
+                  "patientId": { "type": "string" },
+                  "patientPhone": { "type": "string" },
+                  "newPatient": {
+                    "type": "object",
+                    "properties": {
+                      "name": { "type": "string" },
+                      "phone": { "type": "string" }
+                    }
+                  },
+                  "serviceId": { "type": "string" },
+                  "notes": { "type": "string", "maxLength": 500 }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Appointment created",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/CalendarEvent" }
+              }
+            }
+          },
+          "409": {
+            "description": "Time slot conflict"
+          }
+        }
+      }
+    },
+    "/calendar/reschedule": {
+      "patch": {
+        "summary": "Reschedule Appointment",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["appointmentId", "newStartTime", "newEndTime"],
+                "properties": {
+                  "appointmentId": { "type": "string" },
+                  "newStartTime": { "type": "string", "format": "date-time" },
+                  "newEndTime": { "type": "string", "format": "date-time" },
+                  "newProfessionalId": { "type": "string" },
+                  "reason": { "type": "string", "maxLength": 500 },
+                  "notifyPatient": { "type": "boolean", "default": true }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Appointment rescheduled",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/CalendarEvent" }
+              }
+            }
+          },
+          "409": {
+            "description": "Time slot conflict"
+          }
+        }
+      }
+    },
+    "/calendar/availability": {
+      "get": {
+        "summary": "Get Available Slots",
+        "parameters": [
+          { "name": "professionalId", "in": "query", "schema": { "type": "string" } },
+          { "name": "serviceId", "in": "query", "schema": { "type": "string" } },
+          { "name": "from", "in": "query", "required": true, "schema": { "type": "string", "format": "date" } },
+          { "name": "to", "in": "query", "required": true, "schema": { "type": "string", "format": "date" } },
+          { "name": "preferredTime", "in": "query", "schema": { "type": "string", "enum": ["morning", "afternoon", "evening"] } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Available slots",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "slots": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/AvailabilitySlot" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/calendar/check-conflict": {
+      "post": {
+        "summary": "Check for Conflicts",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["professionalId", "startTime", "endTime"],
+                "properties": {
+                  "professionalId": { "type": "string" },
+                  "startTime": { "type": "string", "format": "date-time" },
+                  "endTime": { "type": "string", "format": "date-time" },
+                  "excludeAppointmentId": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Conflict check result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "hasConflict": { "type": "boolean" },
+                    "conflictingAppointments": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": { "type": "string" },
+                          "patientName": { "type": "string" },
+                          "startTime": { "type": "string" },
+                          "endTime": { "type": "string" }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "CalendarEvent": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "appointmentId": { "type": "string" },
+          "title": { "type": "string" },
+          "subtitle": { "type": "string" },
+          "start": { "type": "string", "format": "date-time" },
+          "end": { "type": "string", "format": "date-time" },
+          "durationMinutes": { "type": "integer" },
+          "allDay": { "type": "boolean" },
+          "status": { "type": "string" },
+          "statusColor": { "type": "string" },
+          "professionalId": { "type": "string" },
+          "professionalName": { "type": "string" },
+          "professionalColor": { "type": "string" },
+          "patientId": { "type": "string" },
+          "patientName": { "type": "string" },
+          "patientPhone": { "type": "string" },
+          "serviceId": { "type": "string" },
+          "serviceName": { "type": "string" },
+          "notes": { "type": "string" },
+          "depositPaid": { "type": "boolean" },
+          "source": { "type": "string" }
+        }
+      },
+      "ProfessionalSummary": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "color": { "type": "string" },
+          "workingHours": { "type": "object" }
+        }
+      },
+      "AvailabilitySlot": {
+        "type": "object",
+        "properties": {
+          "professionalId": { "type": "string" },
+          "professionalName": { "type": "string" },
+          "date": { "type": "string", "format": "date" },
+          "startTime": { "type": "string" },
+          "endTime": { "type": "string" },
+          "durationMinutes": { "type": "integer" }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,334 @@
+{
+  "openapi": "3.0.0",
+  "info": { "title": "Gendei Analytics API", "version": "1.0.0" },
+  "paths": {
+    "/analytics/overview": {
+      "get": {
+        "summary": "Get Analytics Overview",
+        "parameters": [
+          { "name": "from", "in": "query", "required": true, "schema": { "type": "string", "format": "date" } },
+          { "name": "to", "in": "query", "required": true, "schema": { "type": "string", "format": "date" } },
+          { "name": "compareWithPrevious", "in": "query", "schema": { "type": "boolean", "default": true } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Analytics overview",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/AnalyticsOverview" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/analytics/appointments": {
+      "get": {
+        "summary": "Get Appointment Analytics",
+        "parameters": [
+          { "name": "from", "in": "query", "required": true, "schema": { "type": "string", "format": "date" } },
+          { "name": "to", "in": "query", "required": true, "schema": { "type": "string", "format": "date" } },
+          { "name": "professionalId", "in": "query", "schema": { "type": "string" } },
+          { "name": "serviceId", "in": "query", "schema": { "type": "string" } },
+          { "name": "granularity", "in": "query", "schema": { "type": "string", "enum": ["daily", "weekly", "monthly"] } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Appointment analytics",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/AppointmentAnalytics" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/analytics/revenue": {
+      "get": {
+        "summary": "Get Revenue Analytics",
+        "parameters": [
+          { "name": "from", "in": "query", "required": true, "schema": { "type": "string", "format": "date" } },
+          { "name": "to", "in": "query", "required": true, "schema": { "type": "string", "format": "date" } },
+          { "name": "granularity", "in": "query", "schema": { "type": "string", "enum": ["daily", "weekly", "monthly"] } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Revenue analytics",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/RevenueAnalytics" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/analytics/patients": {
+      "get": {
+        "summary": "Get Patient Analytics",
+        "parameters": [
+          { "name": "from", "in": "query", "required": true, "schema": { "type": "string", "format": "date" } },
+          { "name": "to", "in": "query", "required": true, "schema": { "type": "string", "format": "date" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Patient analytics",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/PatientAnalytics" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/analytics/professionals": {
+      "get": {
+        "summary": "Get Professional Analytics",
+        "parameters": [
+          { "name": "from", "in": "query", "required": true, "schema": { "type": "string", "format": "date" } },
+          { "name": "to", "in": "query", "required": true, "schema": { "type": "string", "format": "date" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Professional analytics",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ProfessionalAnalytics" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/analytics/ai": {
+      "get": {
+        "summary": "Get AI Performance Analytics",
+        "parameters": [
+          { "name": "from", "in": "query", "required": true, "schema": { "type": "string", "format": "date" } },
+          { "name": "to", "in": "query", "required": true, "schema": { "type": "string", "format": "date" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "AI analytics",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/AIAnalytics" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/analytics/export": {
+      "post": {
+        "summary": "Request Data Export",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["dateRange", "sections"],
+                "properties": {
+                  "dateRange": { "$ref": "#/components/schemas/DateRange" },
+                  "sections": {
+                    "type": "array",
+                    "items": { "type": "string", "enum": ["appointments", "revenue", "patients", "professionals", "ai"] }
+                  },
+                  "format": { "type": "string", "enum": ["csv", "xlsx"], "default": "csv" },
+                  "includeRawData": { "type": "boolean", "default": false }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Export request accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "exportId": { "type": "string" },
+                    "status": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/analytics/export/{exportId}": {
+      "get": {
+        "summary": "Get Export Status",
+        "parameters": [
+          { "name": "exportId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Export status",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/AnalyticsExport" }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "DateRange": {
+        "type": "object",
+        "properties": {
+          "from": { "type": "string", "format": "date" },
+          "to": { "type": "string", "format": "date" }
+        }
+      },
+      "AnalyticsOverview": {
+        "type": "object",
+        "properties": {
+          "appointments": {
+            "type": "object",
+            "properties": {
+              "total": { "type": "integer" },
+              "change": { "type": "number" }
+            }
+          },
+          "revenue": {
+            "type": "object",
+            "properties": {
+              "totalCents": { "type": "integer" },
+              "change": { "type": "number" }
+            }
+          },
+          "patients": {
+            "type": "object",
+            "properties": {
+              "new": { "type": "integer" },
+              "change": { "type": "number" }
+            }
+          },
+          "noShowRate": {
+            "type": "object",
+            "properties": {
+              "rate": { "type": "number" },
+              "change": { "type": "number" }
+            }
+          }
+        }
+      },
+      "AppointmentAnalytics": {
+        "type": "object",
+        "properties": {
+          "total": { "type": "integer" },
+          "byStatus": { "type": "object" },
+          "byProfessional": { "type": "object" },
+          "byService": { "type": "object" },
+          "byHour": { "type": "object" },
+          "byDayOfWeek": { "type": "object" },
+          "timeSeries": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "date": { "type": "string" },
+                "total": { "type": "integer" },
+                "completed": { "type": "integer" },
+                "cancelled": { "type": "integer" }
+              }
+            }
+          },
+          "completionRate": { "type": "number" },
+          "noShowRate": { "type": "number" }
+        }
+      },
+      "RevenueAnalytics": {
+        "type": "object",
+        "properties": {
+          "totalCents": { "type": "integer" },
+          "byService": { "type": "object" },
+          "byProfessional": { "type": "object" },
+          "byPaymentMethod": { "type": "object" },
+          "timeSeries": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "date": { "type": "string" },
+                "totalCents": { "type": "integer" }
+              }
+            }
+          },
+          "averageTicketCents": { "type": "integer" },
+          "projectedMonthCents": { "type": "integer" }
+        }
+      },
+      "PatientAnalytics": {
+        "type": "object",
+        "properties": {
+          "totalActive": { "type": "integer" },
+          "new": { "type": "integer" },
+          "returning": { "type": "integer" },
+          "retentionRate": { "type": "number" },
+          "byAcquisitionChannel": { "type": "object" },
+          "topPatients": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": { "type": "string" },
+                "name": { "type": "string" },
+                "visits": { "type": "integer" }
+              }
+            }
+          }
+        }
+      },
+      "ProfessionalAnalytics": {
+        "type": "object",
+        "properties": {
+          "professionals": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": { "type": "string" },
+                "name": { "type": "string" },
+                "appointments": { "type": "integer" },
+                "completed": { "type": "integer" },
+                "revenueCents": { "type": "integer" },
+                "utilizationRate": { "type": "number" },
+                "averageRating": { "type": "number" }
+              }
+            }
+          }
+        }
+      },
+      "AIAnalytics": {
+        "type": "object",
+        "properties": {
+          "totalConversations": { "type": "integer" },
+          "messagesHandled": { "type": "integer" },
+          "handoffRate": { "type": "number" },
+          "averageResponseTimeSeconds": { "type": "number" },
+          "appointmentsBooked": { "type": "integer" },
+          "conversionRate": { "type": "number" }
+        }
+      },
+      "AnalyticsExport": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "status": { "type": "string", "enum": ["pending", "processing", "completed", "failed"] },
+          "fileUrl": { "type": "string" },
+          "expiresAt": { "type": "string", "format": "date-time" }
+        }
+      }
+    }
+  }
+}

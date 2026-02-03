@@ -1,0 +1,601 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Gendei Professional Management API",
+    "version": "1.0.0",
+    "description": "API endpoints for managing healthcare professionals"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:5001/gendei-dev/us-central1/api",
+      "description": "Local Firebase Emulator"
+    },
+    {
+      "url": "https://us-central1-gendei-prod.cloudfunctions.net/api",
+      "description": "Production"
+    }
+  ],
+  "security": [
+    {
+      "BearerAuth": []
+    }
+  ],
+  "paths": {
+    "/professionals": {
+      "get": {
+        "summary": "List Professionals",
+        "description": "Returns all professionals for the authenticated user's clinic",
+        "operationId": "listProfessionals",
+        "tags": ["Professionals"],
+        "parameters": [
+          {
+            "name": "specialty",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/ProfessionalSpecialty"
+            },
+            "description": "Filter by specialty"
+          },
+          {
+            "name": "active",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": true
+            },
+            "description": "Filter by active status"
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Search by name"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 50,
+              "maximum": 100
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Pagination cursor (last document ID)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of professionals",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfessionalListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      },
+      "post": {
+        "summary": "Create Professional",
+        "description": "Creates a new professional for the clinic",
+        "operationId": "createProfessional",
+        "tags": ["Professionals"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateProfessionalRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Professional created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Professional"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      }
+    },
+    "/professionals/{professionalId}": {
+      "get": {
+        "summary": "Get Professional",
+        "description": "Returns a single professional by ID",
+        "operationId": "getProfessional",
+        "tags": ["Professionals"],
+        "parameters": [
+          {
+            "name": "professionalId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Professional found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Professional"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Professional not found"
+          }
+        }
+      },
+      "patch": {
+        "summary": "Update Professional",
+        "description": "Updates a professional's information",
+        "operationId": "updateProfessional",
+        "tags": ["Professionals"],
+        "parameters": [
+          {
+            "name": "professionalId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateProfessionalRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Professional updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Professional"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request data"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Professional not found"
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete Professional",
+        "description": "Soft deletes (deactivates) a professional",
+        "operationId": "deleteProfessional",
+        "tags": ["Professionals"],
+        "parameters": [
+          {
+            "name": "professionalId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Professional deactivated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "message": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Professional not found"
+          }
+        }
+      }
+    },
+    "/professionals/{professionalId}/photo-upload-url": {
+      "post": {
+        "summary": "Get Photo Upload URL",
+        "description": "Generates a signed URL for uploading a professional's photo",
+        "operationId": "getPhotoUploadUrl",
+        "tags": ["Professionals"],
+        "parameters": [
+          {
+            "name": "professionalId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["contentType"],
+                "properties": {
+                  "contentType": {
+                    "type": "string",
+                    "enum": ["image/jpeg", "image/png", "image/webp"]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Upload URL generated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "uploadUrl": {
+                      "type": "string",
+                      "format": "uri",
+                      "description": "Signed URL for PUT upload"
+                    },
+                    "publicUrl": {
+                      "type": "string",
+                      "format": "uri",
+                      "description": "Public URL after upload"
+                    },
+                    "expiresAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Professional not found"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "Firebase ID Token"
+      }
+    },
+    "schemas": {
+      "Professional": {
+        "type": "object",
+        "required": ["id", "clinicId", "name", "email", "phone", "specialty", "appointmentDuration", "consultationPrice", "active"],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "clinicId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "phone": {
+            "type": "string"
+          },
+          "specialty": {
+            "$ref": "#/components/schemas/ProfessionalSpecialty"
+          },
+          "bio": {
+            "type": "string"
+          },
+          "photoUrl": {
+            "type": "string",
+            "format": "uri"
+          },
+          "photoPath": {
+            "type": "string"
+          },
+          "appointmentDuration": {
+            "type": "integer",
+            "minimum": 15,
+            "maximum": 240,
+            "description": "Duration in minutes"
+          },
+          "consultationPrice": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Price in BRL cents"
+          },
+          "workingDays": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 6
+            }
+          },
+          "workingHours": {
+            "$ref": "#/components/schemas/WorkingHours"
+          },
+          "active": {
+            "type": "boolean"
+          },
+          "deactivatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ProfessionalSpecialty": {
+        "type": "string",
+        "enum": [
+          "general_practitioner",
+          "dentist",
+          "dermatologist",
+          "cardiologist",
+          "orthopedist",
+          "gynecologist",
+          "pediatrician",
+          "ophthalmologist",
+          "psychiatrist",
+          "psychologist",
+          "physiotherapist",
+          "nutritionist",
+          "endocrinologist",
+          "urologist",
+          "neurologist",
+          "otolaryngologist",
+          "veterinarian",
+          "aesthetician",
+          "nurse",
+          "other"
+        ]
+      },
+      "WorkingHours": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "object",
+          "properties": {
+            "ranges": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/TimeRange"
+              }
+            }
+          }
+        },
+        "example": {
+          "1": { "ranges": [{ "from": "08:00", "to": "12:00" }, { "from": "14:00", "to": "18:00" }] },
+          "2": { "ranges": [{ "from": "08:00", "to": "18:00" }] }
+        }
+      },
+      "TimeRange": {
+        "type": "object",
+        "required": ["from", "to"],
+        "properties": {
+          "from": {
+            "type": "string",
+            "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+            "example": "08:00"
+          },
+          "to": {
+            "type": "string",
+            "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+            "example": "18:00"
+          }
+        }
+      },
+      "CreateProfessionalRequest": {
+        "type": "object",
+        "required": ["name", "email", "phone", "specialty", "appointmentDuration", "consultationPrice", "workingDays", "workingHours"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 100
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "phone": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 15
+          },
+          "specialty": {
+            "$ref": "#/components/schemas/ProfessionalSpecialty"
+          },
+          "bio": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "appointmentDuration": {
+            "type": "integer",
+            "minimum": 15,
+            "maximum": 240
+          },
+          "consultationPrice": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "workingDays": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 6
+            },
+            "minItems": 1
+          },
+          "workingHours": {
+            "$ref": "#/components/schemas/WorkingHours"
+          }
+        }
+      },
+      "UpdateProfessionalRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 100
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "phone": {
+            "type": "string"
+          },
+          "specialty": {
+            "$ref": "#/components/schemas/ProfessionalSpecialty"
+          },
+          "bio": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "appointmentDuration": {
+            "type": "integer",
+            "minimum": 15,
+            "maximum": 240
+          },
+          "consultationPrice": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "workingDays": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 6
+            }
+          },
+          "workingHours": {
+            "$ref": "#/components/schemas/WorkingHours"
+          },
+          "active": {
+            "type": "boolean"
+          },
+          "photoUrl": {
+            "type": "string",
+            "format": "uri"
+          }
+        }
+      },
+      "ProfessionalListResponse": {
+        "type": "object",
+        "properties": {
+          "professionals": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Professional"
+            }
+          },
+          "nextCursor": {
+            "type": "string",
+            "description": "Cursor for next page"
+          },
+          "hasMore": {
+            "type": "boolean"
+          },
+          "total": {
+            "type": "integer",
+            "description": "Total count (may be approximate)"
+          }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "required": ["error"],
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "details": {
+            "type": "object"
+          }
+        }
+      }
+    }
+  }
+}

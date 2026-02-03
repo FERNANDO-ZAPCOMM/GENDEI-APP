@@ -1,0 +1,418 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Gendei WhatsApp Integration API",
+    "version": "1.0.0",
+    "description": "API endpoints for WhatsApp Business Platform integration"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:5001/gendei-dev/us-central1/api",
+      "description": "Local Firebase Emulator"
+    },
+    {
+      "url": "https://us-central1-gendei-prod.cloudfunctions.net/api",
+      "description": "Production Functions"
+    },
+    {
+      "url": "http://localhost:8000",
+      "description": "Local Agent"
+    },
+    {
+      "url": "https://agent.gendei.com.br",
+      "description": "Production Agent"
+    }
+  ],
+  "paths": {
+    "/meta/embedded-signup/start": {
+      "post": {
+        "summary": "Start Embedded Signup",
+        "description": "Initializes the Embedded Signup flow and returns configuration",
+        "operationId": "startEmbeddedSignup",
+        "tags": ["Meta OAuth"],
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Signup configuration",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "appId": { "type": "string" },
+                    "configId": { "type": "string" },
+                    "state": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/meta/embedded-signup/complete": {
+      "post": {
+        "summary": "Complete Embedded Signup",
+        "description": "Exchanges OAuth code for access token and stores connection",
+        "operationId": "completeEmbeddedSignup",
+        "tags": ["Meta OAuth"],
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmbeddedSignupCompleteRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Signup completed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmbeddedSignupCompleteResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid code or signup failed"
+          }
+        }
+      }
+    },
+    "/whatsapp/request-verification": {
+      "post": {
+        "summary": "Request Verification Code",
+        "description": "Requests SMS or Voice verification code for phone number",
+        "operationId": "requestVerificationCode",
+        "tags": ["WhatsApp"],
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["phoneNumberId", "codeMethod"],
+                "properties": {
+                  "phoneNumberId": { "type": "string" },
+                  "codeMethod": {
+                    "type": "string",
+                    "enum": ["SMS", "VOICE"]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Verification code requested",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/whatsapp/register-number": {
+      "post": {
+        "summary": "Register Phone Number",
+        "description": "Verifies code and registers phone number for messaging",
+        "operationId": "registerPhoneNumber",
+        "tags": ["WhatsApp"],
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterPhoneRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Phone number registered",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "phoneNumberId": { "type": "string" },
+                    "displayPhone": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid verification code"
+          }
+        }
+      }
+    },
+    "/whatsapp/test-message": {
+      "post": {
+        "summary": "Send Test Message",
+        "description": "Sends a test message to verify WhatsApp connection",
+        "operationId": "sendTestMessage",
+        "tags": ["WhatsApp"],
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TestMessageRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Message sent",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TestMessageResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Send failed"
+          }
+        }
+      }
+    },
+    "/whatsapp/connection": {
+      "get": {
+        "summary": "Get WhatsApp Connection",
+        "description": "Returns WhatsApp connection status and details",
+        "operationId": "getWhatsAppConnection",
+        "tags": ["WhatsApp"],
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Connection details",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhatsAppConnectionResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "WhatsApp not connected"
+          }
+        }
+      },
+      "delete": {
+        "summary": "Disconnect WhatsApp",
+        "description": "Disconnects WhatsApp from the clinic",
+        "operationId": "disconnectWhatsApp",
+        "tags": ["WhatsApp"],
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Disconnected successfully"
+          }
+        }
+      }
+    },
+    "/meta/webhook": {
+      "get": {
+        "summary": "Webhook Verification",
+        "description": "Meta webhook verification endpoint",
+        "operationId": "verifyMetaWebhook",
+        "tags": ["Webhooks"],
+        "parameters": [
+          {
+            "name": "hub.mode",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string", "enum": ["subscribe"] }
+          },
+          {
+            "name": "hub.verify_token",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "hub.challenge",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Challenge response",
+            "content": {
+              "text/plain": {
+                "schema": { "type": "string" }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Webhook Handler",
+        "description": "Receives WhatsApp webhooks from Meta",
+        "operationId": "handleMetaWebhook",
+        "tags": ["Webhooks"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WhatsAppWebhookPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Webhook received"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "Firebase ID Token"
+      }
+    },
+    "schemas": {
+      "EmbeddedSignupCompleteRequest": {
+        "type": "object",
+        "required": ["code"],
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "OAuth code from FB.login"
+          }
+        }
+      },
+      "EmbeddedSignupCompleteResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" },
+          "wabaId": { "type": "string" },
+          "phoneNumbers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": { "type": "string" },
+                "displayPhone": { "type": "string" },
+                "verified": { "type": "boolean" }
+              }
+            }
+          }
+        }
+      },
+      "RegisterPhoneRequest": {
+        "type": "object",
+        "required": ["phoneNumberId", "verificationCode"],
+        "properties": {
+          "phoneNumberId": { "type": "string" },
+          "verificationCode": { "type": "string", "minLength": 6, "maxLength": 6 }
+        }
+      },
+      "TestMessageRequest": {
+        "type": "object",
+        "required": ["phoneNumber"],
+        "properties": {
+          "phoneNumber": {
+            "type": "string",
+            "description": "Recipient phone with country code"
+          }
+        }
+      },
+      "TestMessageResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" },
+          "messageId": { "type": "string" },
+          "error": { "type": "string" }
+        }
+      },
+      "WhatsAppConnectionResponse": {
+        "type": "object",
+        "properties": {
+          "connected": { "type": "boolean" },
+          "phoneNumberId": { "type": "string" },
+          "displayPhone": { "type": "string" },
+          "qualityRating": {
+            "type": "string",
+            "enum": ["GREEN", "YELLOW", "RED", "UNKNOWN"]
+          },
+          "messagingLimit": {
+            "type": "string",
+            "enum": ["TIER_1K", "TIER_10K", "TIER_100K", "TIER_UNLIMITED"]
+          },
+          "verified": { "type": "boolean" },
+          "connectedAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "WhatsAppWebhookPayload": {
+        "type": "object",
+        "properties": {
+          "object": {
+            "type": "string",
+            "enum": ["whatsapp_business_account"]
+          },
+          "entry": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WhatsAppEntry"
+            }
+          }
+        }
+      },
+      "WhatsAppEntry": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "changes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WhatsAppChange"
+            }
+          }
+        }
+      },
+      "WhatsAppChange": {
+        "type": "object",
+        "properties": {
+          "field": {
+            "type": "string",
+            "enum": ["messages", "phone_number_quality_update", "account_update"]
+          },
+          "value": { "type": "object" }
+        }
+      }
+    }
+  }
+}

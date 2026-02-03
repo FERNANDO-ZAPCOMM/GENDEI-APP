@@ -1,0 +1,569 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Gendei Clinic Onboarding API",
+    "version": "1.0.0",
+    "description": "API endpoints for clinic registration and onboarding"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:5001/gendei-dev/us-central1/api",
+      "description": "Local Firebase Emulator"
+    },
+    {
+      "url": "https://us-central1-gendei-prod.cloudfunctions.net/api",
+      "description": "Production"
+    }
+  ],
+  "security": [
+    {
+      "BearerAuth": []
+    }
+  ],
+  "paths": {
+    "/clinics": {
+      "post": {
+        "summary": "Create Clinic",
+        "description": "Creates a new clinic for the authenticated user. Auto-creates if called from GET /clinics/me when no clinic exists.",
+        "operationId": "createClinic",
+        "tags": ["Clinics"],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateClinicRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Clinic created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Clinic"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "409": {
+            "description": "User already has a clinic"
+          }
+        }
+      }
+    },
+    "/clinics/me": {
+      "get": {
+        "summary": "Get Current User's Clinic",
+        "description": "Returns the clinic owned by or associated with the authenticated user. Auto-creates a minimal clinic if none exists.",
+        "operationId": "getMyClinic",
+        "tags": ["Clinics"],
+        "responses": {
+          "200": {
+            "description": "Clinic found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Clinic"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Clinic auto-created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Clinic"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      },
+      "patch": {
+        "summary": "Update Current User's Clinic",
+        "description": "Updates the clinic profile for the authenticated user",
+        "operationId": "updateMyClinic",
+        "tags": ["Clinics"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateClinicRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Clinic updated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Clinic"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Clinic not found"
+          }
+        }
+      }
+    },
+    "/clinics/{clinicId}/settings/{key}": {
+      "put": {
+        "summary": "Update Clinic Setting",
+        "description": "Updates a specific setting for the clinic",
+        "operationId": "updateClinicSetting",
+        "tags": ["Clinics"],
+        "parameters": [
+          {
+            "name": "clinicId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Clinic ID"
+          },
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": ["operatingHours", "paymentSettings", "timezone", "locale"]
+            },
+            "description": "Setting key to update"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  { "$ref": "#/components/schemas/OperatingHours" },
+                  { "$ref": "#/components/schemas/PaymentSettings" },
+                  { "type": "string" }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Setting updated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "key": { "type": "string" },
+                    "updatedAt": { "type": "string", "format": "date-time" }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid setting value"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden - not owner/admin"
+          },
+          "404": {
+            "description": "Clinic not found"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "Firebase ID Token"
+      }
+    },
+    "schemas": {
+      "Clinic": {
+        "type": "object",
+        "required": ["id", "ownerId", "name", "email", "createdAt", "updatedAt"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique clinic identifier"
+          },
+          "ownerId": {
+            "type": "string",
+            "description": "Firebase Auth UID of owner"
+          },
+          "adminIds": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Firebase Auth UIDs of admins"
+          },
+          "name": {
+            "type": "string",
+            "description": "Clinic display name"
+          },
+          "description": {
+            "type": "string",
+            "description": "Clinic description/tagline"
+          },
+          "cnpj": {
+            "type": "string",
+            "pattern": "^\\d{2}\\.\\d{3}\\.\\d{3}/\\d{4}-\\d{2}$",
+            "description": "Brazilian business registration"
+          },
+          "phone": {
+            "type": "string",
+            "description": "Contact phone number"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "description": "Contact email"
+          },
+          "logoUrl": {
+            "type": "string",
+            "format": "uri",
+            "description": "Logo URL in storage"
+          },
+          "address": {
+            "$ref": "#/components/schemas/Address"
+          },
+          "category": {
+            "$ref": "#/components/schemas/ClinicCategory"
+          },
+          "timezone": {
+            "type": "string",
+            "description": "IANA timezone identifier",
+            "default": "America/Sao_Paulo"
+          },
+          "locale": {
+            "type": "string",
+            "enum": ["pt-BR", "en"],
+            "default": "pt-BR"
+          },
+          "operatingHours": {
+            "$ref": "#/components/schemas/OperatingHours"
+          },
+          "paymentSettings": {
+            "$ref": "#/components/schemas/PaymentSettings"
+          },
+          "whatsappConnected": {
+            "type": "boolean",
+            "default": false
+          },
+          "whatsappPhoneNumberId": {
+            "type": "string"
+          },
+          "onboardingCompleted": {
+            "type": "boolean",
+            "default": false
+          },
+          "onboardingStepsCompleted": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["profile", "address", "hours", "payment", "whatsapp"]
+            }
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "CreateClinicRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 2
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "category": {
+            "$ref": "#/components/schemas/ClinicCategory"
+          }
+        }
+      },
+      "UpdateClinicRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 2
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "cnpj": {
+            "type": "string",
+            "pattern": "^\\d{2}\\.\\d{3}\\.\\d{3}/\\d{4}-\\d{2}$"
+          },
+          "phone": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "category": {
+            "$ref": "#/components/schemas/ClinicCategory"
+          },
+          "timezone": {
+            "type": "string"
+          },
+          "locale": {
+            "type": "string",
+            "enum": ["pt-BR", "en"]
+          },
+          "address": {
+            "$ref": "#/components/schemas/Address"
+          },
+          "operatingHours": {
+            "$ref": "#/components/schemas/OperatingHours"
+          },
+          "paymentSettings": {
+            "$ref": "#/components/schemas/PaymentSettings"
+          },
+          "onboardingStepsCompleted": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "onboardingCompleted": {
+            "type": "boolean"
+          }
+        }
+      },
+      "Address": {
+        "type": "object",
+        "required": ["street", "number", "city", "state", "zipCode"],
+        "properties": {
+          "formatted": {
+            "type": "string",
+            "description": "Full formatted address"
+          },
+          "street": {
+            "type": "string"
+          },
+          "number": {
+            "type": "string"
+          },
+          "complement": {
+            "type": "string"
+          },
+          "neighborhood": {
+            "type": "string"
+          },
+          "city": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 2
+          },
+          "zipCode": {
+            "type": "string",
+            "pattern": "^\\d{5}-?\\d{3}$"
+          },
+          "country": {
+            "type": "string",
+            "default": "BR"
+          },
+          "lat": {
+            "type": "number"
+          },
+          "lng": {
+            "type": "number"
+          },
+          "placeId": {
+            "type": "string",
+            "description": "Google Place ID"
+          }
+        }
+      },
+      "ClinicCategory": {
+        "type": "string",
+        "enum": [
+          "general_clinic",
+          "dentistry",
+          "dermatology",
+          "cardiology",
+          "orthopedics",
+          "gynecology",
+          "pediatrics",
+          "ophthalmology",
+          "psychiatry",
+          "psychology",
+          "physiotherapy",
+          "nutrition",
+          "endocrinology",
+          "urology",
+          "neurology",
+          "otolaryngology",
+          "veterinary",
+          "aesthetics",
+          "other"
+        ]
+      },
+      "OperatingHours": {
+        "type": "object",
+        "description": "Weekly operating hours. Keys are day numbers (0=Sunday, 6=Saturday)",
+        "additionalProperties": {
+          "$ref": "#/components/schemas/DaySchedule"
+        },
+        "example": {
+          "0": { "isOpen": false, "ranges": [] },
+          "1": { "isOpen": true, "ranges": [{ "from": "08:00", "to": "18:00" }] }
+        }
+      },
+      "DaySchedule": {
+        "type": "object",
+        "required": ["isOpen", "ranges"],
+        "properties": {
+          "isOpen": {
+            "type": "boolean"
+          },
+          "ranges": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TimeRange"
+            }
+          }
+        }
+      },
+      "TimeRange": {
+        "type": "object",
+        "required": ["from", "to"],
+        "properties": {
+          "from": {
+            "type": "string",
+            "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+            "example": "08:00"
+          },
+          "to": {
+            "type": "string",
+            "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+            "example": "18:00"
+          }
+        }
+      },
+      "PaymentSettings": {
+        "type": "object",
+        "properties": {
+          "acceptsConvenio": {
+            "type": "boolean",
+            "default": false
+          },
+          "convenioList": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "acceptsParticular": {
+            "type": "boolean",
+            "default": true
+          },
+          "requiresDeposit": {
+            "type": "boolean",
+            "default": false
+          },
+          "depositPercentage": {
+            "type": "integer",
+            "minimum": 10,
+            "maximum": 100,
+            "default": 30
+          },
+          "pix": {
+            "$ref": "#/components/schemas/PixKeyConfig"
+          }
+        }
+      },
+      "PixKeyConfig": {
+        "type": "object",
+        "required": ["type", "key"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["cpf", "cnpj", "email", "phone", "random"]
+          },
+          "key": {
+            "type": "string"
+          },
+          "verifiedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "required": ["error"],
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "details": {
+            "type": "object"
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,150 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Gendei Appointment Management API",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/appointments": {
+      "get": {
+        "summary": "List Appointments",
+        "parameters": [
+          { "name": "startDate", "in": "query", "schema": { "type": "string" } },
+          { "name": "endDate", "in": "query", "schema": { "type": "string" } },
+          { "name": "professionalId", "in": "query", "schema": { "type": "string" } },
+          { "name": "status", "in": "query", "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "List of appointments" } }
+      },
+      "post": {
+        "summary": "Create Appointment",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreateAppointment" }
+            }
+          }
+        },
+        "responses": { "201": { "description": "Appointment created" } }
+      }
+    },
+    "/appointments/today": {
+      "get": {
+        "summary": "Get Today's Appointments",
+        "responses": { "200": { "description": "Today's appointments" } }
+      }
+    },
+    "/appointments/{id}": {
+      "get": { "summary": "Get Appointment" },
+      "put": { "summary": "Update Appointment" },
+      "delete": { "summary": "Cancel Appointment" }
+    },
+    "/appointments/{id}/status": {
+      "put": {
+        "summary": "Update Status",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "status": { "type": "string" },
+                  "reason": { "type": "string" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/appointments/{id}/reschedule": {
+      "put": {
+        "summary": "Reschedule Appointment",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "date": { "type": "string" },
+                  "time": { "type": "string" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/availability": {
+      "get": {
+        "summary": "Check Availability",
+        "parameters": [
+          { "name": "serviceId", "in": "query", "required": true, "schema": { "type": "string" } },
+          { "name": "professionalId", "in": "query", "schema": { "type": "string" } },
+          { "name": "date", "in": "query", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Available slots",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "slots": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "time": { "type": "string" },
+                          "professionalId": { "type": "string" },
+                          "professionalName": { "type": "string" }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "CreateAppointment": {
+        "type": "object",
+        "required": ["patientId", "professionalId", "serviceId", "date", "time"],
+        "properties": {
+          "patientId": { "type": "string" },
+          "professionalId": { "type": "string" },
+          "serviceId": { "type": "string" },
+          "date": { "type": "string" },
+          "time": { "type": "string" },
+          "patientName": { "type": "string" },
+          "patientPhone": { "type": "string" },
+          "notes": { "type": "string" }
+        }
+      },
+      "Appointment": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "clinicId": { "type": "string" },
+          "patientId": { "type": "string" },
+          "professionalId": { "type": "string" },
+          "serviceId": { "type": "string" },
+          "date": { "type": "string" },
+          "time": { "type": "string" },
+          "duration": { "type": "integer" },
+          "status": { "type": "string" },
+          "patientName": { "type": "string" },
+          "patientPhone": { "type": "string" },
+          "depositAmount": { "type": "integer" },
+          "depositPaid": { "type": "boolean" }
+        }
+      }
+    }
+  }
+}

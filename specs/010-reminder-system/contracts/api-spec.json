@@ -1,0 +1,364 @@
+{
+  "openapi": "3.0.0",
+  "info": { "title": "Gendei Reminder System API", "version": "1.0.0" },
+  "paths": {
+    "/reminders": {
+      "get": {
+        "summary": "List Reminders",
+        "parameters": [
+          { "name": "status", "in": "query", "schema": { "type": "string" } },
+          { "name": "type", "in": "query", "schema": { "type": "string" } },
+          { "name": "from", "in": "query", "schema": { "type": "string", "format": "date-time" } },
+          { "name": "to", "in": "query", "schema": { "type": "string", "format": "date-time" } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 50 } },
+          { "name": "cursor", "in": "query", "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Reminders list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "reminders": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/Reminder" }
+                    },
+                    "nextCursor": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create Manual Reminder",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["patientId", "patientPhone", "type", "scheduledFor"],
+                "properties": {
+                  "appointmentId": { "type": "string" },
+                  "patientId": { "type": "string" },
+                  "patientPhone": { "type": "string" },
+                  "type": { "$ref": "#/components/schemas/ReminderType" },
+                  "scheduledFor": { "type": "string", "format": "date-time" },
+                  "customMessage": { "type": "string", "maxLength": 1000 },
+                  "variables": { "type": "object", "additionalProperties": { "type": "string" } }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Reminder created",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Reminder" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reminders/{reminderId}": {
+      "get": {
+        "summary": "Get Reminder",
+        "parameters": [
+          { "name": "reminderId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Reminder details",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Reminder" }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Cancel Reminder",
+        "parameters": [
+          { "name": "reminderId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Reminder cancelled" } }
+      }
+    },
+    "/reminders/appointments/{appointmentId}": {
+      "get": {
+        "summary": "Get Reminders for Appointment",
+        "parameters": [
+          { "name": "appointmentId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Appointment reminders",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "reminders": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/Reminder" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reminders/analytics": {
+      "get": {
+        "summary": "Get Reminder Analytics",
+        "parameters": [
+          { "name": "period", "in": "query", "schema": { "type": "string", "example": "2026-02" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Analytics data",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ReminderAnalytics" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/clinics/{clinicId}/settings/reminderSettings": {
+      "get": {
+        "summary": "Get Reminder Settings",
+        "parameters": [
+          { "name": "clinicId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Reminder settings",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ReminderSettings" }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "Update Reminder Settings",
+        "parameters": [
+          { "name": "clinicId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ReminderSettings" }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Settings updated" } }
+      }
+    },
+    "/clinics/{clinicId}/reminder-templates": {
+      "get": {
+        "summary": "List Reminder Templates",
+        "parameters": [
+          { "name": "clinicId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Templates list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "templates": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/ReminderTemplate" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create Reminder Template",
+        "parameters": [
+          { "name": "clinicId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["type", "name", "content"],
+                "properties": {
+                  "type": { "$ref": "#/components/schemas/ReminderType" },
+                  "name": { "type": "string" },
+                  "content": { "type": "string" },
+                  "variables": { "type": "array", "items": { "type": "string" } },
+                  "active": { "type": "boolean", "default": true }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Template created",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ReminderTemplate" }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ReminderType": {
+        "type": "string",
+        "enum": ["reminder_24h", "reminder_2h", "reminder_1h", "confirmation", "no_show", "follow_up", "birthday", "custom"]
+      },
+      "ReminderStatus": {
+        "type": "string",
+        "enum": ["pending", "processing", "sent", "delivered", "failed", "cancelled", "skipped"]
+      },
+      "Reminder": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "clinicId": { "type": "string" },
+          "appointmentId": { "type": "string" },
+          "patientId": { "type": "string" },
+          "patientPhone": { "type": "string" },
+          "type": { "$ref": "#/components/schemas/ReminderType" },
+          "scheduledFor": { "type": "string", "format": "date-time" },
+          "status": { "$ref": "#/components/schemas/ReminderStatus" },
+          "attempts": { "type": "integer" },
+          "sentAt": { "type": "string", "format": "date-time" },
+          "waMessageId": { "type": "string" },
+          "errorMessage": { "type": "string" },
+          "variables": { "type": "object", "additionalProperties": { "type": "string" } },
+          "createdAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "ReminderSettings": {
+        "type": "object",
+        "properties": {
+          "enabled": { "type": "boolean" },
+          "reminder24h": {
+            "type": "object",
+            "properties": {
+              "enabled": { "type": "boolean" },
+              "hoursBefore": { "type": "integer" },
+              "templateId": { "type": "string" }
+            }
+          },
+          "reminder2h": {
+            "type": "object",
+            "properties": {
+              "enabled": { "type": "boolean" },
+              "hoursBefore": { "type": "integer" },
+              "templateId": { "type": "string" }
+            }
+          },
+          "confirmationReminder": {
+            "type": "object",
+            "properties": {
+              "enabled": { "type": "boolean" },
+              "sendImmediately": { "type": "boolean" },
+              "templateId": { "type": "string" }
+            }
+          },
+          "noShowFollowup": {
+            "type": "object",
+            "properties": {
+              "enabled": { "type": "boolean" },
+              "hoursAfter": { "type": "integer" },
+              "templateId": { "type": "string" }
+            }
+          },
+          "birthdayReminder": {
+            "type": "object",
+            "properties": {
+              "enabled": { "type": "boolean" },
+              "sendTime": { "type": "string" },
+              "templateId": { "type": "string" }
+            }
+          },
+          "quietHours": {
+            "type": "object",
+            "properties": {
+              "enabled": { "type": "boolean" },
+              "start": { "type": "string" },
+              "end": { "type": "string" }
+            }
+          }
+        }
+      },
+      "ReminderTemplate": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "type": { "$ref": "#/components/schemas/ReminderType" },
+          "name": { "type": "string" },
+          "content": { "type": "string" },
+          "variables": { "type": "array", "items": { "type": "string" } },
+          "isDefault": { "type": "boolean" },
+          "active": { "type": "boolean" }
+        }
+      },
+      "ReminderAnalytics": {
+        "type": "object",
+        "properties": {
+          "clinicId": { "type": "string" },
+          "period": { "type": "string" },
+          "total": {
+            "type": "object",
+            "properties": {
+              "scheduled": { "type": "integer" },
+              "sent": { "type": "integer" },
+              "delivered": { "type": "integer" },
+              "failed": { "type": "integer" },
+              "cancelled": { "type": "integer" }
+            }
+          },
+          "engagement": {
+            "type": "object",
+            "properties": {
+              "confirmations": { "type": "integer" },
+              "rescheduleRequests": { "type": "integer" },
+              "cancellationRequests": { "type": "integer" }
+            }
+          }
+        }
+      }
+    }
+  }
+}
