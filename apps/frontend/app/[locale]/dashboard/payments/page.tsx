@@ -5,12 +5,9 @@ import { useRouter, useParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { getNextStepUrl } from '@/hooks/use-onboarding';
 import {
-  CreditCard,
   Percent,
   Key,
   Loader2,
-  Plus,
-  X,
   Save,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -20,25 +17,10 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { TypingDots } from '@/components/PageLoader';
-import { cn } from '@/lib/utils';
 import type { PaymentSettings } from '@/lib/clinic-types';
-
-const COMMON_CONVENIOS = [
-  'Unimed',
-  'Bradesco Saúde',
-  'SulAmérica',
-  'Amil',
-  'NotreDame Intermédica',
-  'Hapvida',
-  'Porto Seguro',
-  'Cassi',
-  'Geap',
-  'São Francisco',
-];
 
 export default function PaymentsPage() {
   const t = useTranslations();
@@ -55,10 +37,10 @@ export default function PaymentsPage() {
     requiresDeposit: true, // Always enabled - business model charges 6% from signal
     depositPercentage: 30,
     pixKey: '',
+    pixKeyType: 'cpf',
   });
   const [confirmPixKey, setConfirmPixKey] = useState('');
   const [pixKeyError, setPixKeyError] = useState('');
-  const [newConvenio, setNewConvenio] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
   // Initialize settings from clinic data
@@ -87,28 +69,6 @@ export default function PaymentsPage() {
 
   const updateSettings = (updates: Partial<PaymentSettings>) => {
     setSettings((prev) => ({ ...prev, ...updates }));
-  };
-
-  const handleAddConvenio = () => {
-    if (!newConvenio.trim()) return;
-    if (settings.convenioList.includes(newConvenio.trim())) return;
-    updateSettings({
-      convenioList: [...settings.convenioList, newConvenio.trim()],
-    });
-    setNewConvenio('');
-  };
-
-  const handleRemoveConvenio = (convenio: string) => {
-    updateSettings({
-      convenioList: settings.convenioList.filter((c) => c !== convenio),
-    });
-  };
-
-  const handleAddCommonConvenio = (convenio: string) => {
-    if (settings.convenioList.includes(convenio)) return;
-    updateSettings({
-      convenioList: [...settings.convenioList, convenio],
-    });
   };
 
   const handleSave = async () => {
@@ -168,126 +128,6 @@ export default function PaymentsPage() {
 
       {/* Content wrapper - 75% width on large screens */}
       <div className="w-full lg:w-3/4 space-y-6">
-      {/* Payment Methods Card */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <CreditCard className="w-4 h-4" />
-            Formas de Pagamento
-          </CardTitle>
-          <CardDescription>Selecione as formas de pagamento aceitas</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {/* Particular */}
-          <div className="flex items-center justify-between p-4 border rounded-lg">
-            <div>
-              <Label className="font-medium">Particular</Label>
-              <p className="text-sm text-muted-foreground">
-                Aceita pagamento direto do paciente
-              </p>
-            </div>
-            <Switch
-              checked={settings.acceptsParticular}
-              onCheckedChange={(checked) => updateSettings({ acceptsParticular: checked })}
-              disabled={isSaving}
-            />
-          </div>
-
-          {/* Convênio */}
-          <div
-            className={cn(
-              'p-4 border rounded-lg transition-all',
-              settings.acceptsConvenio ? 'border-blue-200 bg-blue-50/30' : ''
-            )}
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <Label className="font-medium">Convênio</Label>
-                <p className="text-sm text-muted-foreground">
-                  Aceita planos de saúde
-                </p>
-              </div>
-              <Switch
-                checked={settings.acceptsConvenio}
-                onCheckedChange={(checked) => updateSettings({ acceptsConvenio: checked })}
-                disabled={isSaving}
-              />
-            </div>
-
-            {/* Convenio List */}
-            {settings.acceptsConvenio && (
-              <div className="mt-4 pt-4 border-t space-y-4">
-                <Label className="text-sm">Convênios Aceitos</Label>
-
-                {/* Current convenios */}
-                {settings.convenioList.length > 0 && (
-                  <div className="flex flex-wrap gap-2">
-                    {settings.convenioList.map((convenio) => (
-                      <Badge
-                        key={convenio}
-                        variant="secondary"
-                        className="flex items-center gap-1 pr-1"
-                      >
-                        {convenio}
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveConvenio(convenio)}
-                          className="ml-1 hover:bg-gray-300 rounded-full p-0.5"
-                          disabled={isSaving}
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      </Badge>
-                    ))}
-                  </div>
-                )}
-
-                {/* Add convenio input */}
-                <div className="flex gap-2">
-                  <Input
-                    placeholder="Nome do convênio"
-                    value={newConvenio}
-                    onChange={(e) => setNewConvenio(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleAddConvenio()}
-                    disabled={isSaving}
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={handleAddConvenio}
-                    disabled={isSaving || !newConvenio.trim()}
-                  >
-                    <Plus className="h-4 w-4" />
-                  </Button>
-                </div>
-
-                {/* Common convenios suggestions */}
-                <div>
-                  <p className="text-xs text-muted-foreground mb-2">Sugestões:</p>
-                  <div className="flex flex-wrap gap-1">
-                    {COMMON_CONVENIOS.filter(
-                      (c) => !settings.convenioList.includes(c)
-                    ).map((convenio) => (
-                      <Button
-                        key={convenio}
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 text-xs"
-                        onClick={() => handleAddCommonConvenio(convenio)}
-                        disabled={isSaving}
-                      >
-                        + {convenio}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
       {/* Deposit Card */}
       <Card>
         <CardHeader>
@@ -351,43 +191,77 @@ export default function PaymentsPage() {
           <CardDescription>Informe a chave PIX para recebimento de pagamentos</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="pixKey">
-              Chave PIX <span className="text-red-500">*</span>
-            </Label>
-            <Input
-              id="pixKey"
-              placeholder="CPF, CNPJ, e-mail, telefone ou chave aleatória"
-              value={settings.pixKey || ''}
-              onChange={(e) => {
-                updateSettings({ pixKey: e.target.value });
-                setPixKeyError('');
-              }}
-              disabled={isSaving}
-              className={pixKeyError ? 'border-red-500' : ''}
-              required
-            />
+          {/* Tipo de Chave - alone at top, same width as fields below */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="pixKeyType">
+                Tipo de Chave <span className="text-red-500">*</span>
+              </Label>
+              <Select
+                value={settings.pixKeyType || 'cpf'}
+                onValueChange={(value) => updateSettings({ pixKeyType: value as PaymentSettings['pixKeyType'] })}
+                disabled={isSaving}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione o tipo" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="cpf">CPF</SelectItem>
+                  <SelectItem value="cnpj">CNPJ</SelectItem>
+                  <SelectItem value="email">Email</SelectItem>
+                  <SelectItem value="phone">Telefone</SelectItem>
+                  <SelectItem value="random">Chave Aleatória</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="confirmPixKey">
-              Confirme a Chave PIX <span className="text-red-500">*</span>
-            </Label>
-            <Input
-              id="confirmPixKey"
-              placeholder="Digite a chave PIX novamente"
-              value={confirmPixKey}
-              onChange={(e) => {
-                setConfirmPixKey(e.target.value);
-                setPixKeyError('');
-              }}
-              disabled={isSaving}
-              className={pixKeyError ? 'border-red-500' : ''}
-              required
-            />
-            {pixKeyError && (
-              <p className="text-sm text-red-500">{pixKeyError}</p>
-            )}
+
+          {/* Chave PIX and Confirmation - side by side */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="pixKey">
+                Chave PIX <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                id="pixKey"
+                placeholder={
+                  settings.pixKeyType === 'cpf' ? '000.000.000-00' :
+                  settings.pixKeyType === 'cnpj' ? '00.000.000/0000-00' :
+                  settings.pixKeyType === 'email' ? 'exemplo@email.com' :
+                  settings.pixKeyType === 'phone' ? '+55 11 99999-9999' :
+                  'Chave aleatória'
+                }
+                value={settings.pixKey || ''}
+                onChange={(e) => {
+                  updateSettings({ pixKey: e.target.value });
+                  setPixKeyError('');
+                }}
+                disabled={isSaving}
+                className={pixKeyError ? 'border-red-500' : ''}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="confirmPixKey">
+                Confirme a Chave PIX <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                id="confirmPixKey"
+                placeholder="Digite a chave PIX novamente"
+                value={confirmPixKey}
+                onChange={(e) => {
+                  setConfirmPixKey(e.target.value);
+                  setPixKeyError('');
+                }}
+                disabled={isSaving}
+                className={pixKeyError ? 'border-red-500' : ''}
+                required
+              />
+            </div>
           </div>
+          {pixKeyError && (
+            <p className="text-sm text-red-500">{pixKeyError}</p>
+          )}
           <p className="text-xs text-muted-foreground">
             Esta chave será usada para gerar QR codes de pagamento. Digite duas vezes para confirmar.
           </p>

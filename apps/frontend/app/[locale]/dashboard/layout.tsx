@@ -18,6 +18,7 @@ import {
   UserPlus,
   Stethoscope,
   CreditCard,
+  Bot,
 } from 'lucide-react';
 import { FaWhatsapp } from 'react-icons/fa';
 
@@ -133,6 +134,7 @@ const navigation: NavItem[] = [
       { name: 'clinic', href: '/dashboard/clinic', icon: Stethoscope, notificationKey: 'clinic', step: 1 },
       { name: 'payments', href: '/dashboard/payments', icon: CreditCard, notificationKey: 'payments', step: 2 },
       { name: 'whatsapp', href: '/dashboard/whatsapp', icon: FaWhatsapp, notificationKey: 'whatsapp', step: 3 },
+      { name: 'workflow', href: '/dashboard/workflow', icon: Bot },
       { name: 'account', href: '/dashboard/account', icon: User },
     ],
   },

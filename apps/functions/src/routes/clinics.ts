@@ -133,7 +133,8 @@ router.patch('/me', verifyAuth, async (req: Request, res: Response) => {
       'name', 'phone', 'email', 'address', 'city', 'state',
       'zipCode', 'cnpj', 'categories', 'signalPercentage', 'timezone',
       'paymentSettings', 'pixKey', 'depositPercentage', 'requiresDeposit',
-      'description', 'website', 'openingHours', 'addressData', 'greetingSummary'
+      'description', 'website', 'openingHours', 'addressData', 'greetingSummary',
+      'workflowMode'
     ];
 
     const updateData: any = {
@@ -269,7 +270,8 @@ router.put('/:clinicId', verifyAuth, async (req: Request, res: Response) => {
       'name', 'phone', 'email', 'address', 'city', 'state',
       'zipCode', 'cnpj', 'signalPercentage', 'timezone',
       'paymentSettings', 'pixKey', 'depositPercentage', 'requiresDeposit',
-      'description', 'website', 'openingHours', 'addressData', 'greetingSummary', 'categories'
+      'description', 'website', 'openingHours', 'addressData', 'greetingSummary', 'categories',
+      'workflowMode'
     ];
 
     const updateData: any = {

@@ -9,7 +9,6 @@ from typing import TypedDict, List, Optional, Any, Callable
 class ProviderType(str, Enum):
     """Supported AI providers."""
     OPENAI = "openai"
-    ANTHROPIC = "anthropic"
 
 
 class ToolParameter(TypedDict, total=False):

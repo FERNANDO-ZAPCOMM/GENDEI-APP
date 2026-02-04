@@ -1,5 +1,8 @@
 // Gendei Clinic Types
 
+// Workflow mode determines how the WhatsApp bot behaves
+export type WorkflowMode = 'booking' | 'info';
+
 // Structured address data for Google Maps integration and WhatsApp location messages
 export interface ClinicAddress {
   formatted: string;        // Full formatted address string
@@ -30,6 +33,8 @@ export interface Clinic {
   whatsappPhoneNumberId?: string;
   whatsappBusinessAccountId?: string;
   depositPercentage?: number; // 0-100, percentage required as deposit
+  workflowMode?: WorkflowMode;      // WhatsApp bot behavior mode
+  paymentSettings?: PaymentSettings; // Payment settings including convenio, particular, etc.
   createdAt?: string;
   updatedAt?: string;
 }

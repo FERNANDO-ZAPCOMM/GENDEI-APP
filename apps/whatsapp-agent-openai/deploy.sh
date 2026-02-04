@@ -24,7 +24,7 @@ fi
 
 # CLOUD RUN CONFIGURATION
 PROJECT_ID="gendei-prod"
-SERVICE_NAME="gendei-whatsapp-agent-openai"
+SERVICE_NAME="gendei-whatsapp-agent"
 REGION="us-central1"
 STORAGE_BUCKET="gendei-storage-${PROJECT_ID}"
 
@@ -70,12 +70,9 @@ echo "Using service account: ${SERVICE_ACCOUNT}"
 
 # REQUIRED-VARS CHECK (Multi-tenant mode: tokens come from Firestore, not env vars)
 # Required: WHATSAPP_TOKEN (fallback), WHATSAPP_VERIFY_TOKEN (webhook verification), OPENAI_API_KEY (Agents SDK)
-# AI PROVIDER CONFIGURATION (defaults to openai)
-AI_PROVIDER="${AI_PROVIDER:-openai}"
-ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-}"
 
-# Required vars depend on which AI provider is selected
-for var in WHATSAPP_TOKEN WHATSAPP_VERIFY_TOKEN; do
+# Required vars check
+for var in WHATSAPP_TOKEN WHATSAPP_VERIFY_TOKEN OPENAI_API_KEY; do
     if [ -z "${!var}" ]; then
         echo "ERROR: $var not set. Please export it or add it to .env file."
         echo "Make sure your .env file has proper syntax:"
@@ -84,21 +81,7 @@ for var in WHATSAPP_TOKEN WHATSAPP_VERIFY_TOKEN; do
     fi
 done
 
-# Check provider-specific API keys
-if [ "${AI_PROVIDER}" = "anthropic" ]; then
-    if [ -z "${ANTHROPIC_API_KEY}" ]; then
-        echo "ERROR: ANTHROPIC_API_KEY not set but AI_PROVIDER=anthropic"
-        echo "Please set ANTHROPIC_API_KEY in your .env file"
-        exit 1
-    fi
-    echo "Using Anthropic Claude as AI provider"
-else
-    if [ -z "${OPENAI_API_KEY}" ]; then
-        echo "ERROR: OPENAI_API_KEY not set. Please export it or add it to .env file."
-        exit 1
-    fi
-    echo "Using OpenAI as AI provider"
-fi
+echo "Using OpenAI Agents SDK"
 
 # SET DEFAULT PHONE FOR PAGSEGURO API
 DEFAULT_BRAZILIAN_PHONE="${DEFAULT_BRAZILIAN_PHONE:-+5511999999999}"
@@ -254,8 +237,6 @@ gcloud run deploy "${SERVICE_NAME}" \
     --set-env-vars="PAGSEGURO_TOKEN=${PAGSEGURO_TOKEN:-}" \
     --set-env-vars="PAGSEGURO_ENVIRONMENT=${PAGSEGURO_ENVIRONMENT:-production}" \
     --set-env-vars="DEFAULT_BRAZILIAN_PHONE=${DEFAULT_BRAZILIAN_PHONE:-}" \
-    --set-env-vars="AI_PROVIDER=${AI_PROVIDER}" \
-    --set-env-vars="ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}" \
     --set-env-vars="CLINICA_MEDICA_FORMULARIO_FLOW_ID=${CLINICA_MEDICA_FORMULARIO_FLOW_ID:-}" \
     --set-env-vars="CLINICA_MEDICA_AGENDAMENTO_FLOW_ID=${CLINICA_MEDICA_AGENDAMENTO_FLOW_ID:-}" \
     --set-env-vars="FLOWS_PRIVATE_KEY=${FLOWS_PRIVATE_KEY:-}"
@@ -267,7 +248,7 @@ gcloud run services describe "${SERVICE_NAME}" --platform managed --region "${RE
 echo ""
 echo "🎉 Gendei WhatsApp Agent deployed successfully!"
 echo "🤖 Service: ${SERVICE_NAME}"
-echo "🧠 AI Provider: ${AI_PROVIDER^^}"
+echo "🧠 AI Provider: OpenAI"
 if [ "${PRODUCTION_MODE}" = "true" ]; then
     echo "⚡ Resources: PRODUCTION (${CLOUD_RUN_CPU} CPU, ${CLOUD_RUN_MEMORY}, min ${CLOUD_RUN_MIN_INSTANCES} instances)"
 else

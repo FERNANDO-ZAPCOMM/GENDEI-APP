@@ -5,7 +5,6 @@ import { useTranslations } from 'next-intl';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
 import { useMetaStatus } from '@/hooks/use-meta-status';
-import { useClinic } from '@/hooks/use-clinic';
 import { Loader2, ChevronDown, ChevronUp, Wifi, User, QrCode, MessageSquare, Workflow, LogOut } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -95,7 +94,6 @@ export function WhatsAppSettingsContent({ onConnected }: WhatsAppSettingsContent
   const params = useParams();
   const locale = params.locale as string || 'pt-BR';
   const { currentUser } = useAuth();
-  const { currentClinic: clinic } = useClinic();
   const hasCalledOnConnected = useRef(false);
 
   // Collapsible section states

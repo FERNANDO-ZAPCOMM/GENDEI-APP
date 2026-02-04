@@ -5,7 +5,7 @@ Owns:
 - `CreatorRuntime` dataclass
 - Per-creator runtime cache
 - Loading creator profile/products/workflows from Firestore
-- Building agent runtimes (supports OpenAI and Anthropic via AI_PROVIDER env var)
+- Building agent runtimes using OpenAI Agents SDK
 
 This is extracted from `src/main.py` to keep the entrypoint small.
 """
@@ -38,7 +38,6 @@ logger = logging.getLogger(__name__)
 
 # ===== ENVIRONMENT VARIABLES (runtime-scoped) =====
 WHATSAPP_TOKEN = os.getenv("WHATSAPP_TOKEN")
-AI_PROVIDER = os.getenv("AI_PROVIDER", "openai").lower()
 
 # shared storage adapter
 STORAGE_ADAPTER = StorageAdapter()
@@ -60,7 +59,7 @@ def _ensure_tools_registered():
 class CreatorRuntime:
     """
     Runtime context for a creator's WhatsApp agent.
-    Supports both OpenAI and Anthropic providers via the provider abstraction layer.
+    Uses OpenAI Agents SDK for AI capabilities.
     """
     creator_id: str
     phone_number_id: Optional[str]
@@ -68,13 +67,11 @@ class CreatorRuntime:
     data_service: DataService
     db: FirestoreAdapter
     storage: StorageAdapter
-    agents: Dict[str, Any]  # Can be OpenAI Agent or abstracted BaseAgent
+    agents: Dict[str, Any]  # OpenAI Agent instances
     creator_context: str
     product_context: str
     workflow_executor: Optional[WorkflowExecutor] = None
     scheduler: Optional[SchedulerService] = None
-    # New fields for provider abstraction
-    provider: str = "openai"  # "openai" or "anthropic"
     agent_factory: Optional[BaseAgentFactory] = None
     abstracted_agents: Dict[AgentType, BaseAgent] = field(default_factory=dict)
 
@@ -311,43 +308,25 @@ def get_runtime_for_creator(creator_id: str, phone_number_id: Optional[str] = No
     # Ensure tool implementations are registered
     _ensure_tools_registered()
 
-    # Determine provider and build agents
-    provider = AI_PROVIDER
+    # Build agents using OpenAI
     agent_factory = None
     abstracted_agents = {}
 
     # Build context for provider abstraction
     provider_context = _build_provider_context(data_service, creator_profile, products_data)
 
-    if provider == "anthropic":
-        # Use new provider abstraction for Anthropic
-        logger.info(f"🤖 Building Anthropic agents for creator '{creator_id}'")
-        try:
-            agent_factory = ProviderFactory.create_factory()
-            definitions = get_all_agent_definitions()
-            abstracted_agents = agent_factory.create_all_agents(definitions, provider_context)
+    # Use OpenAI factory
+    logger.info(f"🤖 Building OpenAI agents for creator '{creator_id}'")
+    agents = build_agents_for_creator(data_service, creator_context, product_context)
 
-            # Create legacy-compatible agents dict (agent_type value -> agent)
-            # main.py looks up agents by short names like 'greeter', 'triage', not 'greeter_agent'
-            agents = {agent_type.value: agent for agent_type, agent in abstracted_agents.items()}
-            logger.info(f"✅ Built {len(agents)} Anthropic agents via provider abstraction: {list(agents.keys())}")
-        except Exception as e:
-            logger.error(f"❌ Failed to build Anthropic agents: {e}, falling back to OpenAI")
-            provider = "openai"
-            agents = build_agents_for_creator(data_service, creator_context, product_context)
-    else:
-        # Use legacy OpenAI factory (maintains full backward compatibility)
-        logger.info(f"🤖 Building OpenAI agents for creator '{creator_id}'")
-        agents = build_agents_for_creator(data_service, creator_context, product_context)
-
-        # Also build abstracted agents for future use
-        try:
-            from src.providers.types import ProviderType
-            agent_factory = ProviderFactory.create_factory(ProviderType.OPENAI)
-            definitions = get_all_agent_definitions()
-            abstracted_agents = agent_factory.create_all_agents(definitions, provider_context)
-        except Exception as e:
-            logger.warning(f"Could not build abstracted OpenAI agents: {e}")
+    # Also build abstracted agents for future use
+    try:
+        from src.providers.types import ProviderType
+        agent_factory = ProviderFactory.create_factory(ProviderType.OPENAI)
+        definitions = get_all_agent_definitions()
+        abstracted_agents = agent_factory.create_all_agents(definitions, provider_context)
+    except Exception as e:
+        logger.warning(f"Could not build abstracted OpenAI agents: {e}")
 
     # create workflow executor if workflow is active
     workflow_executor = None
@@ -380,11 +359,10 @@ def get_runtime_for_creator(creator_id: str, phone_number_id: Optional[str] = No
         product_context=product_context,
         workflow_executor=workflow_executor,
         scheduler=scheduler,
-        provider=provider,
         agent_factory=agent_factory,
         abstracted_agents=abstracted_agents,
     )
 
     creator_runtime_cache[creator_id] = runtime
-    logger.info(f"✅ Runtime ready for creator '{creator_id}' with {len(agents)} agent(s) [{provider}]")
+    logger.info(f"✅ Runtime ready for creator '{creator_id}' with {len(agents)} agent(s) [openai]")
     return runtime

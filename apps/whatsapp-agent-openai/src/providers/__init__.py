@@ -1,6 +1,6 @@
 """
-Provider abstraction layer for multi-AI support.
-Supports OpenAI and Anthropic providers.
+Provider abstraction layer for AI support.
+Uses OpenAI Agents SDK.
 """
 
 from .types import ProviderType

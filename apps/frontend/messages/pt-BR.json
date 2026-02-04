@@ -124,6 +124,32 @@
     "flows": {
       "title": "WhatsApp Flows",
       "description": "Fluxos interativos de agendamento"
+    },
+    "workflowMode": {
+      "title": "Modo de Atendimento",
+      "description": "Escolha como o assistente deve atender os pacientes",
+      "booking": {
+        "title": "Agendamento",
+        "subtitle": "Sistema completo",
+        "features": {
+          "scheduling": "Agendamento de consultas via WhatsApp",
+          "pix": "Integração com PIX para sinal/pagamento",
+          "reminders": "Lembretes automáticos de consulta",
+          "management": "Cancelamento e reagendamento"
+        }
+      },
+      "info": {
+        "title": "Informativo",
+        "subtitle": "Apenas informações",
+        "features": {
+          "clinic": "Informações sobre a clínica",
+          "professionals": "Lista de profissionais e especialidades",
+          "hours": "Horários de funcionamento",
+          "faq": "Resposta a dúvidas frequentes"
+        }
+      },
+      "saveSuccess": "Modo de atendimento atualizado com sucesso!",
+      "saveError": "Erro ao atualizar modo de atendimento"
     }
   },
   "onboarding": {
@@ -792,6 +818,7 @@
     "services": "Serviços",
     "payments": "Pagamentos",
     "whatsapp": "WhatsApp",
+    "workflow": "Modo de Atendimento",
     "account": "Conta",
     "whatsappStatus": "Status do WhatsApp",
     "recentActivity": "Consultas do Dia",

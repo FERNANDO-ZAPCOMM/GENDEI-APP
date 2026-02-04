@@ -52,6 +52,9 @@ class Clinic:
     whatsapp_access_token: Optional[str] = None
     whatsapp_connected: bool = False
 
+    # Workflow mode: 'booking' (full scheduling) or 'info' (information only)
+    workflow_mode: str = "booking"
+
     # Payment settings
     payment_gateway: str = "pagseguro"
     pagseguro_token: Optional[str] = None
@@ -85,6 +88,7 @@ class Clinic:
             "whatsappPhoneNumberId": self.whatsapp_phone_number_id,
             "whatsappWabaId": self.whatsapp_waba_id,
             "whatsappConnected": self.whatsapp_connected,
+            "workflowMode": self.workflow_mode,
             "paymentGateway": self.payment_gateway,
             "signalPercentage": self.signal_percentage,
             "pixKey": self.pix_key,
@@ -115,6 +119,7 @@ class Clinic:
             whatsapp_waba_id=data.get("whatsappWabaId"),
             whatsapp_access_token=data.get("whatsappAccessToken"),
             whatsapp_connected=data.get("whatsappConnected", False),
+            workflow_mode=data.get("workflowMode", "booking"),
             payment_gateway=data.get("paymentGateway", "pagseguro"),
             pagseguro_token=data.get("pagseguroToken"),
             signal_percentage=data.get("signalPercentage", 15),

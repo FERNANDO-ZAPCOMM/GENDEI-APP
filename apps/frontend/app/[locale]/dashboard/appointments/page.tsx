@@ -349,16 +349,11 @@ export default function AppointmentsPage() {
                           {getSpecialtyName(professional.specialty)}
                         </p>
                       )}
-                      <div className="flex items-center gap-2 mt-1">
-                        <span className="text-xs text-muted-foreground">
-                          {professional.appointmentDuration || 30}min
-                        </span>
-                        {(professional.consultationPrice ?? 0) > 0 && (
-                          <span className="text-xs font-medium text-green-600">
-                            {formatPrice(professional.consultationPrice ?? 0)}
-                          </span>
-                        )}
-                      </div>
+                      {(professional.consultationPrice ?? 0) > 0 && (
+                        <p className="text-xs font-medium text-green-600 mt-1">
+                          {formatPrice(professional.consultationPrice ?? 0)}
+                        </p>
+                      )}
                     </div>
                     {isSelected && (
                       <div className="w-2 h-2 rounded-full bg-primary" />

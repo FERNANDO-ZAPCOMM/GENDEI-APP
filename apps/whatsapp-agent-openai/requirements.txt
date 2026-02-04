@@ -17,10 +17,9 @@ google-cloud-firestore==2.18.0
 google-cloud-storage>=2.18.0
 google-auth>=2.34.0
 
-# AI Provider SDKs
+# AI Provider SDK
 openai>=1.40.0
 openai-agents>=0.6.3
-anthropic>=0.39.0
 
 # HTTP & Data
 requests==2.32.0

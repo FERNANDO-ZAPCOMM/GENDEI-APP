@@ -28,9 +28,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
-import type { ClinicAddress } from '@/lib/clinic-types';
+import type { ClinicAddress, PaymentSettings } from '@/lib/clinic-types';
 import { clinicCategories, getCategoryName } from '@/lib/clinic-categories';
-import { X, ChevronDown, Check } from 'lucide-react';
+import { X, ChevronDown, Check, CreditCard, Plus } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 
 // Days of the week
 const DAYS = [
@@ -44,7 +45,20 @@ const DAYS = [
 ] as const;
 
 type DayKey = typeof DAYS[number]['key'];
-type TabKey = 'basic' | 'contact' | 'location' | 'hours';
+type TabKey = 'basic' | 'contact' | 'location' | 'hours' | 'atendimento';
+
+const COMMON_CONVENIOS = [
+  'Unimed',
+  'Bradesco Saúde',
+  'SulAmérica',
+  'Amil',
+  'NotreDame Intermédica',
+  'Hapvida',
+  'Porto Seguro',
+  'Cassi',
+  'Geap',
+  'São Francisco',
+];
 
 // Phone formatting helper
 const formatPhone = (value: string): string => {
@@ -100,6 +114,12 @@ export default function ClinicSettingsPage() {
   const [hoursConfigured, setHoursConfigured] = useState(false);
   const [addressData, setAddressData] = useState<ClinicAddress | undefined>();
   const [emailError, setEmailError] = useState('');
+  const [paymentSettings, setPaymentSettings] = useState({
+    acceptsParticular: true,
+    acceptsConvenio: false,
+    convenioList: [] as string[],
+  });
+  const [newConvenio, setNewConvenio] = useState('');
 
   useEffect(() => {
     if (currentClinic) {
@@ -124,6 +144,16 @@ export default function ClinicSettingsPage() {
         greetingSummary: clinicData.greetingSummary || '',
       });
       setAddressData(currentClinic.addressData);
+
+      // Load payment settings
+      const existingPaymentSettings = (currentClinic as unknown as { paymentSettings?: PaymentSettings }).paymentSettings;
+      if (existingPaymentSettings) {
+        setPaymentSettings({
+          acceptsParticular: existingPaymentSettings.acceptsParticular ?? true,
+          acceptsConvenio: existingPaymentSettings.acceptsConvenio ?? false,
+          convenioList: existingPaymentSettings.convenioList ?? [],
+        });
+      }
 
       // Parse opening hours - supports both old format and new per-day format
       if (currentClinic.openingHours) {
@@ -220,6 +250,31 @@ export default function ClinicSettingsPage() {
     updateOpeningHoursFromDayHours(newDayHours);
   };
 
+  const handleAddConvenio = () => {
+    if (!newConvenio.trim()) return;
+    if (paymentSettings.convenioList.includes(newConvenio.trim())) return;
+    setPaymentSettings({
+      ...paymentSettings,
+      convenioList: [...paymentSettings.convenioList, newConvenio.trim()],
+    });
+    setNewConvenio('');
+  };
+
+  const handleRemoveConvenio = (convenio: string) => {
+    setPaymentSettings({
+      ...paymentSettings,
+      convenioList: paymentSettings.convenioList.filter((c) => c !== convenio),
+    });
+  };
+
+  const handleAddCommonConvenio = (convenio: string) => {
+    if (paymentSettings.convenioList.includes(convenio)) return;
+    setPaymentSettings({
+      ...paymentSettings,
+      convenioList: [...paymentSettings.convenioList, convenio],
+    });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -229,9 +284,21 @@ export default function ClinicSettingsPage() {
     }
 
     try {
+      // Get existing payment settings to preserve PIX and deposit settings
+      const existingPaymentSettings = (currentClinic as unknown as { paymentSettings?: PaymentSettings }).paymentSettings;
+      const mergedPaymentSettings: PaymentSettings = {
+        requiresDeposit: existingPaymentSettings?.requiresDeposit ?? true,
+        depositPercentage: existingPaymentSettings?.depositPercentage ?? 30,
+        pixKey: existingPaymentSettings?.pixKey,
+        acceptsParticular: paymentSettings.acceptsParticular,
+        acceptsConvenio: paymentSettings.acceptsConvenio,
+        convenioList: paymentSettings.convenioList,
+      };
+
       await updateClinic.mutateAsync({
         ...formData,
         addressData,
+        paymentSettings: mergedPaymentSettings,
       });
       toast.success('Configurações salvas com sucesso');
 
@@ -240,9 +307,10 @@ export default function ClinicSettingsPage() {
       const willHaveContact = !!formData.phone;
       const willHaveLocation = !!(formData.address || addressData?.formatted);
       const willHaveHours = hoursConfigured && Object.values(dayHours).some(d => d.enabled);
+      const willHaveAtendimento = paymentSettings.acceptsParticular || paymentSettings.acceptsConvenio;
 
       // If all tabs complete, redirect to payments page
-      if (willHaveBasicInfo && willHaveContact && willHaveLocation && willHaveHours) {
+      if (willHaveBasicInfo && willHaveContact && willHaveLocation && willHaveHours && willHaveAtendimento) {
         router.push(getNextStepUrl('clinic', locale));
       }
     } catch (error) {
@@ -255,14 +323,16 @@ export default function ClinicSettingsPage() {
   const hasContact = !!(formData.phone);
   const hasLocation = !!(formData.address || addressData?.formatted || currentClinic?.addressData?.formatted);
   const hasHours = hoursConfigured && Object.values(dayHours).some(d => d.enabled);
+  const hasAtendimento = paymentSettings.acceptsParticular || paymentSettings.acceptsConvenio;
 
-  const completedTabs = [hasBasicInfo, hasContact, hasLocation, hasHours].filter(Boolean).length;
+  const completedTabs = [hasBasicInfo, hasContact, hasLocation, hasHours, hasAtendimento].filter(Boolean).length;
 
   const tabs: { key: TabKey; icon: React.ReactNode; label: string; completed: boolean }[] = [
     { key: 'basic', icon: <Info className="h-4 w-4" />, label: 'Informações', completed: hasBasicInfo },
     { key: 'contact', icon: <Phone className="h-4 w-4" />, label: 'Contato', completed: hasContact },
     { key: 'location', icon: <MapPin className="h-4 w-4" />, label: 'Localização', completed: hasLocation },
     { key: 'hours', icon: <Clock className="h-4 w-4" />, label: 'Horários', completed: hasHours },
+    { key: 'atendimento', icon: <CreditCard className="h-4 w-4" />, label: 'Atendimento', completed: hasAtendimento },
   ];
 
   if (isLoading) {
@@ -292,7 +362,7 @@ export default function ClinicSettingsPage() {
               <CardDescription className="text-xs sm:text-sm">Complete as informações para aparecer corretamente</CardDescription>
             </div>
             <div className="text-xs text-muted-foreground">
-              {completedTabs}/4
+              {completedTabs}/5
             </div>
           </div>
         </CardHeader>
@@ -623,6 +693,118 @@ export default function ClinicSettingsPage() {
                         </div>
                       </div>
                     ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Atendimento Tab */}
+              {activeTab === 'atendimento' && (
+                <div className="space-y-4">
+                  <p className="text-sm text-muted-foreground">
+                    Selecione as formas de pagamento aceitas pela clínica
+                  </p>
+
+                  {/* Particular */}
+                  <div className="flex items-center justify-between p-4 border rounded-lg">
+                    <div>
+                      <Label className="font-medium">Particular</Label>
+                      <p className="text-sm text-muted-foreground">
+                        Aceita pagamento direto do paciente
+                      </p>
+                    </div>
+                    <Switch
+                      checked={paymentSettings.acceptsParticular}
+                      onCheckedChange={(checked) => setPaymentSettings({ ...paymentSettings, acceptsParticular: checked })}
+                    />
+                  </div>
+
+                  {/* Convênio */}
+                  <div
+                    className={cn(
+                      'p-4 border rounded-lg transition-all',
+                      paymentSettings.acceptsConvenio ? 'border-blue-200 bg-blue-50/30' : ''
+                    )}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <Label className="font-medium">Convênio</Label>
+                        <p className="text-sm text-muted-foreground">
+                          Aceita planos de saúde
+                        </p>
+                      </div>
+                      <Switch
+                        checked={paymentSettings.acceptsConvenio}
+                        onCheckedChange={(checked) => setPaymentSettings({ ...paymentSettings, acceptsConvenio: checked })}
+                      />
+                    </div>
+
+                    {/* Convenio List */}
+                    {paymentSettings.acceptsConvenio && (
+                      <div className="mt-4 pt-4 border-t space-y-4">
+                        <Label className="text-sm">Convênios Aceitos</Label>
+
+                        {/* Current convenios */}
+                        {paymentSettings.convenioList.length > 0 && (
+                          <div className="flex flex-wrap gap-2">
+                            {paymentSettings.convenioList.map((convenio) => (
+                              <Badge
+                                key={convenio}
+                                variant="secondary"
+                                className="flex items-center gap-1 pr-1"
+                              >
+                                {convenio}
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveConvenio(convenio)}
+                                  className="ml-1 hover:bg-gray-300 rounded-full p-0.5"
+                                >
+                                  <X className="h-3 w-3" />
+                                </button>
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Add convenio input */}
+                        <div className="flex gap-2">
+                          <Input
+                            placeholder="Nome do convênio"
+                            value={newConvenio}
+                            onChange={(e) => setNewConvenio(e.target.value)}
+                            onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddConvenio())}
+                          />
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={handleAddConvenio}
+                            disabled={!newConvenio.trim()}
+                          >
+                            <Plus className="h-4 w-4" />
+                          </Button>
+                        </div>
+
+                        {/* Common convenios suggestions */}
+                        <div>
+                          <p className="text-xs text-muted-foreground mb-2">Sugestões:</p>
+                          <div className="flex flex-wrap gap-1">
+                            {COMMON_CONVENIOS.filter(
+                              (c) => !paymentSettings.convenioList.includes(c)
+                            ).map((convenio) => (
+                              <Button
+                                key={convenio}
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 text-xs"
+                                onClick={() => handleAddCommonConvenio(convenio)}
+                              >
+                                + {convenio}
+                              </Button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

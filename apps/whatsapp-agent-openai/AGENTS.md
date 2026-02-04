@@ -63,11 +63,10 @@ This is the Gendei WhatsApp Agent service built with the OpenAI Agents SDK. It p
 
 ## Environment Variables
 ```
-AI_PROVIDER=openai
 OPENAI_API_KEY=sk-...
 GOOGLE_CLOUD_PROJECT=gendei-prod
-META_BISU_ACCESS_TOKEN=...
-META_WEBHOOK_VERIFY_TOKEN=gendei_verify_token
+WHATSAPP_TOKEN=...
+WHATSAPP_VERIFY_TOKEN=gendei_verify_token
 ```
 
 ## Development Commands

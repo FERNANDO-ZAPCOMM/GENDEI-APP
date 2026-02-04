@@ -3,7 +3,8 @@
 import { useState, useRef, useEffect } from 'react';
 import { useTranslations, useLocale } from 'next-intl';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, Loader2, Camera, User, DollarSign, Save, Trash2, Clock } from 'lucide-react';
+import { ArrowLeft, Loader2, Camera, User, DollarSign, Save, Clock, Plus, Trash2, Briefcase, Mail, Phone, CheckCircle2 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
 import { useClinic } from '@/hooks/use-clinic';
@@ -48,6 +49,31 @@ const DAYS_OF_WEEK = [
   { key: '6', label: 'Domingo' },
 ];
 
+// Phone formatting helper
+const formatPhone = (value: string): string => {
+  const numbers = value.replace(/\D/g, '');
+  if (numbers.length <= 2) return numbers;
+  if (numbers.length <= 7) return `(${numbers.slice(0, 2)}) ${numbers.slice(2)}`;
+  if (numbers.length <= 11) return `(${numbers.slice(0, 2)}) ${numbers.slice(2, 7)}-${numbers.slice(7)}`;
+  return `(${numbers.slice(0, 2)}) ${numbers.slice(2, 7)}-${numbers.slice(7, 11)}`;
+};
+
+// Email validation helper
+const isValidEmail = (email: string): boolean => {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email);
+};
+
+// Service type for the professional
+interface ProfessionalService {
+  id: string;
+  name: string;
+  duration: number;
+  price: number;
+}
+
+type TabKey = 'personal' | 'contact' | 'services' | 'hours';
+
 interface ProfessionalFormData {
   name: string;
   specialty: string;
@@ -59,6 +85,7 @@ interface ProfessionalFormData {
   photoUrl: string;
   bio: string;
   workingHours: WorkingHoursBackend;
+  services: ProfessionalService[];
 }
 
 export default function ProfessionalEditPage() {
@@ -91,10 +118,13 @@ export default function ProfessionalEditPage() {
     photoUrl: '',
     bio: '',
     workingHours: {},
+    services: [],
   });
   const [isSaving, setIsSaving] = useState(false);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [emailError, setEmailError] = useState('');
+  const [activeTab, setActiveTab] = useState<TabKey>('personal');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Load professional data into form
@@ -102,6 +132,7 @@ export default function ProfessionalEditPage() {
     if (professional) {
       // Convert workingHours to backend format if needed
       const workingHours = (professional as any).workingHours || {};
+      const services = (professional as any).services || [];
       setFormData({
         name: professional.name || '',
         specialty: professional.specialty || '',
@@ -113,9 +144,56 @@ export default function ProfessionalEditPage() {
         photoUrl: professional.photoUrl || '',
         bio: professional.bio || '',
         workingHours: workingHours,
+        services: services,
       });
     }
   }, [professional]);
+
+  // Phone change handler with formatting
+  const handlePhoneChange = (value: string) => {
+    setFormData({ ...formData, phone: formatPhone(value) });
+  };
+
+  // Email change handler with validation
+  const handleEmailChange = (value: string) => {
+    setFormData({ ...formData, email: value });
+    if (value && !isValidEmail(value)) {
+      setEmailError('Email inválido');
+    } else {
+      setEmailError('');
+    }
+  };
+
+  // Service management
+  const addService = () => {
+    const newService: ProfessionalService = {
+      id: Date.now().toString(),
+      name: '',
+      duration: 30,
+      price: 0,
+    };
+    setFormData({ ...formData, services: [...formData.services, newService] });
+  };
+
+  const updateService = (id: string, updates: Partial<ProfessionalService>) => {
+    setFormData({
+      ...formData,
+      services: formData.services.map(s => s.id === id ? { ...s, ...updates } : s),
+    });
+  };
+
+  const removeService = (id: string) => {
+    setFormData({
+      ...formData,
+      services: formData.services.filter(s => s.id !== id),
+    });
+  };
+
+  const handleServicePriceChange = (id: string, value: string) => {
+    const numericValue = value.replace(/[^\d,\.]/g, '').replace(',', '.');
+    const price = parseFloat(numericValue) || 0;
+    updateService(id, { price });
+  };
 
   // Toggle working day on/off
   const toggleWorkingDay = (dayKey: string) => {
@@ -186,6 +264,10 @@ export default function ProfessionalEditPage() {
       toast.error('E-mail é obrigatório');
       return;
     }
+    if (emailError) {
+      toast.error('E-mail inválido');
+      return;
+    }
     if (!formData.phone.trim()) {
       toast.error('Telefone é obrigatório');
       return;
@@ -245,6 +327,21 @@ export default function ProfessionalEditPage() {
       .slice(0, 2);
   };
 
+  // Check completion status for each tab
+  const hasPersonalInfo = !!(formData.name && formData.specialty);
+  const hasContact = !!(formData.email && formData.phone && !emailError);
+  const hasServices = !!(formData.consultationPrice > 0 && formData.appointmentDuration > 0);
+  const hasHours = Object.keys(formData.workingHours).length > 0;
+
+  const completedTabs = [hasPersonalInfo, hasContact, hasServices, hasHours].filter(Boolean).length;
+
+  const tabs: { key: TabKey; icon: React.ReactNode; label: string; completed: boolean }[] = [
+    { key: 'personal', icon: <User className="h-4 w-4" />, label: 'Informações', completed: hasPersonalInfo },
+    { key: 'contact', icon: <Phone className="h-4 w-4" />, label: 'Contato', completed: hasContact },
+    { key: 'services', icon: <Briefcase className="h-4 w-4" />, label: 'Consultas', completed: hasServices },
+    { key: 'hours', icon: <Clock className="h-4 w-4" />, label: 'Horários', completed: hasHours },
+  ];
+
   if (clinicLoading || professionalLoading) {
     return <PageLoader message="Carregando profissional..." />;
   }
@@ -267,7 +364,7 @@ export default function ProfessionalEditPage() {
   }
 
   return (
-    <div className="space-y-6 page-transition">
+    <div className="space-y-4 sm:space-y-6 page-transition">
       {/* Header */}
       <div className="flex items-center gap-4">
         <Button
@@ -291,272 +388,405 @@ export default function ProfessionalEditPage() {
         </Button>
       </div>
 
-      {/* Form Card */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Informações do Profissional</CardTitle>
-          <CardDescription>
-            Gerencie os dados e configurações deste profissional
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {/* Profile Photo + Name */}
-          <div className="flex items-start gap-6">
-            <div className="flex flex-col items-center gap-2">
-              <div className="relative">
-                <Avatar className="w-20 h-20 border-2 border-gray-200">
-                  <AvatarImage src={formData.photoUrl} alt={formData.name || 'Foto'} />
-                  <AvatarFallback className="text-lg bg-gray-100">
-                    {formData.name ? getInitials(formData.name) : <User className="w-6 h-6 text-gray-400" />}
-                  </AvatarFallback>
-                </Avatar>
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={isUploadingPhoto}
-                  className="absolute bottom-0 right-0 p-2 bg-white border border-gray-200 rounded-full shadow-sm hover:bg-gray-50 transition-colors disabled:opacity-50"
-                >
-                  {isUploadingPhoto ? (
-                    <Loader2 className="w-4 h-4 animate-spin text-gray-500" />
-                  ) : (
-                    <Camera className="w-4 h-4 text-gray-500" />
-                  )}
-                </button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) handlePhotoUpload(file);
-                    e.target.value = '';
-                  }}
-                  className="hidden"
-                />
-              </div>
-              <p className="text-xs text-muted-foreground">Clique para foto</p>
-            </div>
-            <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">Nome *</Label>
-                <Input
-                  id="name"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="Nome do profissional"
-                  disabled={isSaving}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="specialty">Especialidade <span className="text-red-500">*</span></Label>
-                <Select
-                  value={formData.specialty}
-                  onValueChange={(value) => setFormData({ ...formData, specialty: value })}
-                  disabled={isSaving}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione a especialidade" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availableSpecialties.map((specialty) => (
-                      <SelectItem key={specialty.id} value={specialty.id}>
-                        {specialty.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {formData.specialty && (
-                  <p className="text-xs text-muted-foreground">
-                    {availableSpecialties.find((s) => s.id === formData.specialty)?.description}
-                  </p>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Bio */}
-          <div className="space-y-2">
-            <Label htmlFor="bio">Sobre o profissional</Label>
-            <Textarea
-              id="bio"
-              value={formData.bio}
-              onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
-              placeholder="Breve descrição, formação, experiência..."
-              disabled={isSaving}
-              rows={3}
-              className="resize-none"
-            />
-            <p className="text-xs text-muted-foreground">
-              Esta descrição pode ser exibida para os pacientes ao agendar
-            </p>
-          </div>
-
-          {/* Contact Info */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="email">E-mail <span className="text-red-500">*</span></Label>
-              <Input
-                id="email"
-                type="email"
-                value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                placeholder="email@exemplo.com"
-                disabled={isSaving}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="phone">Telefone <span className="text-red-500">*</span></Label>
-              <Input
-                id="phone"
-                value={formData.phone}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                placeholder="+55 11 99999-9999"
-                disabled={isSaving}
-              />
-            </div>
-          </div>
-
-          {/* Appointment Settings */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="duration">Duração da Consulta <span className="text-red-500">*</span></Label>
-              <Select
-                value={String(formData.appointmentDuration)}
-                onValueChange={(value) => setFormData({ ...formData, appointmentDuration: parseInt(value) })}
-                disabled={isSaving}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione a duração" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="15">15 minutos</SelectItem>
-                  <SelectItem value="20">20 minutos</SelectItem>
-                  <SelectItem value="30">30 minutos</SelectItem>
-                  <SelectItem value="40">40 minutos</SelectItem>
-                  <SelectItem value="45">45 minutos</SelectItem>
-                  <SelectItem value="50">50 minutos</SelectItem>
-                  <SelectItem value="60">1 hora</SelectItem>
-                  <SelectItem value="90">1h 30min</SelectItem>
-                  <SelectItem value="120">2 horas</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="price">Valor da Consulta (R$) <span className="text-red-500">*</span></Label>
-              <div className="relative">
-                <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <Input
-                  id="price"
-                  type="text"
-                  inputMode="decimal"
-                  value={formData.consultationPrice || ''}
-                  onChange={(e) => handlePriceChange(e.target.value)}
-                  placeholder="150,00"
-                  disabled={isSaving}
-                  className="pl-9"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Active Status */}
-          <div className="flex items-center justify-between p-4 border rounded-lg">
+      {/* Main Card with Tabs */}
+      <Card className="h-[calc(100vh-160px)] flex flex-col">
+        <CardHeader className="pb-3 sm:pb-6 flex-shrink-0">
+          <div className="flex items-center justify-between">
             <div>
-              <Label className="font-medium">Profissional ativo</Label>
-              <p className="text-sm text-muted-foreground">
-                Disponível para agendamentos
-              </p>
+              <CardTitle className="text-base sm:text-lg">Dados do Profissional</CardTitle>
+              <CardDescription className="text-xs sm:text-sm">Atualize as informações do profissional</CardDescription>
             </div>
-            <Switch
-              checked={formData.active}
-              onCheckedChange={(checked) => setFormData({ ...formData, active: checked })}
-              disabled={isSaving}
-            />
+            <div className="text-xs text-muted-foreground">
+              {completedTabs}/4
+            </div>
           </div>
-        </CardContent>
-      </Card>
-
-      {/* Working Hours Card */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Clock className="w-5 h-5" />
-            Horários de Atendimento
-          </CardTitle>
-          <CardDescription>
-            Configure os dias e horários que este profissional atende
-          </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          {DAYS_OF_WEEK.map((day) => {
-            const isEnabled = formData.workingHours[day.key] && formData.workingHours[day.key].length > 0;
-            const hours = formData.workingHours[day.key]?.[0] || { start: '09:00', end: '18:00' };
+        <CardContent className="flex-1 flex flex-col pt-0 relative pb-20 overflow-hidden">
+          {/* Horizontal Tabs */}
+          <div className="flex flex-row gap-1 pb-2 border-b overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 flex-shrink-0">
+            {tabs.map((tab) => (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => setActiveTab(tab.key)}
+                className={cn(
+                  'flex-shrink-0 sm:flex-1 min-w-0 flex items-center justify-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors whitespace-nowrap',
+                  activeTab === tab.key
+                    ? tab.completed
+                      ? 'border-2 border-green-500 bg-green-50 text-green-700'
+                      : 'border-2 border-gray-400 bg-gray-100 text-gray-700'
+                    : tab.completed
+                      ? 'border border-green-200 bg-green-50 text-green-600 hover:bg-green-100'
+                      : 'border border-gray-200 bg-gray-50 text-gray-500 hover:bg-gray-100'
+                )}
+              >
+                {tab.completed && activeTab !== tab.key ? (
+                  <CheckCircle2 className="h-3.5 w-3.5 sm:h-4 sm:w-4 flex-shrink-0" />
+                ) : (
+                  <span className="flex-shrink-0">{tab.icon}</span>
+                )}
+                <span className="hidden sm:inline truncate">{tab.label}</span>
+              </button>
+            ))}
+          </div>
 
-            return (
-              <div key={day.key} className="flex items-center gap-4 p-3 border rounded-lg">
-                <div className="w-32">
-                  <div className="flex items-center gap-2">
-                    <Switch
-                      checked={isEnabled}
-                      onCheckedChange={() => toggleWorkingDay(day.key)}
-                      disabled={isSaving}
-                    />
-                    <Label className={`text-sm ${isEnabled ? 'font-medium' : 'text-muted-foreground'}`}>
-                      {day.label}
-                    </Label>
+          {/* Tab Content */}
+          <div className="flex-1 py-2 overflow-y-auto pr-1">
+            {/* Personal Info Tab */}
+            {activeTab === 'personal' && (
+              <div className="space-y-4">
+                {/* Profile Photo + Name */}
+                <div className="flex items-start gap-6">
+                  <div className="flex flex-col items-center gap-2">
+                    <div className="relative">
+                      <Avatar className="w-20 h-20 border-2 border-gray-200">
+                        <AvatarImage src={formData.photoUrl} alt={formData.name || 'Foto'} />
+                        <AvatarFallback className="text-lg bg-gray-100">
+                          {formData.name ? getInitials(formData.name) : <User className="w-6 h-6 text-gray-400" />}
+                        </AvatarFallback>
+                      </Avatar>
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={isUploadingPhoto}
+                        className="absolute bottom-0 right-0 p-2 bg-white border border-gray-200 rounded-full shadow-sm hover:bg-gray-50 transition-colors disabled:opacity-50"
+                      >
+                        {isUploadingPhoto ? (
+                          <Loader2 className="w-4 h-4 animate-spin text-gray-500" />
+                        ) : (
+                          <Camera className="w-4 h-4 text-gray-500" />
+                        )}
+                      </button>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) handlePhotoUpload(file);
+                          e.target.value = '';
+                        }}
+                        className="hidden"
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground">Clique para foto</p>
+                  </div>
+                  <div className="flex-1 space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="name">Nome <span className="text-red-500">*</span></Label>
+                      <Input
+                        id="name"
+                        value={formData.name}
+                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                        placeholder="Nome do profissional"
+                        disabled={isSaving}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="specialty">Especialidade <span className="text-red-500">*</span></Label>
+                      <Select
+                        value={formData.specialty}
+                        onValueChange={(value) => setFormData({ ...formData, specialty: value })}
+                        disabled={isSaving}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione a especialidade" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {availableSpecialties.map((specialty) => (
+                            <SelectItem key={specialty.id} value={specialty.id}>
+                              {specialty.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {formData.specialty && (
+                        <p className="text-xs text-muted-foreground">
+                          {availableSpecialties.find((s) => s.id === formData.specialty)?.description}
+                        </p>
+                      )}
+                    </div>
                   </div>
                 </div>
-                {isEnabled ? (
-                  <div className="flex items-center gap-2 flex-1">
+
+                {/* Bio */}
+                <div className="space-y-2">
+                  <Label htmlFor="bio">Sobre o profissional</Label>
+                  <Textarea
+                    id="bio"
+                    value={formData.bio}
+                    onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
+                    placeholder="Breve descrição, formação, experiência..."
+                    disabled={isSaving}
+                    rows={3}
+                    className="resize-none"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Esta descrição pode ser exibida para os pacientes ao agendar
+                  </p>
+                </div>
+
+                {/* Active Status */}
+                <div className="flex items-center justify-between p-4 border rounded-lg">
+                  <div>
+                    <Label className="font-medium">Profissional ativo</Label>
+                    <p className="text-sm text-muted-foreground">
+                      Disponível para agendamentos
+                    </p>
+                  </div>
+                  <Switch
+                    checked={formData.active}
+                    onCheckedChange={(checked) => setFormData({ ...formData, active: checked })}
+                    disabled={isSaving}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Contact Tab */}
+            {activeTab === 'contact' && (
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="email">E-mail <span className="text-red-500">*</span></Label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
                     <Input
-                      type="time"
-                      value={hours.start}
-                      onChange={(e) => updateWorkingHours(day.key, e.target.value, hours.end)}
+                      id="email"
+                      type="email"
+                      value={formData.email}
+                      onChange={(e) => handleEmailChange(e.target.value)}
+                      placeholder="email@exemplo.com"
                       disabled={isSaving}
-                      className="w-28"
-                    />
-                    <span className="text-muted-foreground">às</span>
-                    <Input
-                      type="time"
-                      value={hours.end}
-                      onChange={(e) => updateWorkingHours(day.key, hours.start, e.target.value)}
-                      disabled={isSaving}
-                      className="w-28"
+                      className={`pl-9 ${emailError ? 'border-red-500' : ''}`}
                     />
                   </div>
-                ) : (
-                  <span className="text-sm text-muted-foreground">Não atende</span>
-                )}
+                  {emailError && (
+                    <p className="text-sm text-red-500">{emailError}</p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="phone">Telefone <span className="text-red-500">*</span></Label>
+                  <div className="relative">
+                    <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <Input
+                      id="phone"
+                      value={formData.phone}
+                      onChange={(e) => handlePhoneChange(e.target.value)}
+                      placeholder="(11) 99999-9999"
+                      disabled={isSaving}
+                      className="pl-9"
+                    />
+                  </div>
+                </div>
               </div>
-            );
-          })}
-          <p className="text-xs text-muted-foreground mt-2">
-            Os horários configurados serão usados pelo agendamento automático via WhatsApp.
-          </p>
+            )}
+
+            {/* Services Tab (Consultas Oferecidas) */}
+            {activeTab === 'services' && (
+              <div className="space-y-4">
+                {/* Main consultation settings */}
+                <div className="p-4 border rounded-lg bg-blue-50/50 border-blue-200">
+                  <Label className="font-medium text-blue-800 mb-3 block">Consulta Principal</Label>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="duration">Duração <span className="text-red-500">*</span></Label>
+                      <Select
+                        value={String(formData.appointmentDuration)}
+                        onValueChange={(value) => setFormData({ ...formData, appointmentDuration: parseInt(value) })}
+                        disabled={isSaving}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione a duração" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="15">15 minutos</SelectItem>
+                          <SelectItem value="20">20 minutos</SelectItem>
+                          <SelectItem value="30">30 minutos</SelectItem>
+                          <SelectItem value="40">40 minutos</SelectItem>
+                          <SelectItem value="45">45 minutos</SelectItem>
+                          <SelectItem value="50">50 minutos</SelectItem>
+                          <SelectItem value="60">1 hora</SelectItem>
+                          <SelectItem value="90">1h 30min</SelectItem>
+                          <SelectItem value="120">2 horas</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="price">Valor (R$) <span className="text-red-500">*</span></Label>
+                      <div className="relative">
+                        <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                        <Input
+                          id="price"
+                          type="text"
+                          inputMode="decimal"
+                          value={formData.consultationPrice || ''}
+                          onChange={(e) => handlePriceChange(e.target.value)}
+                          placeholder="150,00"
+                          disabled={isSaving}
+                          className="pl-9"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Additional services */}
+                <div className="pt-2">
+                  <Label className="font-medium mb-3 block">Serviços Adicionais</Label>
+                  {formData.services.length === 0 ? (
+                    <div className="text-center py-4 border-2 border-dashed rounded-lg">
+                      <p className="text-muted-foreground text-sm mb-2">Nenhum serviço adicional</p>
+                      <Button type="button" variant="outline" size="sm" onClick={addService} disabled={isSaving}>
+                        <Plus className="w-4 h-4 mr-2" />
+                        Adicionar Serviço
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {formData.services.map((service, index) => (
+                        <div key={service.id} className="p-3 border rounded-lg space-y-3">
+                          <div className="flex items-center justify-between">
+                            <Label className="text-sm font-medium">Serviço {index + 1}</Label>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => removeService(service.id)}
+                              disabled={isSaving}
+                              className="h-7 w-7 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            <div className="space-y-1">
+                              <Label className="text-xs">Nome</Label>
+                              <Input
+                                value={service.name}
+                                onChange={(e) => updateService(service.id, { name: e.target.value })}
+                                placeholder="Ex: Retorno"
+                                disabled={isSaving}
+                                className="h-9"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs">Duração</Label>
+                              <Select
+                                value={String(service.duration)}
+                                onValueChange={(value) => updateService(service.id, { duration: parseInt(value) })}
+                                disabled={isSaving}
+                              >
+                                <SelectTrigger className="h-9">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="15">15 min</SelectItem>
+                                  <SelectItem value="20">20 min</SelectItem>
+                                  <SelectItem value="30">30 min</SelectItem>
+                                  <SelectItem value="45">45 min</SelectItem>
+                                  <SelectItem value="60">1 hora</SelectItem>
+                                  <SelectItem value="90">1h30</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs">Valor (R$)</Label>
+                              <div className="relative">
+                                <DollarSign className="absolute left-2 top-1/2 transform -translate-y-1/2 w-3 h-3 text-gray-400" />
+                                <Input
+                                  type="text"
+                                  inputMode="decimal"
+                                  value={service.price || ''}
+                                  onChange={(e) => handleServicePriceChange(service.id, e.target.value)}
+                                  placeholder="100"
+                                  disabled={isSaving}
+                                  className="pl-7 h-9"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                      <Button type="button" variant="outline" size="sm" onClick={addService} disabled={isSaving}>
+                        <Plus className="w-4 h-4 mr-2" />
+                        Adicionar Outro
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Hours Tab */}
+            {activeTab === 'hours' && (
+              <div className="space-y-2">
+                {DAYS_OF_WEEK.map((day) => {
+                  const isEnabled = formData.workingHours[day.key] && formData.workingHours[day.key].length > 0;
+                  const hours = formData.workingHours[day.key]?.[0] || { start: '09:00', end: '18:00' };
+
+                  return (
+                    <div key={day.key} className="flex items-center gap-4 p-3 border rounded-lg">
+                      <div className="w-32">
+                        <div className="flex items-center gap-2">
+                          <Switch
+                            checked={isEnabled}
+                            onCheckedChange={() => toggleWorkingDay(day.key)}
+                            disabled={isSaving}
+                          />
+                          <Label className={`text-sm ${isEnabled ? 'font-medium' : 'text-muted-foreground'}`}>
+                            {day.label}
+                          </Label>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 flex-1">
+                        <Input
+                          type="time"
+                          value={hours.start}
+                          onChange={(e) => updateWorkingHours(day.key, e.target.value, hours.end)}
+                          disabled={isSaving || !isEnabled}
+                          className={cn("w-28", !isEnabled && "opacity-50")}
+                        />
+                        <span className={cn("text-muted-foreground", !isEnabled && "opacity-50")}>às</span>
+                        <Input
+                          type="time"
+                          value={hours.end}
+                          onChange={(e) => updateWorkingHours(day.key, hours.start, e.target.value)}
+                          disabled={isSaving || !isEnabled}
+                          className={cn("w-28", !isEnabled && "opacity-50")}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+                <p className="text-xs text-muted-foreground mt-2">
+                  Os horários serão usados pelo agendamento automático via WhatsApp.
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Save Button - Fixed position at bottom */}
+          <div className="absolute bottom-6 left-6 right-6 pt-4 bg-white flex justify-end">
+            <Button
+              onClick={handleSubmit}
+              disabled={isSaving || !formData.name || !formData.specialty || !formData.email || !formData.phone || !formData.consultationPrice}
+              className="w-full sm:w-auto"
+            >
+              {isSaving ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Salvando...
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4 mr-2" />
+                  Salvar Alterações
+                </>
+              )}
+            </Button>
+          </div>
         </CardContent>
       </Card>
-
-      {/* Save Button - Fixed at bottom */}
-      <div className="flex justify-end pt-4 pb-6">
-        <Button
-          onClick={handleSubmit}
-          disabled={isSaving || !formData.name || !formData.specialty || !formData.email || !formData.phone || !formData.consultationPrice}
-          size="lg"
-          className="min-w-[200px]"
-        >
-          {isSaving ? (
-            <>
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              Salvando...
-            </>
-          ) : (
-            <>
-              <Save className="w-4 h-4 mr-2" />
-              Salvar Alterações
-            </>
-          )}
-        </Button>
-      </div>
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>

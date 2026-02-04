@@ -25,13 +25,12 @@ class AgentType(str, Enum):
 
 @dataclass
 class ModelConfig:
-    """Provider-agnostic model configuration."""
+    """OpenAI model configuration."""
     # Model complexity tier
     tier: str  # "fast" or "complex"
 
-    # Provider-specific model names (resolved at runtime)
+    # OpenAI model name
     openai_model: str = "gpt-4o-mini"
-    anthropic_model: str = "claude-sonnet-4-5"
 
     # Generation settings
     max_tokens: int = 150

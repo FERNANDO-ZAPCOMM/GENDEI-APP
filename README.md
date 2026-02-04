@@ -1,6 +1,8 @@
 # Gendei
 
-WhatsApp-integrated clinic appointment scheduling platform for healthcare providers in Brazil.
+Gendei is an intelligent appointment scheduling platform that transforms how healthcare clinics in Brazil manage patient interactions through WhatsApp. By leveraging AI-powered agents and the official WhatsApp Business Platform, Gendei automates the entire patient journey—from appointment booking and PIX payment collection to automated reminders and rescheduling—all within a conversational interface that patients already use daily. The platform addresses a critical pain point in Brazilian healthcare: the average no-show rate of 20-30% that costs clinics tens of thousands of reais monthly in lost revenue.
+
+For clinic owners and administrators, Gendei delivers measurable ROI by reducing no-show rates to as low as 5% through a combination of upfront deposit collection via PIX and intelligent reminder systems (24h and 2h before appointments). The platform eliminates reception bottlenecks by providing 24/7 automated scheduling that responds in seconds instead of hours, while maintaining the ability to seamlessly hand off complex cases to human staff. With a modern web dashboard for calendar management, patient CRM, and real-time analytics, Gendei empowers clinics to recover lost revenue, reduce operational chaos, and deliver a superior patient experience—all without requiring patients to download a new app or learn a new system.
 
 ## Overview
 
@@ -8,18 +10,19 @@ Gendei enables healthcare clinics to manage appointments, patient interactions, 
 
 ### Key Features
 
-- **WhatsApp AI Agent**: Natural language appointment booking via WhatsApp
+- **WhatsApp AI Agent**: Natural language appointment booking via WhatsApp using OpenAI Agents SDK
 - **Multi-Clinic Support**: Single platform supporting multiple independent clinics
 - **Real-time Dashboard**: Modern React dashboard for clinic management
 - **Automated Reminders**: 24h and 2h appointment reminders via WhatsApp
 - **Payment Integration**: PIX key management with deposit tracking
 - **Admin Portal**: Platform-wide analytics and support tools
+- **WhatsApp Flows**: Structured data collection for bookings and surveys
 
 ## Tech Stack
 
 ### Frontend (Web Dashboard)
 - **Framework**: Next.js 16 (App Router) with TypeScript
-- **UI**: React 19, Tailwind CSS 4, shadcn/ui components
+- **UI**: React 18, Tailwind CSS 3, shadcn/ui components
 - **State**: TanStack React Query v5
 - **Forms**: React Hook Form + Zod validation
 - **Auth**: Firebase Authentication (Email/Password, Google OAuth)
@@ -30,7 +33,7 @@ Gendei enables healthcare clinics to manage appointments, patient interactions, 
 
 ### Admin Portal
 - **Framework**: Next.js 16 (App Router) with TypeScript
-- **UI**: React 19, Tailwind CSS 4, shadcn/ui components
+- **UI**: React 18, Tailwind CSS 3, shadcn/ui components
 - **State**: TanStack React Query v5
 - **Auth**: Firebase Authentication (Google OAuth with email whitelist)
 - **Database**: Firestore (cross-clinic queries)
@@ -45,14 +48,14 @@ Gendei enables healthcare clinics to manage appointments, patient interactions, 
 - **Runtime**: Firebase Cloud Functions (Node.js 20)
 - **Framework**: Express.js with TypeScript
 - **Database**: Firestore (Firebase Admin SDK)
-- **APIs**: WhatsApp Cloud API, Anthropic AI, OpenAI, Resend
+- **APIs**: WhatsApp Cloud API, OpenAI, Resend
 - **Scheduled Tasks**: Cloud Scheduler (runs every 15 minutes)
 
 ### WhatsApp Agent (Python)
 - **Runtime**: Python 3.11+ on Google Cloud Run
 - **Framework**: FastAPI + Uvicorn
-- **AI Providers**: OpenAI Agents SDK, Anthropic Claude SDK
-- **Database**: Firestore
+- **AI SDK**: OpenAI Agents SDK (openai-agents)
+- **Database**: Firestore (google-cloud-firestore)
 - **Deployment**: Docker on Cloud Run (Light/Production modes)
 
 ## Project Structure
@@ -60,46 +63,46 @@ Gendei enables healthcare clinics to manage appointments, patient interactions, 
 ```
 gendei/
 ├── apps/
-│   ├── frontend/              # Next.js clinic dashboard (port 3002)
-│   │   ├── app/               # App Router pages
-│   │   │   └── [locale]/      # Internationalized routes
-│   │   │       ├── dashboard/ # Main dashboard pages
-│   │   │       │   ├── agenda/       # Appointment calendar
-│   │   │       │   ├── clinic/       # Clinic settings
-│   │   │       │   ├── conversations/# WhatsApp inbox
-│   │   │       │   ├── patients/     # Patient management
-│   │   │       │   ├── payments/     # Payment settings (PIX)
-│   │   │       │   ├── professionals/# Staff management
-│   │   │       │   └── whatsapp/     # WhatsApp setup
-│   │   │       ├── signin/    # Authentication
-│   │   │       └── signup/    # Registration
-│   │   ├── components/        # React components
-│   │   │   ├── ui/            # shadcn/ui components
-│   │   │   ├── calendar/      # Calendar grid components
-│   │   │   ├── chat/          # Chat/conversation components
-│   │   │   ├── dashboard/     # Dashboard-specific components
-│   │   │   └── whatsapp/      # WhatsApp integration components
-│   │   ├── hooks/             # Custom React hooks
-│   │   ├── lib/               # Utilities and configs
-│   │   └── messages/          # i18n translation files
+│   ├── frontend/                    # Next.js clinic dashboard (port 3002)
+│   │   ├── app/                     # App Router pages
+│   │   │   └── [locale]/            # Internationalized routes
+│   │   │       ├── dashboard/       # Main dashboard pages
+│   │   │       │   ├── agenda/      # Appointment calendar
+│   │   │       │   ├── clinic/      # Clinic settings
+│   │   │       │   ├── conversations/ # WhatsApp inbox
+│   │   │       │   ├── patients/    # Patient management
+│   │   │       │   ├── payments/    # Payment settings (PIX)
+│   │   │       │   ├── professionals/ # Staff management
+│   │   │       │   └── whatsapp/    # WhatsApp setup
+│   │   │       ├── signin/          # Authentication
+│   │   │       └── signup/          # Registration
+│   │   ├── components/              # React components
+│   │   │   ├── ui/                  # shadcn/ui components
+│   │   │   ├── calendar/            # Calendar grid components
+│   │   │   ├── chat/                # Chat/conversation components
+│   │   │   ├── dashboard/           # Dashboard-specific components
+│   │   │   └── whatsapp/            # WhatsApp integration components
+│   │   ├── hooks/                   # Custom React hooks
+│   │   ├── lib/                     # Utilities and configs
+│   │   └── messages/                # i18n translation files
 │   │
-│   ├── admin/                 # Next.js admin portal (port 3003)
+│   ├── admin/                       # Next.js admin portal (port 3003)
 │   │   └── src/
-│   │       ├── app/           # App Router pages
-│   │       │   ├── login/     # Admin login (Google OAuth)
-│   │       │   └── dashboard/ # Admin dashboard
-│   │       │       ├── clinics/      # Clinic management
+│   │       ├── app/                 # App Router pages
+│   │       │   ├── login/           # Admin login (Google OAuth)
+│   │       │   └── dashboard/       # Admin dashboard
+│   │       │       ├── clinics/     # Clinic management
 │   │       │       ├── appointments/ # All appointments + CSV export
-│   │       │       ├── payments/     # Revenue analytics
-│   │       │       ├── health/       # System health monitoring
-│   │       │       └── support/      # Support tools
-│   │       ├── components/ui/ # Shared UI components
-│   │       ├── hooks/         # Data fetching hooks
-│   │       └── lib/           # Firebase, auth, queries
+│   │       │       ├── payments/    # Revenue analytics
+│   │       │       ├── health/      # System health monitoring
+│   │       │       └── support/     # Support tools
+│   │       ├── components/ui/       # Shared UI components
+│   │       ├── hooks/               # Data fetching hooks
+│   │       └── lib/                 # Firebase, auth, queries
 │   │
-│   ├── functions/             # Firebase Cloud Functions (API)
+│   ├── functions/                   # Firebase Cloud Functions (API)
 │   │   └── src/
-│   │       ├── routes/        # API endpoints
+│   │       ├── routes/              # API endpoints
 │   │       │   ├── clinics.ts       # Clinic CRUD + time blocks
 │   │       │   ├── appointments.ts  # Appointment management
 │   │       │   ├── patients.ts      # Patient management
@@ -107,39 +110,69 @@ gendei/
 │   │       │   ├── services.ts      # Service management
 │   │       │   ├── conversations.ts # WhatsApp conversations
 │   │       │   └── meta.ts          # WhatsApp/Meta webhooks
-│   │       ├── services/      # Business logic
+│   │       ├── services/            # Business logic
 │   │       │   ├── reminders.ts     # Automated reminders
 │   │       │   └── onboarding.ts    # Clinic onboarding
-│   │       └── middleware/    # Auth middleware
+│   │       └── middleware/          # Auth middleware
 │   │
-│   ├── whatsapp-agent/        # Python WhatsApp AI Agent
+│   ├── whatsapp-agent-openai/       # Python WhatsApp AI Agent (PRIMARY)
 │   │   ├── src/
-│   │   │   ├── agents/        # AI agent definitions
-│   │   │   │   ├── greeting_agent.py    # Fast greeting responses
-│   │   │   │   ├── scheduling_agent.py  # Appointment booking
-│   │   │   │   ├── reminder_agent.py    # Reminder handling
-│   │   │   │   └── triage_agent.py      # Message routing
-│   │   │   ├── providers/     # AI provider abstraction
-│   │   │   │   ├── openai_provider.py   # OpenAI integration
-│   │   │   │   └── anthropic_provider.py# Claude integration
-│   │   │   ├── scheduler/     # Appointment scheduling logic
-│   │   │   └── database/      # Firestore interface
-│   │   ├── deploy.sh          # Cloud Run deployment script
-│   │   ├── Dockerfile         # Container configuration
-│   │   └── requirements.txt   # Python dependencies
+│   │   │   ├── main.py              # FastAPI app with webhook handlers
+│   │   │   ├── agents/              # AI agent definitions
+│   │   │   │   ├── openai_factory.py # Agent creation
+│   │   │   │   ├── function_tools.py # Tool implementations
+│   │   │   │   ├── prompts.py       # System prompts (pt-BR)
+│   │   │   │   ├── orchestrator.py  # Agent routing
+│   │   │   │   └── guardrails.py    # Input/output validation
+│   │   │   ├── adapters/            # WhatsApp message parsing
+│   │   │   ├── database/            # Firestore interface
+│   │   │   ├── flows/               # WhatsApp Flows handlers
+│   │   │   ├── providers/           # AI provider abstraction
+│   │   │   ├── runtime/             # Execution context
+│   │   │   ├── scheduler/           # Appointment scheduling logic
+│   │   │   ├── services/            # Business services
+│   │   │   ├── templates/           # Message templates
+│   │   │   ├── utils/               # Utility functions
+│   │   │   └── workflows/           # Complex workflow handlers
+│   │   ├── deploy.sh                # Cloud Run deployment script
+│   │   ├── Dockerfile               # Container configuration
+│   │   └── requirements.txt         # Python dependencies
 │   │
-│   └── website/               # Marketing website (Vite + React)
+│   ├── whatsapp-agent-claude/       # Alternative Claude-based agent
+│   │
+│   ├── whatsapp-agent/              # Legacy agent implementation
+│   │
+│   ├── shared/                      # Shared utilities across apps
+│   │
+│   └── website/                     # Marketing website (Vite + React)
 │       ├── src/
-│       │   ├── App.jsx        # Main app with routing
-│       │   ├── Home.jsx       # Landing page
-│       │   ├── Terms.jsx      # Terms of service
-│       │   └── Privacy.jsx    # Privacy policy
-│       └── vercel.json        # SPA routing configuration
+│       │   ├── App.jsx              # Main app with routing
+│       │   ├── Home.jsx             # Landing page
+│       │   ├── Terms.jsx            # Terms of service
+│       │   └── Privacy.jsx          # Privacy policy
+│       └── vercel.json              # SPA routing configuration
 │
-├── firebase.json              # Firebase configuration
-├── firestore.rules            # Security rules
-├── storage.rules              # Cloud Storage rules
-└── package.json               # Monorepo workspace config
+├── specs/                           # Feature specifications
+│   ├── 001-clinic-onboarding/       # Clinic registration & setup
+│   ├── 002-professional-management/ # Staff management
+│   ├── 003-service-management/      # Medical services
+│   ├── 004-whatsapp-integration/    # WhatsApp Business API
+│   ├── 005-ai-agents-system/        # Multi-agent architecture
+│   ├── 006-appointment-management/  # Appointment workflows
+│   ├── 007-patient-management/      # Patient CRM
+│   ├── 008-payment-pix/             # PIX payments
+│   ├── 009-conversation-inbox/      # WhatsApp inbox
+│   ├── 010-reminder-system/         # Automated reminders
+│   ├── 011-admin-portal/            # Platform administration
+│   ├── 012-team-management/         # RBAC & invitations
+│   ├── 013-whatsapp-flows/          # Structured flows
+│   ├── 014-analytics-dashboard/     # Metrics & reporting
+│   └── 015-calendar-system/         # Calendar views
+│
+├── firebase.json                    # Firebase configuration
+├── firestore.rules                  # Security rules
+├── storage.rules                    # Cloud Storage rules
+└── package.json                     # Monorepo workspace config
 ```
 
 ## Applications
@@ -221,30 +254,47 @@ export const ADMIN_EMAILS = [
 ];
 ```
 
-### 3. WhatsApp Agent
+### 3. WhatsApp Agent (OpenAI)
 
-AI-powered WhatsApp chatbot for patient interactions.
+AI-powered WhatsApp chatbot for patient interactions, built with OpenAI Agents SDK.
 
 #### Agent Architecture
 
-| Agent | Purpose | Triggers |
-|-------|---------|----------|
-| **Greeting Agent** | Fast responses to greetings | "Oi", "Olá", "Bom dia" |
-| **Scheduling Agent** | Appointment booking | "Quero agendar", availability queries |
-| **Reminder Agent** | Handle reminder responses | "Confirmo", "Preciso remarcar" |
-| **Triage Agent** | Message routing | Complex queries, human handoff |
+| Agent | Purpose | Model | Triggers |
+|-------|---------|-------|----------|
+| **Triage** | Routes messages to appropriate agent | gpt-4o-mini | All incoming messages |
+| **Greeter** | Welcome and intent capture | gpt-4o-mini | "Oi", "Olá", "Bom dia" |
+| **Clinic Info** | Clinic details, services, professionals | gpt-4o-mini | Information queries |
+| **Scheduling** | Appointment booking workflow | gpt-4o | "Quero agendar", availability |
+| **Appointment Manager** | View/cancel/reschedule appointments | gpt-4o | "Meus agendamentos", "Cancelar" |
+| **Support** | Help and human escalation | gpt-4o-mini | Complex queries, complaints |
 
-#### AI Provider Support
+#### Message Flow
 
-The agent supports multiple AI providers:
-
-- **OpenAI** (default): GPT-4 via Agents SDK
-- **Anthropic**: Claude via Claude SDK
-
-Configure via environment variable:
-```bash
-AI_PROVIDER=openai   # or "anthropic"
 ```
+1. WhatsApp webhook receives patient message
+2. Message buffering combines rapid sequential messages (2-5 sec)
+3. Triage agent classifies intent and routes to specialized agent
+4. Agent uses function tools to execute actions
+5. Response sent back to patient via WhatsApp Cloud API
+```
+
+#### Key Components
+
+| File | Purpose |
+|------|---------|
+| `src/main.py` | FastAPI app with webhook handlers |
+| `src/agents/openai_factory.py` | OpenAI agent definitions |
+| `src/agents/function_tools.py` | Tool implementations (@function_tool) |
+| `src/agents/prompts.py` | System prompts (Brazilian Portuguese) |
+| `src/agents/orchestrator.py` | Agent routing and execution |
+| `src/agents/guardrails.py` | Input/output validation |
+
+#### Guardrails
+
+- **Input validation**: Blocks prompt injection attempts
+- **Output validation**: Blocks AI disclosure terms
+- Never reveals: "GPT", "OpenAI", "bot", "IA", "inteligência artificial"
 
 #### Deployment Modes
 
@@ -277,6 +327,44 @@ Static marketing website for Gendei.
 - **Home**: Landing page with features and pricing
 - **Terms**: Terms of service
 - **Privacy**: Privacy policy
+
+## Feature Specifications
+
+This project uses detailed feature specifications located in the `/specs` directory. Each feature has comprehensive documentation including plans, data models, API contracts, and implementation guides.
+
+### Specifications Index
+
+| Spec | Feature | Description |
+|------|---------|-------------|
+| [001](specs/001-clinic-onboarding/) | **Clinic Onboarding** | Registration, profile setup, operating hours, Google Maps integration |
+| [002](specs/002-professional-management/) | **Professional Management** | Healthcare staff management with photo uploads, specialties, working hours |
+| [003](specs/003-service-management/) | **Service Management** | Medical services configuration with pricing and professional assignments |
+| [004](specs/004-whatsapp-integration/) | **WhatsApp Integration** | Meta Embedded Signup, OAuth flow, webhook setup, message handling |
+| [005](specs/005-ai-agents-system/) | **AI Agents System** | Multi-agent architecture with triage, greeting, scheduling, and reminder agents |
+| [006](specs/006-appointment-management/) | **Appointment Management** | 7-state workflow, calendar views, time blocking, deposit tracking |
+| [007](specs/007-patient-management/) | **Patient Management** | Patient CRUD, search, CRM tags, multi-clinic support |
+| [008](specs/008-payment-pix/) | **Payment PIX** | PIX key configuration, deposit percentages, health insurance support |
+| [009](specs/009-conversation-inbox/) | **Conversation Inbox** | Real-time WhatsApp inbox with AI-to-human handoff |
+| [010](specs/010-reminder-system/) | **Reminder System** | Automated 24h/2h reminders, no-show follow-ups, smart retry logic |
+| [011](specs/011-admin-portal/) | **Admin Portal** | Platform management, clinic lifecycle, analytics, feature flags |
+| [012](specs/012-team-management/) | **Team Management** | RBAC, invitations, permissions (Owner, Admin, Staff, Reception) |
+| [013](specs/013-whatsapp-flows/) | **WhatsApp Flows** | Structured data collection: booking, intake forms, surveys |
+| [014](specs/014-analytics-dashboard/) | **Analytics Dashboard** | Appointments, revenue, patient metrics, AI effectiveness tracking |
+| [015](specs/015-calendar-system/) | **Calendar System** | Day/week/month views, drag-and-drop, real-time updates |
+
+### Spec Structure
+
+Each specification directory contains:
+
+```
+specs/XXX-feature-name/
+├── plan.md           # Implementation plan with phases and tasks
+├── research.md       # Technical research and decisions
+├── data-model.md     # Firestore schema definitions
+├── quickstart.md     # Getting started guide
+└── contracts/
+    └── api-spec.json # OpenAPI/JSON API contracts
+```
 
 ## Getting Started
 
@@ -335,13 +423,13 @@ npm run serve
 ### WhatsApp Agent Setup
 
 ```bash
-cd apps/whatsapp-agent
+cd apps/whatsapp-agent-openai
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 cp .env.example .env
 # Configure environment variables
-python -m uvicorn src.main:app --port 8081
+python -m uvicorn src.main:app --port 8080 --reload
 ```
 
 ### Website Setup
@@ -399,7 +487,6 @@ WHATSAPP_BUSINESS_ACCOUNT_ID=your_waba_id
 
 # AI Providers
 OPENAI_API_KEY=your_openai_key
-ANTHROPIC_API_KEY=your_anthropic_key
 
 # Email (Resend)
 RESEND_API_KEY=your_resend_key
@@ -409,21 +496,13 @@ RESEND_API_KEY=your_resend_key
 
 ```env
 # Required
+OPENAI_API_KEY=your_openai_key
 WHATSAPP_TOKEN=your_whatsapp_token
 WHATSAPP_VERIFY_TOKEN=your_verify_token
-OPENAI_API_KEY=your_openai_key
-
-# Optional - Anthropic (if using Claude)
-AI_PROVIDER=openai  # or "anthropic"
-ANTHROPIC_API_KEY=your_anthropic_key
-
-# Google Cloud
 GOOGLE_CLOUD_PROJECT=your_project_id
-STORAGE_BUCKET=your_storage_bucket
 
-# Multi-tenant
-TEST_CREATOR_ID=  # Leave empty for multi-clinic mode
-DEFAULT_CREATOR_ID=default_creator
+# Optional
+STORAGE_BUCKET=your_storage_bucket
 ```
 
 ## API Endpoints
@@ -443,16 +522,6 @@ DEFAULT_CREATOR_ID=default_creator
 | DELETE | `/clinics/:id/time-blocks/:blockId` | Remove time block |
 | GET | `/clinics/:id/settings` | Get clinic settings |
 | PUT | `/clinics/:id/settings/:key` | Update clinic setting |
-
-#### Allowed Update Fields (PATCH/PUT)
-
-```javascript
-[
-  'name', 'phone', 'email', 'address', 'city', 'state',
-  'zipCode', 'cnpj', 'categories', 'signalPercentage', 'timezone',
-  'paymentSettings', 'pixKey', 'depositPercentage', 'requiresDeposit'
-]
-```
 
 ### Professionals
 
@@ -610,7 +679,8 @@ Reminders are processed every 15 minutes with deduplication (`reminder24hSent`, 
 |------|-------------|
 | **Owner** | Full access to all features |
 | **Admin** | Manage appointments, professionals, services, conversations |
-| **Support** | View & manage conversations and appointments only |
+| **Staff** | Own appointments, patients |
+| **Reception** | Appointments, basic patient info |
 
 ### Security Features
 
@@ -672,7 +742,6 @@ npm run dev       # Development server
 npm run build     # Production build
 npm run start     # Start production server
 npm run lint      # ESLint
-npm run typecheck # TypeScript check
 ```
 
 ### Admin
@@ -697,17 +766,20 @@ npm run logs        # View function logs
 ### WhatsApp Agent
 
 ```bash
-cd apps/whatsapp-agent
+cd apps/whatsapp-agent-openai
 source venv/bin/activate
 
 # Local development
-python -m uvicorn src.main:app --port 8081 --reload
+python -m uvicorn src.main:app --port 8080 --reload
 
 # Deploy to Cloud Run (Light mode)
 ./deploy.sh
 
 # Deploy to Cloud Run (Production mode)
 PRODUCTION_MODE=true ./deploy.sh
+
+# Run tests
+pytest tests/
 ```
 
 ## Deployment
@@ -739,7 +811,7 @@ firebase deploy --only functions
 ### WhatsApp Agent (Cloud Run)
 
 ```bash
-cd apps/whatsapp-agent
+cd apps/whatsapp-agent-openai
 
 # Light mode (dev/staging)
 ./deploy.sh

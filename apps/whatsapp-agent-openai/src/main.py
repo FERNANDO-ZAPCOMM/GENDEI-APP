@@ -995,24 +995,60 @@ async def send_initial_greeting(
         logger.info(f"👋 Sent appointment-aware greeting to {phone} (apt: {apt.id})")
 
     else:
-        # No upcoming appointments - standard greeting
+        # No upcoming appointments - personalized greeting with clinic context
         if db:
             state = db.load_conversation_state(clinic_id, phone)
             state["state"] = "awaiting_greeting_response"
             state["clinic_id"] = clinic_id
             db.save_conversation_state(clinic_id, phone, state)
 
-        buttons = [
-            {"id": "greeting_sim", "title": "Agendar"},
-            {"id": "greeting_nao", "title": "Dúvida"},
-        ]
+        # Check workflow mode (default to 'booking' for backward compatibility)
+        workflow_mode = getattr(clinic, 'workflow_mode', 'booking') if clinic else 'booking'
 
-        # Use greeting_summary if available, otherwise use default greeting
+        # Build personalized greeting with clinic context
+        greeting_message = f"👋 *Bem-vindo(a) a {clinic_name}!*\n\n"
+
+        # Add greeting summary if available
         greeting_summary = getattr(clinic, 'greeting_summary', '') if clinic else ''
         if greeting_summary:
-            greeting_message = f"👋 *Bem-vindo(a) a {clinic_name}!*\n\n{greeting_summary}\n\nComo posso ajudar?"
+            greeting_message += f"{greeting_summary}\n\n"
+
+        # Add professionals/specialties if available
+        if db:
+            professionals = db.get_clinic_professionals(clinic_id)
+            if professionals:
+                # Group by specialty
+                specialties = {}
+                for p in professionals:
+                    spec = getattr(p, 'specialty', '') or 'Geral'
+                    if spec not in specialties:
+                        specialties[spec] = []
+                    specialties[spec].append(p.name)
+
+                if len(specialties) > 0:
+                    # Show specialties available
+                    spec_list = list(specialties.keys())[:3]  # Max 3 specialties
+                    if len(spec_list) == 1:
+                        greeting_message += f"👨‍⚕️ Atendemos em *{spec_list[0]}*\n\n"
+                    else:
+                        greeting_message += f"👨‍⚕️ Especialidades: *{', '.join(spec_list)}*\n\n"
+
+        greeting_message += "Como posso ajudar?"
+
+        # Configure buttons based on workflow mode
+        if workflow_mode == 'info':
+            # Info mode: no scheduling, only information
+            buttons = [
+                {"id": "greeting_nao", "title": "Informações"},
+                {"id": "greeting_contato", "title": "Falar com atendente"},
+            ]
+            logger.info(f"📋 Clinic {clinic_id} is in INFO mode - no scheduling")
         else:
-            greeting_message = f"👋 *Bem-vindo(a) a {clinic_name}!*\n\nComo posso ajudar?"
+            # Booking mode: full scheduling capability
+            buttons = [
+                {"id": "greeting_sim", "title": "Agendar"},
+                {"id": "greeting_nao", "title": "Dúvida"},
+            ]
 
         await send_whatsapp_buttons(
             phone_number_id, phone,
@@ -1020,7 +1056,7 @@ async def send_initial_greeting(
             buttons,
             access_token
         )
-        logger.info(f"👋 Sent standard greeting to {phone} (no upcoming appointments)")
+        logger.info(f"👋 Sent standard greeting to {phone} (mode: {workflow_mode})")
 
 
 async def handle_greeting_response_duvida(
@@ -1029,7 +1065,7 @@ async def handle_greeting_response_duvida(
     phone_number_id: str,
     access_token: str
 ) -> None:
-    """Handle when user clicks 'Dúvida' - show clinic info and ask what they need."""
+    """Handle when user clicks 'Dúvida' - show clinic info with professionals and ask what they need."""
     clinic = db.get_clinic(clinic_id) if db else None
 
     # Update state to general chat
@@ -1038,7 +1074,7 @@ async def handle_greeting_response_duvida(
         state["state"] = "general_chat"
         db.save_conversation_state(clinic_id, phone, state)
 
-    # Build info message
+    # Build comprehensive info message
     info_parts = ["Claro! Vou te ajudar. 😊\n"]
 
     if clinic:
@@ -1046,19 +1082,33 @@ async def handle_greeting_response_duvida(
         info_parts.append(f"Aqui estão algumas informações da *{clinic_name}*:\n")
 
         if hasattr(clinic, 'address') and clinic.address:
-            info_parts.append(f"📍 Endereço: {clinic.address}")
+            info_parts.append(f"📍 *Endereço:* {clinic.address}")
 
         if hasattr(clinic, 'opening_hours') and clinic.opening_hours:
-            info_parts.append(f"🕐 Horário: {clinic.opening_hours}")
+            info_parts.append(f"🕐 *Horário:* {clinic.opening_hours}")
 
         if hasattr(clinic, 'phone') and clinic.phone:
-            info_parts.append(f"📞 Telefone: {clinic.phone}")
+            info_parts.append(f"📞 *Telefone:* {clinic.phone}")
 
-    info_parts.append("\n\nQual é a sua dúvida?")
+        # Add professionals/specialties
+        if db:
+            professionals = db.get_clinic_professionals(clinic_id)
+            if professionals:
+                info_parts.append("")
+                info_parts.append("👨‍⚕️ *Nossa equipe:*")
+                for p in professionals[:5]:  # Max 5 professionals
+                    name = p.name
+                    specialty = getattr(p, 'specialty', '')
+                    if specialty:
+                        info_parts.append(f"• {name} - {specialty}")
+                    else:
+                        info_parts.append(f"• {name}")
+
+    info_parts.append("\n\nO que você gostaria de saber?")
 
     await send_whatsapp_message(
         phone_number_id, phone,
-        "\n".join(contact_parts),
+        "\n".join(info_parts),
         access_token
     )
 
@@ -1583,6 +1633,41 @@ async def handle_scheduling_intent(
         )
         return
 
+    # Check workflow mode - if info mode, redirect to contact
+    workflow_mode = getattr(clinic, 'workflow_mode', 'booking')
+    if workflow_mode == 'info':
+        logger.info(f"📋 Clinic {clinic_id} is in INFO mode - redirecting scheduling request")
+        clinic_name = clinic.name or "a clínica"
+        clinic_phone = clinic.phone or ""
+
+        info_message = (
+            f"Para agendar uma consulta na *{clinic_name}*, "
+            "entre em contato diretamente com nossa equipe.\n\n"
+        )
+
+        if clinic_phone:
+            info_message += f"📞 *Telefone:* {clinic_phone}\n\n"
+
+        info_message += "Posso ajudar com alguma informação sobre a clínica?"
+
+        await send_whatsapp_message(
+            phone_number_id, phone,
+            info_message,
+            access_token
+        )
+
+        # Send contact card if clinic has phone
+        if clinic_phone:
+            await send_whatsapp_contact_card(
+                phone_number_id, phone,
+                contact_name=clinic_name,
+                contact_phone=clinic_phone,
+                contact_email=getattr(clinic, 'email', None),
+                organization=clinic_name,
+                access_token=access_token
+            )
+        return
+
     # Get professionals
     professionals = db.get_clinic_professionals(clinic_id)
 
@@ -1947,6 +2032,16 @@ async def process_message(
             await handle_greeting_response_duvida(
                 clinic_id, phone,
                 phone_number_id, access_token
+            )
+            return
+
+        if button_payload == "greeting_contato":
+            logger.info(f"📞 User {phone} wants to talk to attendant (info mode)")
+            await escalate_to_human(
+                clinic_id, phone,
+                phone_number_id, access_token,
+                reason="user_requested_contact_info_mode",
+                auto_takeover=True
             )
             return
 
