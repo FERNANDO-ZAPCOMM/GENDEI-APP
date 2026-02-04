@@ -82,8 +82,9 @@ export function useProfessionals(clinicId: string) {
         body: JSON.stringify({ ...data, clinicId }),
       });
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['professionals', clinicId] });
+      queryClient.invalidateQueries({ queryKey: ['professional', clinicId, variables.id] });
     },
   });
 

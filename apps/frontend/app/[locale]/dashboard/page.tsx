@@ -193,7 +193,7 @@ export default function DashboardPage() {
           <div className="flex items-center justify-between">
             <div>
               <CardTitle className="flex items-center gap-2">
-                <Calendar className="w-5 h-5 text-emerald-600" />
+                <Calendar className="w-5 h-5 text-black" />
                 {t('dashboard.recentActivity')}
               </CardTitle>
               <CardDescription>
