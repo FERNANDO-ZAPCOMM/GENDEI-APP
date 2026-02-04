@@ -292,7 +292,7 @@ Responda ao paciente usando as ferramentas disponíveis. Use send_text_message p
         async for msg in query(
             prompt=message_generator(),
             options=ClaudeAgentOptions(
-                model="sonnet",  # Claude Sonnet for best balance of speed and capability
+                model="haiku",  # Claude Haiku for fast responses
                 mcp_servers={"gendei-clinic-tools": gendei_tools_server},
                 allowed_tools=ALL_TOOL_NAMES + ["Task"],
                 agents=agents,
@@ -356,16 +356,16 @@ async def handle_incoming_message(
         buffer_key = f"{clinic_id}:{phone}"
 
         # Check if message already processed
-        if db and db.is_message_processed(clinic_id, message_id):
+        if db and db.is_message_processed(message_id):
             logger.info(f"Message {message_id} already processed, skipping")
             return
 
         # Mark as processed
         if db:
-            db.mark_message_processed(clinic_id, message_id)
+            db.mark_message_processed(message_id)
 
         # Check for human takeover
-        if db and db.is_human_takeover_active(clinic_id, phone):
+        if db and db.is_human_takeover_enabled(clinic_id, phone):
             logger.info(f"Human takeover active for {phone}, skipping AI")
             return
 
@@ -513,6 +513,24 @@ async def verify_webhook(request: Request):
 @app.post("/whatsapp")
 async def webhook_handler(request: Request, background_tasks: BackgroundTasks):
     """WhatsApp webhook handler for incoming messages."""
+    return await _handle_webhook(request, background_tasks)
+
+
+# Also support /webhook endpoint for backwards compatibility
+@app.get("/webhook")
+async def verify_webhook_alt(request: Request):
+    """WhatsApp webhook verification endpoint (alternative path)."""
+    return await verify_webhook(request)
+
+
+@app.post("/webhook")
+async def webhook_handler_alt(request: Request, background_tasks: BackgroundTasks):
+    """WhatsApp webhook handler (alternative path)."""
+    return await _handle_webhook(request, background_tasks)
+
+
+async def _handle_webhook(request: Request, background_tasks: BackgroundTasks):
+    """Internal webhook handler implementation."""
     try:
         body = await request.json()
 

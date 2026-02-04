@@ -56,6 +56,62 @@ async def send_text_message(args: Dict[str, Any]) -> Dict[str, Any]:
         }
 
 
+@tool(
+    "send_whatsapp_buttons",
+    "Send a WhatsApp message with interactive quick reply buttons (up to 3 buttons). Use for greetings, menu options, yes/no questions, and any choice-based interactions.",
+    {
+        "phone": str,
+        "body_text": str,
+        "buttons": list,  # List of dicts with 'id' and 'title' keys
+        "header_text": str,
+        "footer_text": str
+    }
+)
+async def send_whatsapp_buttons(args: Dict[str, Any]) -> Dict[str, Any]:
+    """Send an interactive button message via WhatsApp."""
+    try:
+        phone = ensure_phone_has_plus(args["phone"])
+        body_text = args["body_text"]
+        buttons = args["buttons"]  # List of {'id': 'xxx', 'title': 'Button Text'}
+        header_text = args.get("header_text")
+        footer_text = args.get("footer_text")
+        runtime = get_runtime()
+
+        # Validate buttons
+        if not buttons or len(buttons) == 0:
+            return {
+                "content": [{"type": "text", "text": "Error: At least one button is required"}]
+            }
+
+        if len(buttons) > 3:
+            buttons = buttons[:3]  # WhatsApp max 3 buttons
+
+        # Send interactive button message
+        from src.utils.messaging import send_whatsapp_buttons as send_buttons
+        result = await send_buttons(
+            phone=phone,
+            body_text=body_text,
+            buttons=buttons,
+            header_text=header_text,
+            footer_text=footer_text
+        )
+
+        # Log interaction
+        runtime.db.log_conversation_message(
+            runtime.clinic_id, phone, "interactive_buttons", body_text, source="agent"
+        )
+
+        return {
+            "content": [{"type": "text", "text": f"Button message sent successfully to {phone}"}]
+        }
+
+    except Exception as e:
+        logger.error(f"Error in send_whatsapp_buttons: {e}")
+        return {
+            "content": [{"type": "text", "text": f"Error sending buttons: {str(e)}"}]
+        }
+
+
 # ===== CLINIC INFO TOOLS =====
 
 @tool(
@@ -621,6 +677,7 @@ def create_gendei_tools_server():
         tools=[
             # Messaging
             send_text_message,
+            send_whatsapp_buttons,
             # Clinic info
             get_clinic_info,
             get_professionals,
@@ -642,6 +699,7 @@ def create_gendei_tools_server():
 # List of all tool names for reference
 ALL_TOOL_NAMES = [
     "mcp__gendei-clinic-tools__send_text_message",
+    "mcp__gendei-clinic-tools__send_whatsapp_buttons",
     "mcp__gendei-clinic-tools__get_clinic_info",
     "mcp__gendei-clinic-tools__get_professionals",
     "mcp__gendei-clinic-tools__get_services",

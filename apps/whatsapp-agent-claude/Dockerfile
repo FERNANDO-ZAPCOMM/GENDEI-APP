@@ -1,7 +1,8 @@
 # Gendei WhatsApp Agent - Claude Agent SDK
 # Healthcare appointment scheduling via WhatsApp
 
-FROM python:3.11-slim
+# Use linux/amd64 platform for Cloud Run compatibility
+FROM --platform=linux/amd64 python:3.11-slim
 
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1
@@ -15,9 +16,6 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
-
-# Install Claude Code CLI (required for Claude Agent SDK)
-RUN curl -fsSL https://claude.ai/install.sh | bash
 
 # Copy requirements first for better caching
 COPY requirements.txt .

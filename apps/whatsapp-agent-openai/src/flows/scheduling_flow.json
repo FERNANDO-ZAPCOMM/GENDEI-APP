@@ -1,0 +1,474 @@
+{
+  "version": "6.2",
+  "data_api_version": "3.0",
+  "routing_model": {
+    "SELECT_PROFESSIONAL": ["SELECT_DATE"],
+    "SELECT_DATE": ["SELECT_TIME"],
+    "SELECT_TIME": ["PATIENT_INFO"],
+    "PATIENT_INFO": ["CONFIRM"],
+    "CONFIRM": ["SUCCESS"]
+  },
+  "screens": [
+    {
+      "id": "SELECT_PROFESSIONAL",
+      "title": "Agendar Consulta",
+      "data": {
+        "professionals": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {"type": "string"},
+              "title": {"type": "string"},
+              "description": {"type": "string"}
+            }
+          },
+          "__example__": [
+            {"id": "prof1", "title": "Dr. Silva", "description": "Clínico Geral"}
+          ]
+        },
+        "clinic_name": {
+          "type": "string",
+          "__example__": "Clínica Exemplo"
+        },
+        "error_message": {
+          "type": "string",
+          "__example__": ""
+        }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "TextHeading",
+            "text": "Selecione o profissional"
+          },
+          {
+            "type": "TextBody",
+            "text": "Escolha o profissional para sua consulta:"
+          },
+          {
+            "type": "Form",
+            "name": "professional_form",
+            "children": [
+              {
+                "type": "RadioButtonsGroup",
+                "name": "professional_id",
+                "label": "Profissional",
+                "required": true,
+                "data-source": "${data.professionals}"
+              },
+              {
+                "type": "Footer",
+                "label": "Continuar",
+                "on-click-action": {
+                  "name": "data_exchange",
+                  "payload": {
+                    "professional_id": "${form.professional_id}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "SELECT_DATE",
+      "title": "Escolha a Data",
+      "data": {
+        "professional_id": {
+          "type": "string",
+          "__example__": "prof1"
+        },
+        "professional_name": {
+          "type": "string",
+          "__example__": "Dr. Silva"
+        },
+        "specialty": {
+          "type": "string",
+          "__example__": "Clínico Geral"
+        },
+        "available_dates": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {"type": "string"},
+              "title": {"type": "string"}
+            }
+          },
+          "__example__": [
+            {"id": "2026-01-20", "title": "Segunda, 20/01"}
+          ]
+        },
+        "error_message": {
+          "type": "string",
+          "__example__": ""
+        }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "TextHeading",
+            "text": "${data.professional_name}"
+          },
+          {
+            "type": "TextSubheading",
+            "text": "${data.specialty}"
+          },
+          {
+            "type": "TextBody",
+            "text": "Selecione uma data disponível:"
+          },
+          {
+            "type": "Form",
+            "name": "date_form",
+            "children": [
+              {
+                "type": "RadioButtonsGroup",
+                "name": "selected_date",
+                "label": "Data",
+                "required": true,
+                "data-source": "${data.available_dates}"
+              },
+              {
+                "type": "Footer",
+                "label": "Continuar",
+                "on-click-action": {
+                  "name": "data_exchange",
+                  "payload": {
+                    "professional_id": "${data.professional_id}",
+                    "professional_name": "${data.professional_name}",
+                    "specialty": "${data.specialty}",
+                    "selected_date": "${form.selected_date}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "SELECT_TIME",
+      "title": "Escolha o Horário",
+      "data": {
+        "professional_id": {
+          "type": "string",
+          "__example__": "prof1"
+        },
+        "professional_name": {
+          "type": "string",
+          "__example__": "Dr. Silva"
+        },
+        "specialty": {
+          "type": "string",
+          "__example__": "Clínico Geral"
+        },
+        "selected_date": {
+          "type": "string",
+          "__example__": "2026-01-20"
+        },
+        "formatted_date": {
+          "type": "string",
+          "__example__": "Segunda-feira, 20/01/2026"
+        },
+        "available_times": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {"type": "string"},
+              "title": {"type": "string"}
+            }
+          },
+          "__example__": [
+            {"id": "09:00", "title": "09:00"}
+          ]
+        },
+        "error_message": {
+          "type": "string",
+          "__example__": ""
+        }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "TextHeading",
+            "text": "${data.professional_name}"
+          },
+          {
+            "type": "TextSubheading",
+            "text": "${data.formatted_date}"
+          },
+          {
+            "type": "TextBody",
+            "text": "Selecione um horário:"
+          },
+          {
+            "type": "Form",
+            "name": "time_form",
+            "children": [
+              {
+                "type": "RadioButtonsGroup",
+                "name": "selected_time",
+                "label": "Horário",
+                "required": true,
+                "data-source": "${data.available_times}"
+              },
+              {
+                "type": "Footer",
+                "label": "Continuar",
+                "on-click-action": {
+                  "name": "data_exchange",
+                  "payload": {
+                    "professional_id": "${data.professional_id}",
+                    "professional_name": "${data.professional_name}",
+                    "specialty": "${data.specialty}",
+                    "selected_date": "${data.selected_date}",
+                    "formatted_date": "${data.formatted_date}",
+                    "selected_time": "${form.selected_time}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "PATIENT_INFO",
+      "title": "Seus Dados",
+      "data": {
+        "professional_id": {
+          "type": "string",
+          "__example__": "prof1"
+        },
+        "professional_name": {
+          "type": "string",
+          "__example__": "Dr. Silva"
+        },
+        "specialty": {
+          "type": "string",
+          "__example__": "Clínico Geral"
+        },
+        "selected_date": {
+          "type": "string",
+          "__example__": "2026-01-20"
+        },
+        "formatted_date": {
+          "type": "string",
+          "__example__": "Segunda-feira, 20/01/2026"
+        },
+        "selected_time": {
+          "type": "string",
+          "__example__": "09:00"
+        },
+        "error_message": {
+          "type": "string",
+          "__example__": ""
+        }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "TextHeading",
+            "text": "Confirme seus dados"
+          },
+          {
+            "type": "Form",
+            "name": "patient_form",
+            "children": [
+              {
+                "type": "TextInput",
+                "name": "patient_name",
+                "label": "Nome completo",
+                "input-type": "text",
+                "required": true,
+                "helper-text": "Como você gostaria de ser chamado"
+              },
+              {
+                "type": "Footer",
+                "label": "Revisar",
+                "on-click-action": {
+                  "name": "data_exchange",
+                  "payload": {
+                    "professional_id": "${data.professional_id}",
+                    "professional_name": "${data.professional_name}",
+                    "specialty": "${data.specialty}",
+                    "selected_date": "${data.selected_date}",
+                    "formatted_date": "${data.formatted_date}",
+                    "selected_time": "${data.selected_time}",
+                    "patient_name": "${form.patient_name}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "CONFIRM",
+      "title": "Confirmar Agendamento",
+      "data": {
+        "professional_id": {
+          "type": "string",
+          "__example__": "prof1"
+        },
+        "professional_name": {
+          "type": "string",
+          "__example__": "Dr. Silva"
+        },
+        "specialty": {
+          "type": "string",
+          "__example__": "Clínico Geral"
+        },
+        "selected_date": {
+          "type": "string",
+          "__example__": "2026-01-20"
+        },
+        "formatted_date": {
+          "type": "string",
+          "__example__": "Segunda-feira, 20/01/2026"
+        },
+        "selected_time": {
+          "type": "string",
+          "__example__": "09:00"
+        },
+        "patient_name": {
+          "type": "string",
+          "__example__": "Maria Silva"
+        },
+        "price": {
+          "type": "string",
+          "__example__": "R$ 150,00"
+        },
+        "summary_professional": {
+          "type": "string",
+          "__example__": "Dr. Silva - Clínico Geral"
+        },
+        "summary_datetime": {
+          "type": "string",
+          "__example__": "Segunda-feira, 20/01/2026 às 09:00"
+        },
+        "error_message": {
+          "type": "string",
+          "__example__": ""
+        }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "TextHeading",
+            "text": "Confirme sua consulta"
+          },
+          {
+            "type": "TextSubheading",
+            "text": "Profissional"
+          },
+          {
+            "type": "TextBody",
+            "text": "${data.summary_professional}"
+          },
+          {
+            "type": "TextSubheading",
+            "text": "Data e Horário"
+          },
+          {
+            "type": "TextBody",
+            "text": "${data.summary_datetime}"
+          },
+          {
+            "type": "TextSubheading",
+            "text": "Paciente"
+          },
+          {
+            "type": "TextBody",
+            "text": "${data.patient_name}"
+          },
+          {
+            "type": "TextSubheading",
+            "text": "Valor"
+          },
+          {
+            "type": "TextBody",
+            "text": "${data.price}"
+          },
+          {
+            "type": "Form",
+            "name": "confirm_form",
+            "children": [
+              {
+                "type": "Footer",
+                "label": "Confirmar Agendamento",
+                "on-click-action": {
+                  "name": "data_exchange",
+                  "payload": {
+                    "professional_id": "${data.professional_id}",
+                    "professional_name": "${data.professional_name}",
+                    "specialty": "${data.specialty}",
+                    "selected_date": "${data.selected_date}",
+                    "formatted_date": "${data.formatted_date}",
+                    "selected_time": "${data.selected_time}",
+                    "patient_name": "${data.patient_name}",
+                    "confirm": true
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "SUCCESS",
+      "title": "Agendamento Confirmado",
+      "terminal": true,
+      "data": {
+        "professional_name": {
+          "type": "string",
+          "__example__": "Dr. Silva"
+        },
+        "summary_datetime": {
+          "type": "string",
+          "__example__": "Segunda-feira, 20/01/2026 às 09:00"
+        }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "TextHeading",
+            "text": "Agendamento Confirmado!"
+          },
+          {
+            "type": "TextBody",
+            "text": "Sua consulta foi agendada com sucesso."
+          },
+          {
+            "type": "TextSubheading",
+            "text": "Detalhes"
+          },
+          {
+            "type": "TextBody",
+            "text": "${data.professional_name}"
+          },
+          {
+            "type": "TextBody",
+            "text": "${data.summary_datetime}"
+          },
+          {
+            "type": "TextBody",
+            "text": "Você receberá um lembrete 24h antes da consulta."
+          }
+        ]
+      }
+    }
+  ]
+}

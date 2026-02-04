@@ -6,20 +6,6 @@
   "storage": {
     "rules": "storage.rules"
   },
-  "hosting": {
-    "public": "apps/frontend/out",
-    "ignore": [
-      "firebase.json",
-      "**/.*",
-      "**/node_modules/**"
-    ],
-    "rewrites": [
-      {
-        "source": "/functions/**",
-        "function": "api"
-      }
-    ]
-  },
   "functions": [
     {
       "source": "apps/functions",

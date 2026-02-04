@@ -397,6 +397,40 @@ router.get('/:clinicId/stats', verifyAuth, async (req: Request, res: Response) =
   }
 });
 
+// GET /clinics/:clinicId/pending-counts - Get pending action counts for sidebar
+router.get('/:clinicId/pending-counts', verifyAuth, async (req: Request, res: Response) => {
+  try {
+    const { clinicId } = req.params;
+    const user = (req as any).user;
+
+    if (user?.uid !== clinicId) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    const [
+      pendingAppointments,
+      escalatedConversations
+    ] = await Promise.all([
+      db.collection('gendei_appointments')
+        .where('clinicId', '==', clinicId)
+        .where('status', '==', 'pending')
+        .count().get(),
+      db.collection('gendei_conversations')
+        .where('clinicId', '==', clinicId)
+        .where('isHumanTakeover', '==', true)
+        .count().get()
+    ]);
+
+    return res.json({
+      pendingAppointments: pendingAppointments.data().count,
+      escalatedConversations: escalatedConversations.data().count
+    });
+  } catch (error: any) {
+    console.error('Error getting pending counts:', error);
+    return res.status(500).json({ message: error.message });
+  }
+});
+
 // ============================================
 // AI SUMMARY GENERATION
 // ============================================

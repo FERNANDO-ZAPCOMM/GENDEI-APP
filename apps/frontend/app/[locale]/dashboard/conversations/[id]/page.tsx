@@ -3,12 +3,13 @@
 import { useState, useEffect, useRef } from 'react';
 import { useTranslations } from 'next-intl';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, Bot, User, Send, Play, Pause, Clock, Archive, Trash2, MoreVertical } from 'lucide-react';
+import { ArrowLeft, Bot, User, Send, Play, Pause, Clock, Archive, Trash2, MoreVertical, AlertTriangle, MessageSquare, X } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 
 import { useClinic } from '@/hooks/use-clinic';
 import { useAuth } from '@/hooks/use-auth';
+import { useMessagingWindow } from '@/hooks/use-messaging-window';
 import { getConversationStateColor } from '@/lib/meta-utils';
 import {
   useConversation,
@@ -62,6 +63,18 @@ export default function ConversationDetailPage() {
     conversationId
   );
 
+  // 24h window and queue management
+  const {
+    isWindowOpen,
+    reengagementSentAt,
+    queuedMessages,
+    queuedMessagesCount,
+    queueMessage,
+    clearQueue,
+    sendQueue,
+    sendReengagement,
+  } = useMessagingWindow(clinic?.id || '', conversationId);
+
   const takeoverMutation = useTakeoverConversation();
   const releaseMutation = useReleaseConversation();
   const sendMessageMutation = useSendMessage();
@@ -111,6 +124,19 @@ export default function ConversationDetailPage() {
   const handleSendMessage = async () => {
     if (!clinic?.id || !currentUser?.uid || !messageInput.trim()) return;
 
+    // If window is closed, queue the message instead
+    if (!isWindowOpen) {
+      try {
+        await queueMessage.mutateAsync(messageInput.trim());
+        setMessageInput('');
+        toast.success(t('conversations.queue.messageQueued'));
+      } catch (error) {
+        toast.error(t('conversations.queue.queueError'));
+      }
+      return;
+    }
+
+    // Window is open, send directly
     try {
       await sendMessageMutation.mutateAsync({
         clinicId: clinic.id,
@@ -129,6 +155,34 @@ export default function ConversationDetailPage() {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSendMessage();
+    }
+  };
+
+  const handleSendReengagement = async () => {
+    try {
+      await sendReengagement.mutateAsync();
+      toast.success(t('conversations.reengagement.sent'));
+    } catch (error) {
+      toast.error(t('conversations.reengagement.error'));
+    }
+  };
+
+  const handleSendQueue = async () => {
+    try {
+      const result = await sendQueue.mutateAsync();
+      const data = (result as any).data;
+      toast.success(t('conversations.queue.sent', { count: data?.sent || 0 }));
+    } catch (error) {
+      toast.error(t('conversations.queue.sendError'));
+    }
+  };
+
+  const handleClearQueue = async () => {
+    try {
+      await clearQueue.mutateAsync();
+      toast.success(t('conversations.queue.cleared'));
+    } catch (error) {
+      toast.error(t('conversations.queue.clearError'));
     }
   };
 
@@ -170,7 +224,7 @@ export default function ConversationDetailPage() {
   const canSendMessages = isHumanControl && conversation.state !== 'fechado';
 
   return (
-    <div className="flex flex-col h-[calc(100vh-120px)] gap-6 page-transition">
+    <div className="flex flex-col h-[calc(100vh-120px)] gap-4 page-transition">
       {/* Header */}
       <div className="flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-4">
@@ -244,70 +298,131 @@ export default function ConversationDetailPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Control Panel */}
-      <Card className="flex-shrink-0">
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                {isHumanControl ? (
-                  <>
-                    <User className="h-5 w-5 text-blue-600" />
-                    {t('conversations.control.humanMode')}
-                  </>
-                ) : (
-                  <>
-                    <Bot className="h-5 w-5 text-purple-600" />
-                    {t('conversations.control.aiMode')}
-                  </>
-                )}
-              </CardTitle>
-              <CardDescription>
-                {isHumanControl
-                  ? t('conversations.control.humanDescription')
-                  : t('conversations.control.aiDescription')}
-              </CardDescription>
-            </div>
+      {/* Control Bar - Compact */}
+      <div className={`flex items-center justify-between p-3 rounded-lg border flex-shrink-0 ${
+        isHumanControl ? 'bg-blue-50 border-blue-200' : 'bg-gray-50 border-gray-200'
+      }`}>
+        <div className="flex items-center gap-3">
+          <Badge className={isHumanControl ? 'bg-blue-600' : 'bg-purple-600'}>
+            {isHumanControl ? (
+              <><User className="h-3 w-3 mr-1" /> {t('conversations.handler.human')}</>
+            ) : (
+              <><Bot className="h-3 w-3 mr-1" /> {t('conversations.handler.ai')}</>
+            )}
+          </Badge>
+          <span className="text-sm text-muted-foreground">
+            {isHumanControl
+              ? t('conversations.control.humanDescription')
+              : t('conversations.control.aiDescription')}
+          </span>
 
-            {conversation.state !== 'fechado' && (
-              <div>
-                {isHumanControl ? (
-                  <Button
-                    variant="outline"
-                    onClick={handleRelease}
-                    disabled={releaseMutation.isPending}
-                  >
-                    <Play className="h-4 w-4 mr-2" />
-                    {t('conversations.control.releaseToAI')}
-                  </Button>
-                ) : (
-                  <Button
-                    onClick={handleTakeover}
-                    disabled={takeoverMutation.isPending}
-                    className="bg-blue-600 hover:bg-blue-700 text-white"
-                  >
-                    <Pause className="h-4 w-4 mr-2" />
-                    {t('conversations.control.takeControl')}
-                  </Button>
-                )}
-              </div>
+          {/* 24h Window Status */}
+          {isHumanControl && (
+            <Badge
+              variant="outline"
+              className={isWindowOpen
+                ? 'text-green-600 border-green-600 bg-green-50'
+                : 'text-amber-600 border-amber-600 bg-amber-50'
+              }
+            >
+              <Clock className="h-3 w-3 mr-1" />
+              {isWindowOpen ? t('conversations.window.open') : t('conversations.window.closed')}
+            </Badge>
+          )}
+        </div>
+
+        {conversation.state !== 'fechado' && (
+          <div>
+            {isHumanControl ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleRelease}
+                disabled={releaseMutation.isPending}
+              >
+                <Play className="h-4 w-4 mr-2" />
+                {t('conversations.control.releaseToAI')}
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                onClick={handleTakeover}
+                disabled={takeoverMutation.isPending}
+                className="bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                <Pause className="h-4 w-4 mr-2" />
+                {t('conversations.control.takeControl')}
+              </Button>
             )}
           </div>
-        </CardHeader>
-
-        {isHumanControl && conversation.takenOverAt && (
-          <CardContent>
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Clock className="h-4 w-4" />
-              <span>
-                {t('conversations.control.takenOverAt', {
-                  time: format(new Date(conversation.takenOverAt), 'MMM d, HH:mm'),
-                })}
-              </span>
-            </div>
-          </CardContent>
         )}
-      </Card>
+      </div>
+
+      {/* 24h Window Alert - Only show when in human control and window is closed */}
+      {isHumanControl && !isWindowOpen && (
+        <div className="flex items-center justify-between p-3 rounded-lg border border-amber-300 bg-amber-50 flex-shrink-0">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 text-amber-600" />
+            <span className="text-sm text-amber-800">
+              {t('conversations.window.closedMessage')}
+            </span>
+            {reengagementSentAt && (
+              <Badge variant="outline" className="text-amber-700 border-amber-400">
+                {t('conversations.reengagement.sentAt', {
+                  time: format(new Date(reengagementSentAt), 'HH:mm')
+                })}
+              </Badge>
+            )}
+          </div>
+          {!reengagementSentAt && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleSendReengagement}
+              disabled={sendReengagement.isPending}
+              className="border-amber-400 text-amber-700 hover:bg-amber-100"
+            >
+              <MessageSquare className="h-4 w-4 mr-2" />
+              {t('conversations.reengagement.send')}
+            </Button>
+          )}
+        </div>
+      )}
+
+      {/* Queued Messages Alert */}
+      {isHumanControl && queuedMessagesCount > 0 && (
+        <div className="flex items-center justify-between p-3 rounded-lg border border-blue-300 bg-blue-50 flex-shrink-0">
+          <div className="flex items-center gap-2">
+            <MessageSquare className="h-4 w-4 text-blue-600" />
+            <span className="text-sm text-blue-800">
+              {t('conversations.queue.count', { count: queuedMessagesCount })}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={handleClearQueue}
+              disabled={clearQueue.isPending}
+              className="text-blue-700 hover:bg-blue-100"
+            >
+              <X className="h-4 w-4 mr-1" />
+              {t('conversations.queue.clear')}
+            </Button>
+            {isWindowOpen && (
+              <Button
+                size="sm"
+                onClick={handleSendQueue}
+                disabled={sendQueue.isPending}
+                className="bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                <Send className="h-4 w-4 mr-1" />
+                {t('conversations.queue.sendAll')}
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Messages */}
       <Card className="flex-1 flex flex-col min-h-0">
@@ -347,21 +462,24 @@ export default function ConversationDetailPage() {
               <Textarea
                 value={messageInput}
                 onChange={(e) => setMessageInput(e.target.value)}
-                onKeyPress={handleKeyPress}
+                onKeyDown={handleKeyPress}
                 placeholder={t('conversations.messages.placeholder')}
                 className="min-h-[60px] max-h-[120px]"
-                disabled={sendMessageMutation.isPending}
+                disabled={sendMessageMutation.isPending || queueMessage.isPending}
               />
               <Button
                 onClick={handleSendMessage}
-                disabled={!messageInput.trim() || sendMessageMutation.isPending}
+                disabled={!messageInput.trim() || sendMessageMutation.isPending || queueMessage.isPending}
                 className="self-end"
               >
                 <Send className="h-4 w-4" />
               </Button>
             </div>
             <p className="text-xs text-muted-foreground mt-2">
-              {t('conversations.messages.hint')}
+              {isWindowOpen
+                ? t('conversations.messages.hint')
+                : t('conversations.messages.hintWindowClosed')
+              }
             </p>
           </CardContent>
         )}

@@ -543,6 +543,15 @@ export async function saveConnectionWithIds(options: {
     }
   }
 
+  // Also store phoneNumberId in tokens collection for conversations endpoint
+  if (phoneNumberId) {
+    await db.collection(TOKENS).doc(clinicId).set(
+      { phoneNumberId, updatedAt: FieldValue.serverTimestamp() },
+      { merge: true }
+    );
+    console.log(`✅ phoneNumberId stored in tokens collection for clinic ${clinicId}`);
+  }
+
   return {
     success: true,
     wabaId,

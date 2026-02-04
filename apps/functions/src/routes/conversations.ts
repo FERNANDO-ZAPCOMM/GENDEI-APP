@@ -616,4 +616,403 @@ router.delete('/:conversationId', verifyAuth, async (req: Request, res: Response
   }
 });
 
+// ============================================
+// 24H MESSAGING WINDOW & MESSAGE QUEUE
+// ============================================
+
+const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
+
+function isWindowOpen(lastCustomerMessageAt: Date | string | undefined): boolean {
+  if (!lastCustomerMessageAt) return false;
+
+  const lastMessageTime = typeof lastCustomerMessageAt === 'string'
+    ? new Date(lastCustomerMessageAt)
+    : lastCustomerMessageAt;
+
+  const now = new Date();
+  const timeSinceLastMessage = now.getTime() - lastMessageTime.getTime();
+
+  return timeSinceLastMessage < TWENTY_FOUR_HOURS_MS;
+}
+
+// GET /conversations/:conversationId/window-status - Get 24h window status and queue
+router.get('/:conversationId/window-status', verifyAuth, async (req: Request, res: Response) => {
+  try {
+    const { conversationId } = req.params;
+    const user = (req as any).user;
+    const clinicId = req.query.clinicId as string || user?.uid;
+
+    if (!clinicId) {
+      return res.status(400).json({ message: 'Clinic ID is required' });
+    }
+
+    if (user?.uid !== clinicId) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    const convRef = db
+      .collection(CLINICS)
+      .doc(clinicId)
+      .collection('conversations')
+      .doc(conversationId);
+
+    const convDoc = await convRef.get();
+
+    if (!convDoc.exists) {
+      return res.status(404).json({ message: 'Conversation not found' });
+    }
+
+    const convData = convDoc.data();
+    const lastCustomerMessageAt = convData?.lastCustomerMessageAt?.toDate?.() || convData?.lastCustomerMessageAt;
+    const reengagementSentAt = convData?.reengagementSentAt?.toDate?.() || convData?.reengagementSentAt;
+    const messageQueue = convData?.messageQueue || [];
+
+    return res.json({
+      data: {
+        isWindowOpen: isWindowOpen(lastCustomerMessageAt),
+        lastCustomerMessageAt: lastCustomerMessageAt || null,
+        reengagementSentAt: reengagementSentAt || null,
+        queuedMessagesCount: messageQueue.length,
+        queuedMessages: messageQueue,
+      }
+    });
+  } catch (error: any) {
+    console.error('Error getting window status:', error);
+    return res.status(500).json({ message: error.message });
+  }
+});
+
+// POST /conversations/:conversationId/queue - Queue a message
+router.post('/:conversationId/queue', verifyAuth, async (req: Request, res: Response) => {
+  try {
+    const { conversationId } = req.params;
+    const { message } = req.body;
+    const user = (req as any).user;
+    const clinicId = req.query.clinicId as string || user?.uid;
+
+    if (!clinicId) {
+      return res.status(400).json({ message: 'Clinic ID is required' });
+    }
+
+    if (user?.uid !== clinicId) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    if (!message) {
+      return res.status(400).json({ message: 'Message is required' });
+    }
+
+    const convRef = db
+      .collection(CLINICS)
+      .doc(clinicId)
+      .collection('conversations')
+      .doc(conversationId);
+
+    const convDoc = await convRef.get();
+
+    if (!convDoc.exists) {
+      return res.status(404).json({ message: 'Conversation not found' });
+    }
+
+    const queuedMessage = {
+      id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      text: message,
+      queuedAt: new Date().toISOString(),
+      queuedBy: user?.uid,
+    };
+
+    await convRef.update({
+      messageQueue: FieldValue.arrayUnion(queuedMessage),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+
+    // Get updated queue length
+    const updatedDoc = await convRef.get();
+    const queueLength = updatedDoc.data()?.messageQueue?.length || 1;
+
+    return res.json({
+      data: {
+        queuedMessage,
+        queueLength,
+      }
+    });
+  } catch (error: any) {
+    console.error('Error queueing message:', error);
+    return res.status(500).json({ message: error.message });
+  }
+});
+
+// DELETE /conversations/:conversationId/queue - Clear message queue
+router.delete('/:conversationId/queue', verifyAuth, async (req: Request, res: Response) => {
+  try {
+    const { conversationId } = req.params;
+    const user = (req as any).user;
+    const clinicId = req.query.clinicId as string || user?.uid;
+
+    if (!clinicId) {
+      return res.status(400).json({ message: 'Clinic ID is required' });
+    }
+
+    if (user?.uid !== clinicId) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    const convRef = db
+      .collection(CLINICS)
+      .doc(clinicId)
+      .collection('conversations')
+      .doc(conversationId);
+
+    const convDoc = await convRef.get();
+
+    if (!convDoc.exists) {
+      return res.status(404).json({ message: 'Conversation not found' });
+    }
+
+    await convRef.update({
+      messageQueue: [],
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+
+    return res.json({
+      data: { success: true, message: 'Queue cleared' }
+    });
+  } catch (error: any) {
+    console.error('Error clearing queue:', error);
+    return res.status(500).json({ message: error.message });
+  }
+});
+
+// POST /conversations/:conversationId/send-queue - Send all queued messages
+router.post('/:conversationId/send-queue', verifyAuth, async (req: Request, res: Response) => {
+  try {
+    const { conversationId } = req.params;
+    const user = (req as any).user;
+    const clinicId = req.query.clinicId as string || user?.uid;
+
+    if (!clinicId) {
+      return res.status(400).json({ message: 'Clinic ID is required' });
+    }
+
+    if (user?.uid !== clinicId) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    const convRef = db
+      .collection(CLINICS)
+      .doc(clinicId)
+      .collection('conversations')
+      .doc(conversationId);
+
+    const convDoc = await convRef.get();
+
+    if (!convDoc.exists) {
+      return res.status(404).json({ message: 'Conversation not found' });
+    }
+
+    const convData = convDoc.data();
+    const lastCustomerMessageAt = convData?.lastCustomerMessageAt?.toDate?.() || convData?.lastCustomerMessageAt;
+
+    // Check if window is open
+    if (!isWindowOpen(lastCustomerMessageAt)) {
+      return res.status(400).json({ message: '24h window is closed. Customer must reply first.' });
+    }
+
+    const messageQueue = convData?.messageQueue || [];
+
+    if (messageQueue.length === 0) {
+      return res.status(400).json({ message: 'No messages in queue' });
+    }
+
+    const waUserPhone = convData?.waUserPhone;
+
+    if (!waUserPhone) {
+      return res.status(400).json({ message: 'No phone number for this conversation' });
+    }
+
+    // Get WhatsApp token
+    const tokenDoc = await db.collection(TOKENS).doc(clinicId).get();
+
+    if (!tokenDoc.exists) {
+      return res.status(400).json({ message: 'WhatsApp not connected' });
+    }
+
+    const tokenData = tokenDoc.data();
+    const accessToken = tokenData?.accessToken;
+    const phoneNumberId = tokenData?.phoneNumberId;
+
+    if (!accessToken || !phoneNumberId) {
+      return res.status(400).json({ message: 'WhatsApp configuration incomplete' });
+    }
+
+    let sent = 0;
+    let failed = 0;
+
+    // Send each queued message
+    for (const queuedMsg of messageQueue) {
+      try {
+        const response = await fetch(
+          `https://graph.facebook.com/v18.0/${phoneNumberId}/messages`,
+          {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${accessToken}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              messaging_product: 'whatsapp',
+              to: waUserPhone.replace(/\D/g, ''),
+              type: 'text',
+              text: { body: queuedMsg.text },
+            }),
+          }
+        );
+
+        if (response.ok) {
+          // Save message to Firestore
+          await convRef.collection('messages').add({
+            conversationId,
+            clinicId,
+            direction: 'out',
+            from: phoneNumberId,
+            to: waUserPhone,
+            body: queuedMsg.text,
+            messageType: 'text',
+            timestamp: FieldValue.serverTimestamp(),
+            isAiGenerated: false,
+            isHumanSent: true,
+            sentBy: queuedMsg.queuedBy,
+            wasQueued: true,
+          });
+          sent++;
+        } else {
+          failed++;
+        }
+
+        // Small delay between messages to avoid rate limiting
+        await new Promise(resolve => setTimeout(resolve, 500));
+      } catch (error) {
+        console.error('Error sending queued message:', error);
+        failed++;
+      }
+    }
+
+    // Clear queue after sending
+    await convRef.update({
+      messageQueue: [],
+      lastMessageAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+
+    return res.json({
+      data: { sent, failed }
+    });
+  } catch (error: any) {
+    console.error('Error sending queue:', error);
+    return res.status(500).json({ message: error.message });
+  }
+});
+
+// POST /conversations/:conversationId/reengagement - Send re-engagement template
+router.post('/:conversationId/reengagement', verifyAuth, async (req: Request, res: Response) => {
+  try {
+    const { conversationId } = req.params;
+    const user = (req as any).user;
+    const clinicId = req.query.clinicId as string || user?.uid;
+
+    if (!clinicId) {
+      return res.status(400).json({ message: 'Clinic ID is required' });
+    }
+
+    if (user?.uid !== clinicId) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    const convRef = db
+      .collection(CLINICS)
+      .doc(clinicId)
+      .collection('conversations')
+      .doc(conversationId);
+
+    const convDoc = await convRef.get();
+
+    if (!convDoc.exists) {
+      return res.status(404).json({ message: 'Conversation not found' });
+    }
+
+    const convData = convDoc.data();
+    const waUserPhone = convData?.waUserPhone;
+
+    if (!waUserPhone) {
+      return res.status(400).json({ message: 'No phone number for this conversation' });
+    }
+
+    // Get WhatsApp token
+    const tokenDoc = await db.collection(TOKENS).doc(clinicId).get();
+
+    if (!tokenDoc.exists) {
+      return res.status(400).json({ message: 'WhatsApp not connected' });
+    }
+
+    const tokenData = tokenDoc.data();
+    const accessToken = tokenData?.accessToken;
+    const phoneNumberId = tokenData?.phoneNumberId;
+
+    if (!accessToken || !phoneNumberId) {
+      return res.status(400).json({ message: 'WhatsApp configuration incomplete' });
+    }
+
+    // Get clinic to find the re-engagement template name
+    const clinicDoc = await db.collection(CLINICS).doc(clinicId).get();
+    const clinicData = clinicDoc.data();
+    const templateName = clinicData?.reengagementTemplateName || 'gendei_atendimento';
+
+    // Send template message via WhatsApp API
+    const response = await fetch(
+      `https://graph.facebook.com/v18.0/${phoneNumberId}/messages`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messaging_product: 'whatsapp',
+          to: waUserPhone.replace(/\D/g, ''),
+          type: 'template',
+          template: {
+            name: templateName,
+            language: { code: 'pt_BR' },
+          },
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error('WhatsApp API error:', errorData);
+      throw new Error('Failed to send re-engagement template');
+    }
+
+    const responseData = await response.json();
+
+    // Update conversation with reengagement timestamp
+    await convRef.update({
+      reengagementSentAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+
+    return res.json({
+      data: {
+        success: true,
+        messageId: responseData.messages?.[0]?.id,
+        message: 'Re-engagement template sent. Waiting for customer reply to open 24h window.',
+      }
+    });
+  } catch (error: any) {
+    console.error('Error sending reengagement:', error);
+    return res.status(500).json({ message: error.message });
+  }
+});
+
 export default router;

@@ -6,17 +6,17 @@ set -e
 # Configuration
 PROJECT_ID="${GCP_PROJECT:-gendei-prod}"
 REGION="${GCP_REGION:-us-central1}"
-SERVICE_NAME="gendei-whatsapp-agent-claude"
+SERVICE_NAME="gendei-whatsapp-agent"
 IMAGE_NAME="gcr.io/${PROJECT_ID}/${SERVICE_NAME}"
 
-echo "🚀 Deploying Gendei WhatsApp Agent (Claude SDK)..."
+echo "🚀 Deploying Gendei WhatsApp Agent (Claude SDK) to ${SERVICE_NAME}..."
 echo "   Project: ${PROJECT_ID}"
 echo "   Region: ${REGION}"
 echo "   Service: ${SERVICE_NAME}"
 
-# Build the Docker image
-echo "📦 Building Docker image..."
-docker build -t ${IMAGE_NAME} .
+# Build the Docker image for linux/amd64 (Cloud Run architecture)
+echo "📦 Building Docker image for linux/amd64..."
+docker build --platform linux/amd64 -t ${IMAGE_NAME} .
 
 # Push to Container Registry
 echo "⬆️ Pushing to Container Registry..."

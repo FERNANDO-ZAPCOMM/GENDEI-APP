@@ -895,7 +895,10 @@
       "fechado": "Fechado",
       "checkout": "Checkout",
       "greeting": "Saudação",
-      "engaged": "Engajado"
+      "engaged": "Engajado",
+      "selecting_slot": "Selecionando horário",
+      "scheduling": "Agendando",
+      "confirming": "Confirmando"
     },
     "handler": {
       "ai": "IA",
@@ -924,12 +927,17 @@
       "success": "Conversa devolvida para a IA",
       "error": "Falha ao devolver conversa"
     },
+    "message": {
+      "sent": "Mensagem enviada",
+      "error": "Falha ao enviar mensagem"
+    },
     "messages": {
       "title": "Mensagens",
       "loading": "Carregando mensagens...",
       "empty": "Nenhuma mensagem ainda",
       "placeholder": "Digite sua mensagem...",
       "hint": "Pressione Enter para enviar, Shift+Enter para nova linha",
+      "hintWindowClosed": "Janela fechada - mensagem será enfileirada",
       "sent": "Mensagem enviada",
       "error": "Falha ao enviar mensagem",
       "you": "Você",
@@ -943,6 +951,28 @@
         "read": "Lido",
         "failed": "Falhou"
       }
+    },
+    "window": {
+      "open": "Janela aberta",
+      "closed": "Janela fechada",
+      "closedMessage": "Janela de 24h fechada. O cliente precisa responder para reabrir."
+    },
+    "queue": {
+      "count": "{count} mensagem(ns) na fila",
+      "messageQueued": "Mensagem adicionada à fila",
+      "queueError": "Erro ao enfileirar mensagem",
+      "clear": "Limpar fila",
+      "cleared": "Fila limpa",
+      "clearError": "Erro ao limpar fila",
+      "sendAll": "Enviar fila",
+      "sent": "{count} mensagem(ns) enviada(s)",
+      "sendError": "Erro ao enviar fila"
+    },
+    "reengagement": {
+      "send": "Reengajar",
+      "sent": "Template de reengajamento enviado",
+      "sentAt": "Enviado às {time}",
+      "error": "Erro ao enviar template"
     }
   },
   "setup": {
