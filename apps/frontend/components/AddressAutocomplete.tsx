@@ -242,7 +242,7 @@ export function AddressDetails({ addressData, showMap = true }: { addressData?: 
         <div className="rounded-lg overflow-hidden border">
           <iframe
             width="100%"
-            height="200"
+            height="300"
             style={{ border: 0 }}
             loading="lazy"
             allowFullScreen

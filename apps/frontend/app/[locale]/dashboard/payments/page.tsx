@@ -11,6 +11,7 @@ import {
   Loader2,
   Plus,
   X,
+  Save,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -165,8 +166,10 @@ export default function PaymentsPage() {
         <p className="text-gray-600 mt-1">Configure as formas de pagamento e opções de cobrança</p>
       </div>
 
+      {/* Content wrapper - 75% width on large screens */}
+      <div className="w-full lg:w-3/4 space-y-6">
       {/* Payment Methods Card */}
-      <Card className="max-w-2xl">
+      <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
             <CreditCard className="w-4 h-4" />
@@ -286,7 +289,7 @@ export default function PaymentsPage() {
       </Card>
 
       {/* Deposit Card */}
-      <Card className="max-w-2xl">
+      <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
             <Percent className="w-4 h-4" />
@@ -338,7 +341,7 @@ export default function PaymentsPage() {
       </Card>
 
       {/* PIX Card */}
-      <Card className="max-w-2xl">
+      <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
             <Key className="w-4 h-4" />
@@ -392,7 +395,7 @@ export default function PaymentsPage() {
       </Card>
 
       {/* Save Button */}
-      <div className="max-w-2xl">
+      <div className="flex justify-end">
         <Button onClick={handleSave} disabled={isSaving}>
           {isSaving ? (
             <>
@@ -400,9 +403,13 @@ export default function PaymentsPage() {
               Salvando...
             </>
           ) : (
-            t('common.save') || 'Salvar'
+            <>
+              <Save className="h-4 w-4 mr-2" />
+              {t('common.save') || 'Salvar'}
+            </>
           )}
         </Button>
+      </div>
       </div>
     </div>
   );

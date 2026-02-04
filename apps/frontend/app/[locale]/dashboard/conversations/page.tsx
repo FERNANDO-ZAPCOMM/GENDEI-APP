@@ -308,9 +308,7 @@ function ConversationsPageContent() {
                   <Eye className="w-8 h-8 text-muted-foreground/50" />
                 </div>
                 <p className="text-muted-foreground text-sm">
-                  {searchQuery || selectedProfessionalId || stateFilter !== 'all'
-                    ? 'Nenhuma conversa encontrada'
-                    : 'Conversas aparecerao aqui'}
+                  Nenhuma conversa encontrada
                 </p>
               </div>
             ) : (
@@ -400,32 +398,38 @@ function ConversationsPageContent() {
                 </p>
               </div>
             ) : (
-              activeProfessionals.map((professional) => (
-                <div
-                  key={professional.id}
-                  onClick={() => handleProfessionalSelect(professional.id)}
-                  className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-colors ${
-                    selectedProfessionalId === professional.id
-                      ? 'bg-indigo-100 border-2 border-indigo-500'
-                      : 'hover:bg-muted/50 border-2 border-transparent'
-                  }`}
-                >
-                  <Avatar className="h-9 w-9">
-                    <AvatarImage src={professional.photoUrl} alt={professional.name} />
-                    <AvatarFallback className="bg-indigo-100 text-indigo-700 text-xs">
-                      {getInitials(professional.name)}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{professional.name}</p>
-                    {professional.specialty && (
-                      <p className="text-xs text-muted-foreground truncate">
-                        {getSpecialtyName(professional.specialty)}
-                      </p>
+              activeProfessionals.map((professional) => {
+                const isSelected = selectedProfessionalId === professional.id;
+                return (
+                  <div
+                    key={professional.id}
+                    onClick={() => handleProfessionalSelect(professional.id)}
+                    className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all ${
+                      isSelected
+                        ? 'bg-primary/10 border-2 border-primary'
+                        : 'border border-gray-100 hover:bg-gray-50'
+                    }`}
+                  >
+                    <Avatar className="w-10 h-10">
+                      <AvatarImage src={professional.photoUrl} alt={professional.name} />
+                      <AvatarFallback className="text-sm bg-gray-100">
+                        {getInitials(professional.name)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm truncate">{professional.name}</p>
+                      {professional.specialty && (
+                        <p className="text-xs text-muted-foreground truncate">
+                          {getSpecialtyName(professional.specialty)}
+                        </p>
+                      )}
+                    </div>
+                    {isSelected && (
+                      <div className="w-2 h-2 rounded-full bg-primary" />
                     )}
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
           </CardContent>
         </Card>
@@ -466,9 +470,7 @@ function ConversationsPageContent() {
                   <Eye className="w-8 h-8 text-muted-foreground/50" />
                 </div>
                 <p className="text-muted-foreground text-sm">
-                  {searchQuery || stateFilter !== 'all'
-                    ? 'Nenhuma conversa encontrada'
-                    : 'Conversas aparecerao aqui'}
+                  Nenhuma conversa encontrada
                 </p>
               </div>
             ) : (

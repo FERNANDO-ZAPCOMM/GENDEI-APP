@@ -10,6 +10,7 @@ import { useProductChatEngine } from './useProductChatEngine';
 import { uploadFile, type UploadProgress } from '@/lib/upload';
 import { toast } from 'sonner';
 import { AuthContext } from '@/lib/auth-provider';
+import { Save } from 'lucide-react';
 
 interface ProductChatPanelProps {
   isOpen: boolean;
@@ -121,6 +122,7 @@ export function ProductChatPanel({
                 Cancelar
               </Button>
               <Button onClick={handleSave} className="flex-1">
+                <Save className="h-4 w-4 mr-2" />
                 Salvar Produto
               </Button>
             </div>

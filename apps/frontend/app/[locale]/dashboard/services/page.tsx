@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { Plus, MoreHorizontal, Pencil, Trash2, ClipboardList, Clock, Video, MapPin, MonitorSmartphone } from 'lucide-react';
+import { Plus, MoreHorizontal, Pencil, Trash2, ClipboardList, Clock, Video, MapPin, MonitorSmartphone, Save, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { useClinic } from '@/hooks/use-clinic';
@@ -542,7 +542,17 @@ export default function ServicesPage() {
               onClick={handleSubmit}
               disabled={create.isPending || update.isPending}
             >
-              {create.isPending || update.isPending ? 'Salvando...' : 'Salvar'}
+              {create.isPending || update.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Salvando...
+                </>
+              ) : (
+                <>
+                  <Save className="h-4 w-4 mr-2" />
+                  Salvar
+                </>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

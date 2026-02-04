@@ -11,7 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
-import { Loader2, Eye, EyeOff } from 'lucide-react';
+import { Loader2, Eye, EyeOff, Save } from 'lucide-react';
 import { z } from 'zod';
 import { useState } from 'react';
 
@@ -201,7 +201,10 @@ export default function AccountPage() {
                   {t('common.saving') || 'Salvando...'}
                 </>
               ) : (
-                t('common.save') || 'Salvar'
+                <>
+                  <Save className="h-4 w-4 mr-2" />
+                  {t('common.save') || 'Salvar'}
+                </>
               )}
             </Button>
           </form>
@@ -308,7 +311,10 @@ export default function AccountPage() {
                     {t('common.saving') || 'Salvando...'}
                   </>
                 ) : (
-                  t('common.save') || 'Salvar'
+                  <>
+                    <Save className="h-4 w-4 mr-2" />
+                    {t('common.save') || 'Salvar'}
+                  </>
                 )}
               </Button>
             </form>

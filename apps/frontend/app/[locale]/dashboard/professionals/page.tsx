@@ -163,7 +163,7 @@ export default function ProfessionalsPage() {
 
       {/* Add Professional Card - Show when no professionals */}
       {!hasProfessionals && !isLoading && (
-        <Card className="max-w-2xl">
+        <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <UserPlus className="w-4 h-4" />

@@ -25,7 +25,7 @@ import { getNextStepUrl } from '@/hooks/use-onboarding';
 import { AddressAutocomplete, AddressDetails } from '@/components/AddressAutocomplete';
 import { ClinicWhatsAppPreview } from '@/components/chat/ClinicWhatsAppPreview';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Checkbox } from '@/components/ui/checkbox';
+import { Switch } from '@/components/ui/switch';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import type { ClinicAddress } from '@/lib/clinic-types';
@@ -45,22 +45,6 @@ const DAYS = [
 
 type DayKey = typeof DAYS[number]['key'];
 type TabKey = 'basic' | 'contact' | 'location' | 'hours';
-
-// Format selected days into readable string
-const formatDaysString = (selectedDays: Record<DayKey, boolean>): string => {
-  const enabledDays = DAYS.filter(d => selectedDays[d.key]);
-  if (enabledDays.length === 0) return '';
-  if (enabledDays.length === 7) return 'Todos os dias';
-  if (enabledDays.length === 5 &&
-      selectedDays.seg && selectedDays.ter && selectedDays.qua &&
-      selectedDays.qui && selectedDays.sex && !selectedDays.sab && !selectedDays.dom) {
-    return 'Seg-Sex';
-  }
-  if (enabledDays.length === 6 && !selectedDays.dom) {
-    return 'Seg-Sáb';
-  }
-  return enabledDays.map(d => d.label).join(', ');
-};
 
 // Phone formatting helper
 const formatPhone = (value: string): string => {
@@ -104,10 +88,14 @@ export default function ClinicSettingsPage() {
     openingHours: '',
     greetingSummary: '',
   });
-  const [openTime, setOpenTime] = useState('08:00');
-  const [closeTime, setCloseTime] = useState('18:00');
-  const [selectedDays, setSelectedDays] = useState<Record<DayKey, boolean>>({
-    seg: false, ter: false, qua: false, qui: false, sex: false, sab: false, dom: false,
+  const [dayHours, setDayHours] = useState<Record<DayKey, { enabled: boolean; open: string; close: string }>>({
+    seg: { enabled: false, open: '08:00', close: '18:00' },
+    ter: { enabled: false, open: '08:00', close: '18:00' },
+    qua: { enabled: false, open: '08:00', close: '18:00' },
+    qui: { enabled: false, open: '08:00', close: '18:00' },
+    sex: { enabled: false, open: '08:00', close: '18:00' },
+    sab: { enabled: false, open: '08:00', close: '18:00' },
+    dom: { enabled: false, open: '08:00', close: '18:00' },
   });
   const [hoursConfigured, setHoursConfigured] = useState(false);
   const [addressData, setAddressData] = useState<ClinicAddress | undefined>();
@@ -137,31 +125,45 @@ export default function ClinicSettingsPage() {
       });
       setAddressData(currentClinic.addressData);
 
+      // Parse opening hours - supports both old format and new per-day format
       if (currentClinic.openingHours) {
-        const match = currentClinic.openingHours.match(/(\d{2}:\d{2})-(\d{2}:\d{2})/);
-        if (match) {
-          setOpenTime(match[1]);
-          setCloseTime(match[2]);
-        }
-        // Parse selected days from openingHours string
         const hoursStr = currentClinic.openingHours;
+        const newDayHours = { ...dayHours };
 
-        // Check for range formats first
-        const isSegSex = hoursStr.includes('Seg-Sex'); // Mon-Fri
-        const isSegSab = hoursStr.includes('Seg-Sáb') || hoursStr.includes('Seg-Sab'); // Mon-Sat
-        const isTodos = hoursStr.includes('Todos');
+        // Try to parse new format: "Seg: 08:00-18:00, Ter: 09:00-17:00, ..."
+        const dayPatterns = hoursStr.match(/([A-Za-zá]+):\s*(\d{2}:\d{2})-(\d{2}:\d{2})/g);
+        if (dayPatterns && dayPatterns.length > 0) {
+          dayPatterns.forEach((pattern) => {
+            const match = pattern.match(/([A-Za-zá]+):\s*(\d{2}:\d{2})-(\d{2}:\d{2})/);
+            if (match) {
+              const dayName = match[1].toLowerCase();
+              const dayKey = DAYS.find(d => d.label.toLowerCase() === dayName || d.full.toLowerCase() === dayName)?.key;
+              if (dayKey) {
+                newDayHours[dayKey] = { enabled: true, open: match[2], close: match[3] };
+              }
+            }
+          });
+        } else {
+          // Fallback: parse old format with single time for all days
+          const match = hoursStr.match(/(\d{2}:\d{2})-(\d{2}:\d{2})/);
+          const defaultOpen = match ? match[1] : '08:00';
+          const defaultClose = match ? match[2] : '18:00';
 
-        const newDays = {
-          seg: hoursStr.includes('Seg') || isTodos,
-          ter: hoursStr.includes('Ter') || isSegSex || isSegSab || isTodos,
-          qua: hoursStr.includes('Qua') || isSegSex || isSegSab || isTodos,
-          qui: hoursStr.includes('Qui') || isSegSex || isSegSab || isTodos,
-          sex: hoursStr.includes('Sex') || isSegSex || isSegSab || isTodos,
-          sab: hoursStr.includes('Sáb') || hoursStr.includes('Sab') || isSegSab || isTodos,
-          dom: hoursStr.includes('Dom') || isTodos,
-        };
-        setSelectedDays(newDays);
-        setHoursConfigured(true);
+          const isSegSex = hoursStr.includes('Seg-Sex');
+          const isSegSab = hoursStr.includes('Seg-Sáb') || hoursStr.includes('Seg-Sab');
+          const isTodos = hoursStr.includes('Todos');
+
+          if (hoursStr.includes('Seg') || isTodos) newDayHours.seg = { enabled: true, open: defaultOpen, close: defaultClose };
+          if (hoursStr.includes('Ter') || isSegSex || isSegSab || isTodos) newDayHours.ter = { enabled: true, open: defaultOpen, close: defaultClose };
+          if (hoursStr.includes('Qua') || isSegSex || isSegSab || isTodos) newDayHours.qua = { enabled: true, open: defaultOpen, close: defaultClose };
+          if (hoursStr.includes('Qui') || isSegSex || isSegSab || isTodos) newDayHours.qui = { enabled: true, open: defaultOpen, close: defaultClose };
+          if (hoursStr.includes('Sex') || isSegSex || isSegSab || isTodos) newDayHours.sex = { enabled: true, open: defaultOpen, close: defaultClose };
+          if (hoursStr.includes('Sáb') || hoursStr.includes('Sab') || isSegSab || isTodos) newDayHours.sab = { enabled: true, open: defaultOpen, close: defaultClose };
+          if (hoursStr.includes('Dom') || isTodos) newDayHours.dom = { enabled: true, open: defaultOpen, close: defaultClose };
+        }
+
+        setDayHours(newDayHours);
+        setHoursConfigured(Object.values(newDayHours).some(d => d.enabled));
       }
     }
   }, [currentClinic]);
@@ -185,33 +187,37 @@ export default function ClinicSettingsPage() {
     }
   };
 
-  const updateOpeningHours = (days: Record<DayKey, boolean>, open: string, close: string) => {
-    const daysStr = formatDaysString(days);
-    if (!daysStr) {
+  const updateOpeningHoursFromDayHours = (hours: Record<DayKey, { enabled: boolean; open: string; close: string }>) => {
+    const enabledDays = DAYS.filter(d => hours[d.key].enabled);
+    if (enabledDays.length === 0) {
       setFormData((prev) => ({ ...prev, openingHours: '' }));
       setHoursConfigured(false);
       return;
     }
-    const newOpeningHours = `${daysStr}: ${open}-${close}`;
-    setFormData((prev) => ({ ...prev, openingHours: newOpeningHours }));
+    // Format: "Seg: 08:00-18:00, Ter: 09:00-17:00, ..."
+    const hoursStr = enabledDays
+      .map(d => `${d.label}: ${hours[d.key].open}-${hours[d.key].close}`)
+      .join(', ');
+    setFormData((prev) => ({ ...prev, openingHours: hoursStr }));
     setHoursConfigured(true);
   };
 
-  const handleTimeChange = (type: 'open' | 'close', value: string) => {
-    const newOpen = type === 'open' ? value : openTime;
-    const newClose = type === 'close' ? value : closeTime;
-    if (type === 'open') {
-      setOpenTime(value);
-    } else {
-      setCloseTime(value);
-    }
-    updateOpeningHours(selectedDays, newOpen, newClose);
+  const handleDayToggle = (day: DayKey) => {
+    const newDayHours = {
+      ...dayHours,
+      [day]: { ...dayHours[day], enabled: !dayHours[day].enabled }
+    };
+    setDayHours(newDayHours);
+    updateOpeningHoursFromDayHours(newDayHours);
   };
 
-  const handleDayToggle = (day: DayKey) => {
-    const newDays = { ...selectedDays, [day]: !selectedDays[day] };
-    setSelectedDays(newDays);
-    updateOpeningHours(newDays, openTime, closeTime);
+  const handleDayTimeChange = (day: DayKey, type: 'open' | 'close', value: string) => {
+    const newDayHours = {
+      ...dayHours,
+      [day]: { ...dayHours[day], [type]: value }
+    };
+    setDayHours(newDayHours);
+    updateOpeningHoursFromDayHours(newDayHours);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -233,7 +239,7 @@ export default function ClinicSettingsPage() {
       const willHaveBasicInfo = !!(formData.name && formData.categories.length > 0);
       const willHaveContact = !!formData.phone;
       const willHaveLocation = !!(formData.address || addressData?.formatted);
-      const willHaveHours = hoursConfigured && Object.values(selectedDays).some(Boolean);
+      const willHaveHours = hoursConfigured && Object.values(dayHours).some(d => d.enabled);
 
       // If all tabs complete, redirect to payments page
       if (willHaveBasicInfo && willHaveContact && willHaveLocation && willHaveHours) {
@@ -248,7 +254,7 @@ export default function ClinicSettingsPage() {
   const hasBasicInfo = !!(formData.name && formData.categories.length > 0);
   const hasContact = !!(formData.phone);
   const hasLocation = !!(formData.address || addressData?.formatted || currentClinic?.addressData?.formatted);
-  const hasHours = hoursConfigured && Object.values(selectedDays).some(Boolean);
+  const hasHours = hoursConfigured && Object.values(dayHours).some(d => d.enabled);
 
   const completedTabs = [hasBasicInfo, hasContact, hasLocation, hasHours].filter(Boolean).length;
 
@@ -278,7 +284,7 @@ export default function ClinicSettingsPage() {
       {/* Main Content - Side by side layout on desktop */}
       <div className="flex flex-col lg:flex-row gap-4 lg:gap-6">
         {/* Business Profile Card */}
-        <Card className="flex-1 lg:max-w-2xl">
+        <Card className="flex-1">
         <CardHeader className="pb-3 sm:pb-6">
           <div className="flex items-center justify-between">
             <div>
@@ -321,7 +327,7 @@ export default function ClinicSettingsPage() {
 
           {/* Tab Content */}
           <form id="clinic-form" onSubmit={handleSubmit}>
-            <div className="h-[380px] sm:h-[400px] py-2 overflow-y-auto pr-1">
+            <div className="h-[520px] sm:h-[560px] py-2 overflow-y-auto pr-1">
               {/* Basic Info Tab */}
               {activeTab === 'basic' && (
                 <div className="space-y-4">
@@ -565,65 +571,59 @@ export default function ClinicSettingsPage() {
 
               {/* Hours Tab */}
               {activeTab === 'hours' && (
-                <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label className="text-sm">Horários por Dia</Label>
                   <div className="space-y-2">
-                    <Label>Dias de Funcionamento</Label>
-                    <div className="grid grid-cols-7 sm:flex sm:flex-wrap gap-1 sm:gap-2">
-                      {DAYS.map((day) => (
-                        <label
-                          key={day.key}
-                          className={`flex items-center justify-center px-2 sm:px-3 py-2 rounded-lg border cursor-pointer transition-colors ${
-                            selectedDays[day.key]
-                              ? 'bg-green-600 border-green-600 text-white'
-                              : 'bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100'
-                          }`}
-                        >
-                          <Checkbox
-                            checked={selectedDays[day.key]}
-                            onCheckedChange={() => handleDayToggle(day.key)}
-                            className="sr-only"
-                          />
-                          <span className="text-xs sm:text-sm font-medium">{day.label}</span>
-                        </label>
-                      ))}
-                    </div>
+                    {DAYS.map((day) => (
+                      <div
+                        key={day.key}
+                        className="flex items-center gap-4 p-3 border rounded-lg"
+                      >
+                        <div className="w-28">
+                          <div className="flex items-center gap-2">
+                            <Switch
+                              checked={dayHours[day.key].enabled}
+                              onCheckedChange={() => handleDayToggle(day.key)}
+                            />
+                            <Label className={`text-sm ${dayHours[day.key].enabled ? 'font-medium' : 'text-muted-foreground'}`}>
+                              {day.full}
+                            </Label>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 flex-1">
+                          <Select
+                            value={dayHours[day.key].open}
+                            onValueChange={(v) => handleDayTimeChange(day.key, 'open', v)}
+                            disabled={!dayHours[day.key].enabled}
+                          >
+                            <SelectTrigger className={cn("w-[90px] h-8 text-sm", !dayHours[day.key].enabled && "opacity-50")}>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {timeOptions.map((time) => (
+                                <SelectItem key={time} value={time}>{time}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <span className={cn("text-muted-foreground text-sm", !dayHours[day.key].enabled && "opacity-50")}>às</span>
+                          <Select
+                            value={dayHours[day.key].close}
+                            onValueChange={(v) => handleDayTimeChange(day.key, 'close', v)}
+                            disabled={!dayHours[day.key].enabled}
+                          >
+                            <SelectTrigger className={cn("w-[90px] h-8 text-sm", !dayHours[day.key].enabled && "opacity-50")}>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {timeOptions.map((time) => (
+                                <SelectItem key={time} value={time}>{time}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-
-                  <div className="space-y-2">
-                    <Label>Horário</Label>
-                    <div className="flex items-center gap-2 sm:gap-3">
-                      <Select value={openTime} onValueChange={(v) => handleTimeChange('open', v)}>
-                        <SelectTrigger className="w-[100px] sm:w-[120px]">
-                          <SelectValue placeholder="Abertura" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {timeOptions.map((time) => (
-                            <SelectItem key={time} value={time}>{time}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <span className="text-muted-foreground text-sm">até</span>
-                      <Select value={closeTime} onValueChange={(v) => handleTimeChange('close', v)}>
-                        <SelectTrigger className="w-[100px] sm:w-[120px]">
-                          <SelectValue placeholder="Fechamento" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {timeOptions.map((time) => (
-                            <SelectItem key={time} value={time}>{time}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-
-                  {formData.openingHours && (
-                    <div className="bg-gray-50 rounded-lg p-3">
-                      <p className="text-sm">
-                        <span className="text-muted-foreground">Resumo: </span>
-                        <span className="font-medium">{formData.openingHours}</span>
-                      </p>
-                    </div>
-                  )}
                 </div>
               )}
             </div>
@@ -631,7 +631,7 @@ export default function ClinicSettingsPage() {
           </form>
 
           {/* Save Button - Fixed position at bottom */}
-          <div className="absolute bottom-6 left-6 right-6 pt-4 bg-white">
+          <div className="absolute bottom-6 left-6 right-6 pt-4 bg-white flex justify-end">
             <Button type="submit" form="clinic-form" disabled={updateClinic.isPending} className="w-full sm:w-auto">
               {updateClinic.isPending ? (
                 <>
@@ -639,7 +639,10 @@ export default function ClinicSettingsPage() {
                   Salvando...
                 </>
               ) : (
-                t('common.save') || 'Salvar'
+                <>
+                  <Save className="h-4 w-4 mr-2" />
+                  {t('common.save') || 'Salvar'}
+                </>
               )}
             </Button>
           </div>
@@ -660,7 +663,7 @@ export default function ClinicSettingsPage() {
                     name: formData.name,
                     phone: formData.phone,
                     email: formData.email,
-                    openingHours: formData.openingHours || (formatDaysString(selectedDays) ? `${formatDaysString(selectedDays)}: ${openTime}-${closeTime}` : ''),
+                    openingHours: formData.openingHours,
                     address: formData.address,
                     addressData: addressData || currentClinic?.addressData,
                     greetingSummary: formData.greetingSummary,

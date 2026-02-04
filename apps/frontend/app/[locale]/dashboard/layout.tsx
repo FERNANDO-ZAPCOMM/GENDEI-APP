@@ -93,10 +93,11 @@ interface NavItem {
   children?: NavItem[];
   badge?: number;
   notificationKey?: keyof ReturnType<typeof useSidebarNotifications>; // Key to lookup notification
+  step?: number; // Onboarding step number (1-4)
 }
 
 // Gendei clinic navigation structure
-// Organized by: Overview → Agenda Section → Professionals Section → Patients Section → Configuration
+// Organized by: Overview → Agenda Section → Patients Section → Professionals Section → Configuration
 const navigation: NavItem[] = [
   { name: 'overview', href: '/dashboard', icon: LayoutDashboard },
   {
@@ -105,14 +106,6 @@ const navigation: NavItem[] = [
     icon: Calendar,
     children: [
       { name: 'agenda', href: '/dashboard/appointments', icon: Calendar, notificationKey: 'appointments' },
-    ],
-  },
-  {
-    name: 'professionalsSection',
-    href: '#',
-    icon: UserPlus,
-    children: [
-      { name: 'professionals', href: '/dashboard/professionals', icon: UserPlus, notificationKey: 'professionals' },
     ],
   },
   {
@@ -125,13 +118,21 @@ const navigation: NavItem[] = [
     ],
   },
   {
+    name: 'professionalsSection',
+    href: '#',
+    icon: UserPlus,
+    children: [
+      { name: 'professionals', href: '/dashboard/professionals', icon: UserPlus, notificationKey: 'professionals' },
+    ],
+  },
+  {
     name: 'configuration',
     href: '#',
     icon: Settings,
     children: [
-      { name: 'clinic', href: '/dashboard/clinic', icon: Stethoscope, notificationKey: 'clinic' },
-      { name: 'payments', href: '/dashboard/payments', icon: CreditCard, notificationKey: 'payments' },
-      { name: 'whatsapp', href: '/dashboard/whatsapp', icon: FaWhatsapp, notificationKey: 'whatsapp' },
+      { name: 'clinic', href: '/dashboard/clinic', icon: Stethoscope, notificationKey: 'clinic', step: 1 },
+      { name: 'payments', href: '/dashboard/payments', icon: CreditCard, notificationKey: 'payments', step: 2 },
+      { name: 'whatsapp', href: '/dashboard/whatsapp', icon: FaWhatsapp, notificationKey: 'whatsapp', step: 3 },
       { name: 'account', href: '/dashboard/account', icon: User },
     ],
   },
@@ -322,16 +323,52 @@ function NavigationItems({
             )}
             style={{ paddingLeft: `${level * 12 + 16}px` }}
           >
-            <div className="relative">
-              <Icon className="w-4 h-4" />
-              {/* Notification dot on icon */}
-              {notification && (
-                <span className="absolute -top-1 -right-1">
-                  <NotificationDot notification={notification} size="sm" />
-                </span>
-              )}
-            </div>
-            <span className="flex-1">{t(`dashboard.${item.name}`)}</span>
+            {/* Step number indicator for configuration items */}
+            {item.step ? (
+              <div className="relative">
+                {/* Check if this step is complete */}
+                {(() => {
+                  const isComplete = item.step < notifications.onboardingStep ||
+                    (item.step === 4 && notifications.onboardingComplete);
+                  const isCurrentStep = item.step === notifications.onboardingStep && !notifications.onboardingComplete;
+
+                  return (
+                    <>
+                      <div
+                        className={cn(
+                          'w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold',
+                          isComplete
+                            ? 'bg-green-500 text-white'
+                            : 'bg-gray-200 text-gray-600'
+                        )}
+                      >
+                        {item.step}
+                      </div>
+                      {/* Flashing dot on current step */}
+                      {isCurrentStep && (
+                        <span className="absolute -top-1 -right-1">
+                          <NotificationDot notification={{ type: 'onboarding', priority: 1 }} size="sm" />
+                        </span>
+                      )}
+                    </>
+                  );
+                })()}
+              </div>
+            ) : (
+              <div className="relative">
+                <Icon className="w-4 h-4" />
+                {/* Notification dot on icon */}
+                {notification && (
+                  <span className="absolute -top-1 -right-1">
+                    <NotificationDot notification={notification} size="sm" />
+                  </span>
+                )}
+              </div>
+            )}
+            <span className={cn(
+              'flex-1',
+              item.step && item.step < notifications.onboardingStep && 'text-green-700'
+            )}>{t(`dashboard.${item.name}`)}</span>
             {/* Show count badge for action notifications */}
             {notification?.count ? (
               <NotificationBadge notification={notification} />
@@ -466,7 +503,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         {/* Logo */}
         <div className="p-6">
           <span className="text-2xl text-black logo-font">Gendei</span>
-          <p className="text-sm text-muted-foreground mt-1">Painel da Clínica</p>
+          <p className="text-sm text-muted-foreground mt-1 truncate">{clinic?.name || 'Painel da Clínica'}</p>
         </div>
 
         {/* Navigation */}
