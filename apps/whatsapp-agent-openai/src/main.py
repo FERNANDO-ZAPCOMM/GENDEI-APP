@@ -224,10 +224,13 @@ async def get_ai_response(
                 clinic_info += "\nProfissionais:\n"
                 for p in professionals:
                     name = p.get('full_name') or p.get('name', '')
+                    # Handle both old (specialty) and new (specialties) format
+                    specialties = p.get('specialties', [])
                     specialty = p.get('specialty', '')
+                    specialty_display = ", ".join(specialties) if specialties else specialty
                     clinic_info += f"- {name}"
-                    if specialty:
-                        clinic_info += f" ({specialty})"
+                    if specialty_display:
+                        clinic_info += f" ({specialty_display})"
                     clinic_info += "\n"
 
             # Services
@@ -312,7 +315,8 @@ def load_clinic_context(clinic_id: str) -> Dict[str, Any]:
                     "id": p.id,
                     "name": p.name,
                     "full_name": getattr(p, 'full_name', p.name),
-                    "specialty": getattr(p, 'specialty', ''),
+                    "specialty": getattr(p, 'specialty', ''),  # Kept for backward compatibility
+                    "specialties": getattr(p, 'specialties', []),  # Multiple specialties
                 }
                 for p in professionals
             ]
@@ -995,18 +999,21 @@ async def send_initial_greeting(
         logger.info(f"👋 Sent appointment-aware greeting to {phone} (apt: {apt.id})")
 
     else:
-        # No upcoming appointments - personalized greeting with clinic context
+        # No upcoming appointments - HUMAN-LIKE simple text greeting (no buttons initially)
+        # Save state with timestamp for follow-up button logic
         if db:
             state = db.load_conversation_state(clinic_id, phone)
-            state["state"] = "awaiting_greeting_response"
+            state["state"] = "awaiting_initial_response"
             state["clinic_id"] = clinic_id
+            state["greeting_sent_at"] = datetime.now().isoformat()
+            state["buttons_sent"] = False
             db.save_conversation_state(clinic_id, phone, state)
 
         # Check workflow mode (default to 'booking' for backward compatibility)
         workflow_mode = getattr(clinic, 'workflow_mode', 'booking') if clinic else 'booking'
 
-        # Build personalized greeting with clinic context
-        greeting_message = f"👋 *Bem-vindo(a) a {clinic_name}!*\n\n"
+        # Build personalized greeting with clinic context (SIMPLE TEXT, no buttons)
+        greeting_message = f"👋 Bem-vindo(a) a *{clinic_name}*!\n\n"
 
         # Add greeting summary if available
         greeting_summary = getattr(clinic, 'greeting_summary', '') if clinic else ''
@@ -1017,46 +1024,105 @@ async def send_initial_greeting(
         if db:
             professionals = db.get_clinic_professionals(clinic_id)
             if professionals:
-                # Group by specialty
+                # Group by specialty (handles both old and new format)
                 specialties = {}
                 for p in professionals:
-                    spec = getattr(p, 'specialty', '') or 'Geral'
-                    if spec not in specialties:
-                        specialties[spec] = []
-                    specialties[spec].append(p.name)
+                    # Get all specialties for this professional
+                    prof_specialties = getattr(p, 'specialties', []) or []
+                    if not prof_specialties:
+                        # Fallback to old format
+                        prof_specialties = [getattr(p, 'specialty', '') or 'Geral']
+                    for spec in prof_specialties:
+                        spec = spec or 'Geral'
+                        if spec not in specialties:
+                            specialties[spec] = []
+                        if p.name not in specialties[spec]:
+                            specialties[spec].append(p.name)
 
                 if len(specialties) > 0:
                     # Show specialties available
                     spec_list = list(specialties.keys())[:3]  # Max 3 specialties
                     if len(spec_list) == 1:
-                        greeting_message += f"👨‍⚕️ Atendemos em *{spec_list[0]}*\n\n"
+                        greeting_message += f"🏥 Atendemos em *{spec_list[0]}*\n\n"
                     else:
-                        greeting_message += f"👨‍⚕️ Especialidades: *{', '.join(spec_list)}*\n\n"
+                        greeting_message += f"🏥 Atendemos em *{', '.join(spec_list)}*\n\n"
 
         greeting_message += "Como posso ajudar?"
 
+        # Send simple text message (NO buttons) - like a real human agent
+        await send_whatsapp_message(
+            phone_number_id, phone,
+            greeting_message,
+            access_token
+        )
+        logger.info(f"👋 Sent human-like text greeting to {phone} (mode: {workflow_mode}) - waiting for natural response")
+
+        # Schedule follow-up buttons if no response in 60 seconds
+        asyncio.create_task(
+            send_followup_buttons_if_no_response(
+                clinic_id, phone, phone_number_id, access_token,
+                workflow_mode=workflow_mode, delay_seconds=60
+            )
+        )
+
+
+async def send_followup_buttons_if_no_response(
+    clinic_id: str,
+    phone: str,
+    phone_number_id: str,
+    access_token: str,
+    workflow_mode: str = 'booking',
+    delay_seconds: int = 60
+) -> None:
+    """
+    After delay, check if user responded. If not, send buttons as a gentle nudge.
+    This makes the bot feel more human - waits for natural response first.
+    """
+    await asyncio.sleep(delay_seconds)
+
+    if not db:
+        return
+
+    # Check current state
+    state = db.load_conversation_state(clinic_id, phone)
+    current_state = state.get("state", "")
+    buttons_sent = state.get("buttons_sent", False)
+
+    # Only send follow-up if:
+    # 1. Still in awaiting_initial_response state (user hasn't responded)
+    # 2. Buttons haven't been sent yet
+    if current_state == "awaiting_initial_response" and not buttons_sent:
+        logger.info(f"⏰ No response from {phone} after {delay_seconds}s - sending follow-up buttons")
+
+        # Mark buttons as sent to avoid duplicate sends
+        state["buttons_sent"] = True
+        state["state"] = "awaiting_greeting_response"
+        db.save_conversation_state(clinic_id, phone, state)
+
         # Configure buttons based on workflow mode
         if workflow_mode == 'info':
-            # Info mode: no scheduling, only information
             buttons = [
                 {"id": "greeting_nao", "title": "Informações"},
                 {"id": "greeting_contato", "title": "Falar com atendente"},
             ]
-            logger.info(f"📋 Clinic {clinic_id} is in INFO mode - no scheduling")
         else:
-            # Booking mode: full scheduling capability
             buttons = [
                 {"id": "greeting_sim", "title": "Agendar"},
                 {"id": "greeting_nao", "title": "Dúvida"},
             ]
 
+        # Send gentle follow-up with buttons
+        followup_message = "Posso te ajudar com algo? 🙂"
+
         await send_whatsapp_buttons(
             phone_number_id, phone,
-            greeting_message,
+            followup_message,
             buttons,
             access_token
         )
-        logger.info(f"👋 Sent standard greeting to {phone} (mode: {workflow_mode})")
+        logger.info(f"📤 Sent follow-up buttons to {phone}")
+    else:
+        logger.info(f"✅ User {phone} already responded or moved to state: {current_state} - skipping follow-up buttons")
 
 
 async def handle_greeting_response_duvida(
@@ -1098,9 +1164,14 @@ async def handle_greeting_response_duvida(
                 info_parts.append("👨‍⚕️ *Nossa equipe:*")
                 for p in professionals[:5]:  # Max 5 professionals
                     name = p.name
-                    specialty = getattr(p, 'specialty', '')
-                    if specialty:
-                        info_parts.append(f"• {name} - {specialty}")
+                    # Handle both old and new specialties format
+                    specialties = getattr(p, 'specialties', []) or []
+                    if specialties:
+                        specialty_display = ", ".join(specialties)
+                    else:
+                        specialty_display = getattr(p, 'specialty', '')
+                    if specialty_display:
+                        info_parts.append(f"• {name} - {specialty_display}")
                     else:
                         info_parts.append(f"• {name}")
 
@@ -1690,7 +1761,9 @@ async def handle_scheduling_intent(
         # Build especialidades list (each professional = one specialty option)
         especialidades = []
         for prof in professionals:
-            specialty = getattr(prof, 'specialty', '') or ''
+            # Use primary (first) specialty for display, or fallback to old format
+            specialties = getattr(prof, 'specialties', []) or []
+            specialty = specialties[0] if specialties else (getattr(prof, 'specialty', '') or '')
             specialty_name = CLINICA_MEDICA_SPECIALTIES.get(specialty, specialty) if specialty else "Especialista"
             prof_name = (prof.full_name or prof.name or "")[:72]
             especialidades.append({
@@ -1747,12 +1820,17 @@ async def handle_scheduling_intent(
         )
         return
 
+    # Helper to get specialty display for a professional
+    def get_prof_specialty_display(p):
+        specialties = getattr(p, 'specialties', []) or []
+        return ", ".join(specialties) if specialties else getattr(p, 'specialty', '')
+
     # If only one professional, show time slots directly with buttons
     if len(professionals) == 1:
         prof = professionals[0]
         await show_professional_slots(
             clinic_id, phone, prof.id, prof.full_name or prof.name,
-            getattr(prof, 'specialty', ''),
+            get_prof_specialty_display(prof),
             phone_number_id, access_token
         )
     elif len(professionals) <= 3:
@@ -1762,7 +1840,7 @@ async def handle_scheduling_intent(
             for p in professionals[:3]
         ]
         # Save state
-        prof_map = {f"prof_{p.id}": {"id": p.id, "name": p.full_name or p.name, "specialty": getattr(p, 'specialty', '')} for p in professionals}
+        prof_map = {f"prof_{p.id}": {"id": p.id, "name": p.full_name or p.name, "specialty": get_prof_specialty_display(p)} for p in professionals}
         new_state = {
             "state": "selecting_professional",
             "clinic_id": clinic_id,
@@ -1783,14 +1861,14 @@ async def handle_scheduling_intent(
             {
                 "id": f"prof_{p.id}",
                 "title": (p.full_name or p.name)[:24],
-                "description": getattr(p, 'specialty', '')[:72] or "Profissional"
+                "description": get_prof_specialty_display(p)[:72] or "Profissional"
             }
             for p in professionals[:10]
         ]
         sections = [{"title": "Profissionais", "rows": rows}]
 
         # Save state
-        prof_map = {f"prof_{p.id}": {"id": p.id, "name": p.full_name or p.name, "specialty": getattr(p, 'specialty', '')} for p in professionals}
+        prof_map = {f"prof_{p.id}": {"id": p.id, "name": p.full_name or p.name, "specialty": get_prof_specialty_display(p)} for p in professionals}
         new_state = {
             "state": "selecting_professional",
             "clinic_id": clinic_id,
@@ -2002,7 +2080,7 @@ async def process_message(
         )
 
         # If it's a greeting and user is in a mid-flow state, reset and greet
-        if is_greeting and current_state not in (None, "new", "novo", "", "awaiting_greeting_response", "general_chat"):
+        if is_greeting and current_state not in (None, "new", "novo", "", "awaiting_greeting_response", "awaiting_initial_response", "general_chat"):
             logger.info(f"👋 Greeting detected while in state '{current_state}', resetting conversation for {phone}")
             # Clear the old state
             if db:
@@ -2153,6 +2231,43 @@ async def process_message(
         )
         return
 
+    # Handle natural response after simple text greeting (more human-like flow)
+    if current_state == "awaiting_initial_response":
+        # User responded naturally to our text greeting - analyze their intent
+        scheduling_words = ["agendar", "marcar", "consulta", "horário", "horario", "atendimento", "quero", "preciso", "reservar"]
+        question_words = ["duvida", "dúvida", "pergunta", "endereço", "endereco", "horário de funcionamento", "informação", "informacao", "preço", "preco", "valor", "convênio", "convenio"]
+
+        # Clear the buttons_sent flag since user responded
+        if db:
+            state["buttons_sent"] = True  # Prevent follow-up buttons
+            db.save_conversation_state(clinic_id, phone, state)
+
+        # Check for booking intent
+        if any(word in msg_lower for word in scheduling_words):
+            logger.info(f"📅 User {phone} wants to schedule (natural response)")
+            await handle_scheduling_intent(
+                clinic_id, phone, message,
+                phone_number_id, access_token
+            )
+            return
+
+        # Check for question/info intent
+        if any(word in msg_lower for word in question_words):
+            logger.info(f"❓ User {phone} has a question (natural response)")
+            # Update state and let AI handle it
+            if db:
+                state["state"] = "general_chat"
+                db.save_conversation_state(clinic_id, phone, state)
+            # Continue to AI chat below (don't return)
+
+        else:
+            # Unclear intent - let AI analyze and respond naturally
+            logger.info(f"🤔 User {phone} - unclear intent, letting AI analyze: {message[:50]}...")
+            if db:
+                state["state"] = "general_chat"
+                db.save_conversation_state(clinic_id, phone, state)
+            # Continue to AI chat below (don't return)
+
     # Handle user waiting for greeting response who types text instead of clicking button
     if current_state == "awaiting_greeting_response":
         # Check if they want to schedule based on text
@@ -2174,11 +2289,12 @@ async def process_message(
             )
             return
 
-        # If unclear response, re-send the greeting buttons
-        await send_initial_greeting(
-            clinic_id, phone, phone_number_id, access_token
-        )
-        return
+        # If unclear response, let AI handle it naturally instead of re-sending buttons
+        logger.info(f"🤔 User {phone} - unclear response after buttons, letting AI handle")
+        if db:
+            state["state"] = "general_chat"
+            db.save_conversation_state(clinic_id, phone, state)
+        # Continue to AI chat below (don't return)
 
     # Handle general chat state - user previously declined but might want to schedule now
     if current_state == "general_chat":

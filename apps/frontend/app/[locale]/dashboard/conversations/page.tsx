@@ -9,7 +9,7 @@ import { toast } from 'sonner';
 
 import { useClinic } from '@/hooks/use-clinic';
 import { useProfessionals } from '@/hooks/use-professionals';
-import { getSpecialtyName } from '@/lib/specialties';
+import { getSpecialtyNames, getProfessionalSpecialties } from '@/lib/specialties';
 import { getConversationStateColor } from '@/lib/meta-utils';
 import {
   useConversations,
@@ -418,9 +418,9 @@ function ConversationsPageContent() {
                     </Avatar>
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-sm truncate">{professional.name}</p>
-                      {professional.specialty && (
+                      {getProfessionalSpecialties(professional).length > 0 && (
                         <p className="text-xs text-muted-foreground truncate">
-                          {getSpecialtyName(professional.specialty)}
+                          {getSpecialtyNames(getProfessionalSpecialties(professional))}
                         </p>
                       )}
                     </div>

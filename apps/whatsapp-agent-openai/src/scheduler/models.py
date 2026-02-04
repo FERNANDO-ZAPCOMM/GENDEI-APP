@@ -137,7 +137,8 @@ class Professional:
     id: str
     clinic_id: str
     name: str
-    specialty: str                  # e.g., "dermatologia", "pediatria"
+    specialty: str = ""             # Deprecated: use specialties instead (kept for backward compatibility)
+    specialties: List[str] = field(default_factory=list)  # Multiple specialties (e.g., ["dermatologia", "pediatria"])
     title: str = ""                 # e.g., "Dr.", "Dra."
     crm: Optional[str] = None       # Medical license number
     email: Optional[str] = None
@@ -162,7 +163,8 @@ class Professional:
             "id": self.id,
             "clinicId": self.clinic_id,
             "name": self.name,
-            "specialty": self.specialty,
+            "specialty": self.specialty,  # Keep for backward compatibility
+            "specialties": self.specialties,
             "title": self.title,
             "crm": self.crm,
             "email": self.email,
@@ -177,11 +179,18 @@ class Professional:
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "Professional":
+        # Handle both old (specialty) and new (specialties) format
+        specialties = data.get("specialties", [])
+        specialty = data.get("specialty", "")
+        # If specialties array is empty but specialty exists, use it
+        if not specialties and specialty:
+            specialties = [specialty]
         return cls(
             id=data.get("id", ""),
             clinic_id=data.get("clinicId", ""),
             name=data.get("name", ""),
-            specialty=data.get("specialty", ""),
+            specialty=specialty,  # Keep for backward compatibility
+            specialties=specialties,
             title=data.get("title", ""),
             crm=data.get("crm"),
             email=data.get("email"),
@@ -199,6 +208,18 @@ class Professional:
         if self.title:
             return f"{self.title} {self.name}"
         return self.name
+
+    def get_specialties_display(self, separator: str = ", ") -> str:
+        """Returns a display string of all specialties"""
+        if self.specialties:
+            return separator.join(self.specialties)
+        return self.specialty or ""
+
+    def get_primary_specialty(self) -> str:
+        """Returns the primary (first) specialty"""
+        if self.specialties:
+            return self.specialties[0]
+        return self.specialty or ""
 
 
 @dataclass

@@ -130,6 +130,24 @@ export function getSpecialtyName(id: string): string {
   return specialty?.name || id;
 }
 
+// Helper function to get multiple specialty names joined
+export function getSpecialtyNames(ids: string[] | undefined, separator: string = ', '): string {
+  if (!ids || ids.length === 0) return '';
+  return ids.map(id => getSpecialtyName(id)).join(separator);
+}
+
+// Helper to get specialties from a professional (handles both old and new format)
+export function getProfessionalSpecialties(professional: { specialty?: string; specialties?: string[] }): string[] {
+  // Prefer new specialties array, fallback to old specialty field
+  if (professional.specialties && professional.specialties.length > 0) {
+    return professional.specialties;
+  }
+  if (professional.specialty) {
+    return [professional.specialty];
+  }
+  return [];
+}
+
 // Filter specialties by allowed IDs (for clinic category filtering)
 export function filterSpecialties(allowedIds: string[]): Specialty[] {
   // If no filter, return all specialties

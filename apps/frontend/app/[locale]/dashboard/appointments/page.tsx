@@ -41,7 +41,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { CalendarGrid } from '@/components/calendar/CalendarGrid';
-import { getSpecialtyName } from '@/lib/specialties';
+import { getSpecialtyNames, getProfessionalSpecialties } from '@/lib/specialties';
 import type { Appointment, AppointmentStatus } from '@/lib/clinic-types';
 
 const statusConfig: Record<AppointmentStatus, { label: string; color: string; icon: any }> = {
@@ -344,9 +344,9 @@ export default function AppointmentsPage() {
                     </Avatar>
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-sm truncate">{professional.name}</p>
-                      {professional.specialty && (
+                      {getProfessionalSpecialties(professional).length > 0 && (
                         <p className="text-xs text-muted-foreground truncate">
-                          {getSpecialtyName(professional.specialty)}
+                          {getSpecialtyNames(getProfessionalSpecialties(professional))}
                         </p>
                       )}
                       {(professional.consultationPrice ?? 0) > 0 && (

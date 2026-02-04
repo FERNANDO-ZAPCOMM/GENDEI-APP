@@ -353,8 +353,10 @@ export default function ClinicSettingsPage() {
 
       {/* Main Content - Side by side layout on desktop */}
       <div className="flex flex-col lg:flex-row gap-4 lg:gap-6">
-        {/* Business Profile Card */}
-        <Card className="flex-1">
+        {/* Left Side - Settings */}
+        <div className="flex-1 space-y-6">
+          {/* Business Profile Card */}
+          <Card>
         <CardHeader className="pb-3 sm:pb-6">
           <div className="flex items-center justify-between">
             <div>
@@ -366,7 +368,7 @@ export default function ClinicSettingsPage() {
             </div>
           </div>
         </CardHeader>
-        <CardContent className="space-y-4 pt-0 relative pb-24">
+        <CardContent className="space-y-4 pt-0">
           {/* Horizontal Tabs - scrollable on mobile */}
           <div className="flex flex-row gap-1 pb-2 border-b overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
             {tabs.map((tab) => (
@@ -811,10 +813,12 @@ export default function ClinicSettingsPage() {
             </div>
 
           </form>
+        </CardContent>
+      </Card>
 
-          {/* Save Button - Fixed position at bottom */}
-          <div className="absolute bottom-6 left-6 right-6 pt-4 bg-white flex justify-end">
-            <Button type="submit" form="clinic-form" disabled={updateClinic.isPending} className="w-full sm:w-auto">
+          {/* Save Button */}
+          <div className="flex justify-end">
+            <Button type="submit" form="clinic-form" disabled={updateClinic.isPending}>
               {updateClinic.isPending ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -828,8 +832,7 @@ export default function ClinicSettingsPage() {
               )}
             </Button>
           </div>
-        </CardContent>
-      </Card>
+        </div>
 
         {/* WhatsApp Preview - Hidden on mobile, sticky on desktop */}
         <div className="hidden lg:block w-[360px] flex-shrink-0">

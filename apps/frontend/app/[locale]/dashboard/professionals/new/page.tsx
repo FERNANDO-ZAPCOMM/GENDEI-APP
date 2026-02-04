@@ -54,6 +54,15 @@ const isValidEmail = (email: string): boolean => {
   return emailRegex.test(email);
 };
 
+// Name formatting helper - capitalize first letter of each word
+const formatName = (value: string): string => {
+  return value
+    .toLowerCase()
+    .split(' ')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+};
+
 // Service type for the professional
 interface ProfessionalService {
   id: string;
@@ -75,7 +84,7 @@ const defaultWorkingHours: WorkingHoursBackend = {
 
 interface ProfessionalFormData {
   name: string;
-  specialty: string;
+  specialties: string[]; // Multiple specialties supported
   email: string;
   phone: string;
   appointmentDuration: number;
@@ -102,7 +111,7 @@ export default function NewProfessionalPage() {
 
   const [formData, setFormData] = useState<ProfessionalFormData>({
     name: '',
-    specialty: '',
+    specialties: [], // Multiple specialties
     email: '',
     phone: '',
     appointmentDuration: 30,
@@ -226,8 +235,8 @@ export default function NewProfessionalPage() {
       toast.error('Nome é obrigatório');
       return;
     }
-    if (!formData.specialty) {
-      toast.error('Especialidade é obrigatória');
+    if (!formData.specialties || formData.specialties.length === 0) {
+      toast.error('Selecione pelo menos uma especialidade');
       return;
     }
     if (!formData.email.trim()) {
@@ -285,10 +294,13 @@ export default function NewProfessionalPage() {
   };
 
   // Check completion status for each tab
-  const hasPersonalInfo = !!(formData.name && formData.specialty);
+  const hasPersonalInfo = !!(formData.name && formData.specialties.length > 0);
   const hasContact = !!(formData.email && formData.phone && !emailError);
   const hasServices = !!(formData.consultationPrice > 0 && formData.appointmentDuration > 0);
   const hasHours = Object.keys(formData.workingHours).length > 0;
+
+  // Check if all mandatory info is complete (required to be active)
+  const canBeActive = hasPersonalInfo && hasContact && hasServices && hasHours;
 
   const completedTabs = [hasPersonalInfo, hasContact, hasServices, hasHours].filter(Boolean).length;
 
@@ -321,8 +333,8 @@ export default function NewProfessionalPage() {
       </div>
 
       {/* Main Card with Tabs */}
-      <Card className="h-[calc(100vh-160px)] flex flex-col">
-        <CardHeader className="pb-3 sm:pb-6 flex-shrink-0">
+      <Card>
+        <CardHeader className="pb-3 sm:pb-6">
           <div className="flex items-center justify-between">
             <div>
               <CardTitle className="text-base sm:text-lg">Dados do Profissional</CardTitle>
@@ -333,20 +345,20 @@ export default function NewProfessionalPage() {
             </div>
           </div>
         </CardHeader>
-        <CardContent className="flex-1 flex flex-col pt-0 relative pb-20 overflow-hidden">
+        <CardContent className="space-y-4 pt-0">
           {/* Horizontal Tabs */}
-          <div className="flex flex-row gap-1 pb-2 border-b overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 flex-shrink-0">
+          <div className="flex flex-row gap-1 pb-2 border-b overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
             {tabs.map((tab) => (
               <button
                 key={tab.key}
                 type="button"
                 onClick={() => setActiveTab(tab.key)}
                 className={cn(
-                  'flex-shrink-0 sm:flex-1 min-w-0 flex items-center justify-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors whitespace-nowrap',
+                  'flex-shrink-0 sm:flex-1 min-w-0 flex items-center justify-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors whitespace-nowrap relative',
                   activeTab === tab.key
                     ? tab.completed
                       ? 'border-2 border-green-500 bg-green-50 text-green-700'
-                      : 'border-2 border-gray-400 bg-gray-100 text-gray-700'
+                      : 'border-2 border-amber-400 bg-amber-50 text-amber-700'
                     : tab.completed
                       ? 'border border-green-200 bg-green-50 text-green-600 hover:bg-green-100'
                       : 'border border-gray-200 bg-gray-50 text-gray-500 hover:bg-gray-100'
@@ -358,12 +370,18 @@ export default function NewProfessionalPage() {
                   <span className="flex-shrink-0">{tab.icon}</span>
                 )}
                 <span className="hidden sm:inline truncate">{tab.label}</span>
+                {!tab.completed && activeTab !== tab.key && (
+                  <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
+                  </span>
+                )}
               </button>
             ))}
           </div>
 
           {/* Tab Content */}
-          <div className="flex-1 py-2 overflow-y-auto pr-1">
+          <div className="h-[520px] sm:h-[560px] py-2 overflow-y-auto pr-1">
             {/* Personal Info Tab */}
             {activeTab === 'personal' && (
               <div className="space-y-4">
@@ -409,32 +427,49 @@ export default function NewProfessionalPage() {
                       <Input
                         id="name"
                         value={formData.name}
-                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                        onChange={(e) => setFormData({ ...formData, name: formatName(e.target.value) })}
                         placeholder="Nome do profissional"
                         disabled={isSaving}
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="specialty">Especialidade <span className="text-red-500">*</span></Label>
-                      <Select
-                        value={formData.specialty}
-                        onValueChange={(value) => setFormData({ ...formData, specialty: value })}
-                        disabled={isSaving}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione a especialidade" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {availableSpecialties.map((specialty) => (
-                            <SelectItem key={specialty.id} value={specialty.id}>
+                      <Label>Especialidades <span className="text-red-500">*</span></Label>
+                      <div className="flex flex-wrap gap-2">
+                        {availableSpecialties.map((specialty) => {
+                          const isSelected = formData.specialties.includes(specialty.id);
+                          return (
+                            <button
+                              key={specialty.id}
+                              type="button"
+                              onClick={() => {
+                                if (isSelected) {
+                                  setFormData({
+                                    ...formData,
+                                    specialties: formData.specialties.filter(s => s !== specialty.id)
+                                  });
+                                } else {
+                                  setFormData({
+                                    ...formData,
+                                    specialties: [...formData.specialties, specialty.id]
+                                  });
+                                }
+                              }}
+                              disabled={isSaving}
+                              className={cn(
+                                "px-3 py-1.5 text-sm rounded-full border transition-colors",
+                                isSelected
+                                  ? "bg-black text-white border-black"
+                                  : "bg-white text-gray-700 border-gray-200 hover:border-gray-400"
+                              )}
+                            >
                               {specialty.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      {formData.specialty && (
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {formData.specialties.length === 0 && (
                         <p className="text-xs text-muted-foreground">
-                          {availableSpecialties.find((s) => s.id === formData.specialty)?.description}
+                          Selecione pelo menos uma especialidade
                         </p>
                       )}
                     </div>
@@ -450,7 +485,7 @@ export default function NewProfessionalPage() {
                     onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
                     placeholder="Breve descrição, formação, experiência..."
                     disabled={isSaving}
-                    rows={3}
+                    rows={5}
                     className="resize-none"
                   />
                   <p className="text-xs text-muted-foreground">
@@ -459,17 +494,36 @@ export default function NewProfessionalPage() {
                 </div>
 
                 {/* Active Status */}
-                <div className="flex items-center justify-between p-4 border rounded-lg">
+                <div className={cn(
+                  "flex items-center justify-between p-4 border rounded-lg",
+                  !canBeActive && "border-amber-200 bg-amber-50/50"
+                )}>
                   <div>
-                    <Label className="font-medium">Profissional ativo</Label>
+                    <div className="flex items-center gap-2">
+                      <Label className="font-medium">Profissional ativo</Label>
+                      {!canBeActive && (
+                        <span className="relative flex h-2 w-2">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                        </span>
+                      )}
+                    </div>
                     <p className="text-sm text-muted-foreground">
-                      Disponível para agendamentos
+                      {canBeActive
+                        ? 'Disponível para agendamentos'
+                        : 'Complete todas as informações obrigatórias para ativar'}
                     </p>
                   </div>
                   <Switch
-                    checked={formData.active}
-                    onCheckedChange={(checked) => setFormData({ ...formData, active: checked })}
-                    disabled={isSaving}
+                    checked={formData.active && canBeActive}
+                    onCheckedChange={(checked) => {
+                      if (!canBeActive && checked) {
+                        toast.error('Complete todas as informações obrigatórias antes de ativar o profissional');
+                        return;
+                      }
+                      setFormData({ ...formData, active: checked });
+                    }}
+                    disabled={isSaving || !canBeActive}
                   />
                 </div>
               </div>
@@ -696,29 +750,28 @@ export default function NewProfessionalPage() {
               </div>
             )}
           </div>
-
-          {/* Save Button - Fixed position at bottom */}
-          <div className="absolute bottom-6 left-6 right-6 pt-4 bg-white flex justify-end">
-            <Button
-              onClick={handleSubmit}
-              disabled={isSaving || !formData.name || !formData.specialty || !formData.email || !formData.phone || !formData.consultationPrice}
-              className="w-full sm:w-auto"
-            >
-              {isSaving ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Salvando...
-                </>
-              ) : (
-                <>
-                  <Save className="w-4 h-4 mr-2" />
-                  Salvar
-                </>
-              )}
-            </Button>
-          </div>
         </CardContent>
       </Card>
+
+      {/* Save Button */}
+      <div className="flex justify-end">
+        <Button
+          onClick={handleSubmit}
+          disabled={isSaving || !formData.name || formData.specialties.length === 0 || !formData.email || !formData.phone || !formData.consultationPrice}
+        >
+          {isSaving ? (
+            <>
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              Salvando...
+            </>
+          ) : (
+            <>
+              <Save className="w-4 h-4 mr-2" />
+              Salvar
+            </>
+          )}
+        </Button>
+      </div>
     </div>
   );
 }

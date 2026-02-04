@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { getSpecialtyName } from '@/lib/specialties';
+import { getSpecialtyName, getSpecialtyNames, getProfessionalSpecialties } from '@/lib/specialties';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -84,12 +84,15 @@ export default function ProfessionalsPage() {
   // Filter professionals
   const filteredProfessionals = professionals.filter((p) => {
     const matchesStatus = statusFilter === 'all' || (statusFilter === 'active' ? p.active : !p.active);
-    const matchesSpecialty = selectedSpecialty === 'all' || p.specialty === selectedSpecialty;
+    const profSpecialties = getProfessionalSpecialties(p);
+    const matchesSpecialty = selectedSpecialty === 'all' || profSpecialties.includes(selectedSpecialty);
     return matchesStatus && matchesSpecialty;
   });
 
-  // Get unique specialties from professionals
-  const usedSpecialties = [...new Set(professionals.map(p => p.specialty).filter((s): s is string => Boolean(s)))];
+  // Get unique specialties from professionals (handles both old and new format)
+  const usedSpecialties = [...new Set(
+    professionals.flatMap(p => getProfessionalSpecialties(p))
+  )].filter(Boolean);
 
   // Stats
   const activeProfessionals = professionals.filter(p => p.active);
@@ -282,7 +285,7 @@ export default function ProfessionalsPage() {
                       <div className="flex-1 min-w-0">
                         <h3 className="font-medium">{professional.name}</h3>
                         <p className="text-sm text-muted-foreground">
-                          {professional.specialty ? getSpecialtyName(professional.specialty) : 'Sem especialidade'}
+                          {getSpecialtyNames(getProfessionalSpecialties(professional)) || 'Sem especialidade'}
                         </p>
                         <div className="flex items-center gap-3 mt-1.5 flex-wrap">
                           <Badge className={professional.active

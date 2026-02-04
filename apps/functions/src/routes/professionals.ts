@@ -95,6 +95,7 @@ router.post('/', verifyAuth, async (req: Request, res: Response) => {
     const {
       name,
       specialty,
+      specialties = [], // Multiple specialties support
       title = '',
       crm,
       email,
@@ -117,7 +118,8 @@ router.post('/', verifyAuth, async (req: Request, res: Response) => {
 
     const professionalData = {
       name,
-      specialty: specialty || '',
+      specialty: specialty || '', // Deprecated: kept for backward compatibility
+      specialties: specialties.length > 0 ? specialties : (specialty ? [specialty] : []), // Multiple specialties
       title,
       crm: crm || null,
       email: email || null,
@@ -178,7 +180,7 @@ router.put('/:professionalId', verifyAuth, async (req: Request, res: Response) =
     }
 
     const allowedFields = [
-      'name', 'specialty', 'title', 'crm', 'email', 'phone',
+      'name', 'specialty', 'specialties', 'title', 'crm', 'email', 'phone',
       'workingHours', 'appointmentDuration', 'bufferTime',
       'serviceIds', 'active', 'consultationPrice', 'photoUrl', 'bio'
     ];

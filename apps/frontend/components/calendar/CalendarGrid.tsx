@@ -1,10 +1,10 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { format, addDays, isSameDay, addMinutes, startOfWeek } from 'date-fns';
+import { format, addDays, isSameDay, addMinutes, startOfWeek, getDay, parseISO, isBefore, isAfter } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
-import { Clock, User, X, Plus, Phone, FileText, MoreHorizontal } from 'lucide-react';
+import { Clock, User, X, Plus, Phone, FileText, MoreHorizontal, Repeat } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -143,6 +143,9 @@ export function CalendarGrid({
     endTime: '',
     reason: '',
     professionalId: 'all',
+    repeatPattern: 'none' as 'none' | 'weekdays' | 'daily' | 'custom',
+    repeatDays: [1, 2, 3, 4, 5] as number[], // 0=Sunday, 1=Monday, etc.
+    repeatUntil: '',
   });
   const [hoveredSlot, setHoveredSlot] = useState<string | null>(null);
 
@@ -204,10 +207,15 @@ export function CalendarGrid({
     // Calculate default end time (1 hour later)
     const [hours, minutes] = time.split(':').map(Number);
     const endDate = addMinutes(new Date(2000, 0, 1, hours, minutes), 60);
+    // Default repeat until: 4 weeks from selected date
+    const defaultRepeatUntil = format(addDays(date, 28), 'yyyy-MM-dd');
     setBlockForm({
       endTime: format(endDate, 'HH:mm'),
       reason: '',
       professionalId: selectedProfessional !== 'all' ? selectedProfessional : 'all',
+      repeatPattern: 'none',
+      repeatDays: [1, 2, 3, 4, 5], // Weekdays by default
+      repeatUntil: defaultRepeatUntil,
     });
 
     setBlockDialogOpen(true);
@@ -217,8 +225,7 @@ export function CalendarGrid({
   const handleCreateBlock = () => {
     if (!selectedSlot || !onBlockTime) return;
 
-    onBlockTime({
-      date: selectedSlot.date,
+    const baseBlock = {
       startTime: selectedSlot.time,
       endTime: blockForm.endTime,
       reason: blockForm.reason || 'Bloqueado',
@@ -226,7 +233,37 @@ export function CalendarGrid({
       professionalName: blockForm.professionalId !== 'all'
         ? professionals.find(p => p.id === blockForm.professionalId)?.name
         : undefined,
-    });
+    };
+
+    // If no repeat, create single block
+    if (blockForm.repeatPattern === 'none') {
+      onBlockTime({
+        ...baseBlock,
+        date: selectedSlot.date,
+      });
+    } else {
+      // Create blocks for each day in the pattern
+      const startDate = parseISO(selectedSlot.date);
+      const endDate = parseISO(blockForm.repeatUntil);
+      let currentDate = startDate;
+
+      const daysToInclude = blockForm.repeatPattern === 'weekdays'
+        ? [1, 2, 3, 4, 5] // Monday to Friday
+        : blockForm.repeatPattern === 'daily'
+        ? [0, 1, 2, 3, 4, 5, 6] // All days
+        : blockForm.repeatDays; // Custom selection
+
+      while (!isAfter(currentDate, endDate)) {
+        const dayOfWeek = getDay(currentDate);
+        if (daysToInclude.includes(dayOfWeek)) {
+          onBlockTime({
+            ...baseBlock,
+            date: format(currentDate, 'yyyy-MM-dd'),
+          });
+        }
+        currentDate = addDays(currentDate, 1);
+      }
+    }
 
     setBlockDialogOpen(false);
     setSelectedSlot(null);
@@ -561,7 +598,7 @@ export function CalendarGrid({
 
         {/* Block Time Dialog */}
         <Dialog open={blockDialogOpen} onOpenChange={setBlockDialogOpen}>
-          <DialogContent className="sm:max-w-md">
+          <DialogContent className="sm:max-w-lg">
             <DialogHeader>
               <DialogTitle>Bloquear Horario</DialogTitle>
               <DialogDescription>
@@ -629,14 +666,101 @@ export function CalendarGrid({
                   </SelectContent>
                 </Select>
               </div>
+
+              {/* Repeat Options */}
+              <div className="space-y-2 pt-2 border-t">
+                <Label className="text-xs font-medium text-gray-500 flex items-center gap-1.5">
+                  <Repeat className="w-3.5 h-3.5" />
+                  Repetir
+                </Label>
+                <Select
+                  value={blockForm.repeatPattern}
+                  onValueChange={(v: 'none' | 'weekdays' | 'daily' | 'custom') => setBlockForm({ ...blockForm, repeatPattern: v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Não repetir</SelectItem>
+                    <SelectItem value="weekdays">Dias úteis (Seg-Sex)</SelectItem>
+                    <SelectItem value="daily">Todos os dias</SelectItem>
+                    <SelectItem value="custom">Personalizado</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Custom days selection */}
+              {blockForm.repeatPattern === 'custom' && (
+                <div className="space-y-2">
+                  <Label className="text-xs font-medium text-gray-500">Dias da semana</Label>
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      { value: 0, label: 'Dom' },
+                      { value: 1, label: 'Seg' },
+                      { value: 2, label: 'Ter' },
+                      { value: 3, label: 'Qua' },
+                      { value: 4, label: 'Qui' },
+                      { value: 5, label: 'Sex' },
+                      { value: 6, label: 'Sáb' },
+                    ].map((day) => (
+                      <label
+                        key={day.value}
+                        className={cn(
+                          'flex items-center justify-center w-10 h-10 rounded-full text-xs font-medium cursor-pointer transition-colors',
+                          blockForm.repeatDays.includes(day.value)
+                            ? 'bg-black text-white'
+                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        )}
+                      >
+                        <input
+                          type="checkbox"
+                          className="sr-only"
+                          checked={blockForm.repeatDays.includes(day.value)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setBlockForm({
+                                ...blockForm,
+                                repeatDays: [...blockForm.repeatDays, day.value].sort(),
+                              });
+                            } else {
+                              setBlockForm({
+                                ...blockForm,
+                                repeatDays: blockForm.repeatDays.filter((d) => d !== day.value),
+                              });
+                            }
+                          }}
+                        />
+                        {day.label}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* End date for repeat */}
+              {blockForm.repeatPattern !== 'none' && (
+                <div className="space-y-2">
+                  <Label className="text-xs font-medium text-gray-500">Repetir até</Label>
+                  <Input
+                    type="date"
+                    value={blockForm.repeatUntil}
+                    min={selectedSlot?.date}
+                    onChange={(e) => setBlockForm({ ...blockForm, repeatUntil: e.target.value })}
+                    className="font-mono"
+                  />
+                </div>
+              )}
             </div>
 
             <DialogFooter>
               <Button variant="outline" onClick={() => setBlockDialogOpen(false)}>
                 Cancelar
               </Button>
-              <Button onClick={handleCreateBlock} disabled={!blockForm.endTime}>
-                Bloquear Horario
+              <Button
+                onClick={handleCreateBlock}
+                disabled={!blockForm.endTime || (blockForm.repeatPattern === 'custom' && blockForm.repeatDays.length === 0)}
+              >
+                {blockForm.repeatPattern !== 'none' ? 'Bloquear Série' : 'Bloquear Horário'}
               </Button>
             </DialogFooter>
           </DialogContent>

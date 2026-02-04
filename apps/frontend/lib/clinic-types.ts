@@ -43,7 +43,8 @@ export interface Professional {
   id: string;
   clinicId: string;
   name: string;
-  specialty?: string;
+  specialty?: string; // Deprecated: use specialties instead (kept for backward compatibility)
+  specialties?: string[]; // Array of specialty IDs (e.g., ['clinico_geral', 'pediatria'])
   email?: string;
   phone?: string;
   photoUrl?: string;

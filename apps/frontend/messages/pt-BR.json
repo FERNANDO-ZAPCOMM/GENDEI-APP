@@ -925,7 +925,8 @@
       "engaged": "Engajado",
       "selecting_slot": "Selecionando horário",
       "scheduling": "Agendando",
-      "confirming": "Confirmando"
+      "confirming": "Confirmando",
+      "awaiting_greeting_response": "Aguardando resposta"
     },
     "handler": {
       "ai": "IA",

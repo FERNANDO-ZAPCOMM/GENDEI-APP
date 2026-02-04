@@ -10,7 +10,7 @@ import { toast } from 'sonner';
 import { useClinic } from '@/hooks/use-clinic';
 import { usePatients } from '@/hooks/use-patients';
 import { useProfessionals } from '@/hooks/use-professionals';
-import { getSpecialtyName } from '@/lib/specialties';
+import { getSpecialtyNames, getProfessionalSpecialties } from '@/lib/specialties';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -326,9 +326,9 @@ export default function PatientsPage() {
                     </Avatar>
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-sm truncate">{professional.name}</p>
-                      {professional.specialty && (
+                      {getProfessionalSpecialties(professional).length > 0 && (
                         <p className="text-xs text-muted-foreground truncate">
-                          {getSpecialtyName(professional.specialty)}
+                          {getSpecialtyNames(getProfessionalSpecialties(professional))}
                         </p>
                       )}
                     </div>
