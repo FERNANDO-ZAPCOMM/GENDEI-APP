@@ -10,6 +10,10 @@
       "title": "Escolha o Horário",
       "terminal": true,
       "data": {
+        "professional_info": {
+          "type": "string",
+          "__example__": "Dr. Ricardo Mendes - Dermatologia Clínica"
+        },
         "doctor_name": {
           "type": "string",
           "__example__": "Dr. Ricardo Mendes"
@@ -62,12 +66,8 @@
         "type": "SingleColumnLayout",
         "children": [
           {
-            "type": "TextHeading",
-            "text": "${data.specialty_name}"
-          },
-          {
-            "type": "TextSubheading",
-            "text": "${data.doctor_name}"
+            "type": "TextBody",
+            "text": "${data.professional_info}"
           },
           {
             "type": "Form",

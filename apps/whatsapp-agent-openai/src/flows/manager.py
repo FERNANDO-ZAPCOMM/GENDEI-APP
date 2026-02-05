@@ -360,6 +360,7 @@ async def send_booking_flow(
         True if successful
     """
     initial_data = {
+        "professional_info": f"{professional_name} - {specialty_name}",
         "professional_id": professional_id,
         "doctor_name": professional_name,
         "specialty_name": specialty_name,

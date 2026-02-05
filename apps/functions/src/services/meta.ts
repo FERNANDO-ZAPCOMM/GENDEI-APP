@@ -1054,6 +1054,7 @@ const BOOKING_FLOW_JSON = {
       terminal: true,
       title: 'Escolha o Horário',
       data: {
+        professional_info: { type: 'string', __example__: 'Dr. Ricardo Mendes - Dermatologia Clínica' },
         doctor_name: { type: 'string', __example__: 'Dr. Ricardo Mendes' },
         specialty_name: { type: 'string', __example__: 'Dermatologia Clínica' },
         professional_id: { type: 'string', __example__: 'prof_1' },
@@ -1081,8 +1082,7 @@ const BOOKING_FLOW_JSON = {
       layout: {
         type: 'SingleColumnLayout',
         children: [
-          { type: 'TextHeading', text: '${data.specialty_name}' },
-          { type: 'TextSubheading', text: '${data.doctor_name}' },
+          { type: 'TextBody', text: '${data.professional_info}' },
           {
             type: 'Form',
             name: 'booking_form',
@@ -1170,7 +1170,7 @@ const PATIENT_INFO_CONVENIO_FLOW_JSON = {
               {
                 type: 'RadioButtonsGroup',
                 name: 'especialidade',
-                label: 'ESCOLHA O PROFISSIONAL',
+                label: 'Profissional',
                 required: true,
                 'data-source': '${data.especialidades}',
               },
@@ -1349,7 +1349,7 @@ const PATIENT_INFO_PARTICULAR_FLOW_JSON = {
               {
                 type: 'RadioButtonsGroup',
                 name: 'especialidade',
-                label: 'ESCOLHA O PROFISSIONAL',
+                label: 'Profissional',
                 required: true,
                 'data-source': '${data.especialidades}',
               },

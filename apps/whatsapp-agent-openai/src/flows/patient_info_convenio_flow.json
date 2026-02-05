@@ -41,7 +41,7 @@
               {
                 "type": "RadioButtonsGroup",
                 "name": "especialidade",
-                "label": "ESCOLHA O PROFISSIONAL",
+                "label": "Profissional",
                 "required": true,
                 "data-source": "${data.especialidades}"
               },
