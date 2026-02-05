@@ -1629,5 +1629,89 @@
       "saveError": "Erro ao salvar o modo de atendimento"
     },
     "preview": "Simulação da conversa"
+  },
+  "clinicPage": {
+    "title": "Configurações da Clínica",
+    "description": "Configure as informações do seu negócio",
+    "tabs": {
+      "basic": "Informações",
+      "contact": "Contato",
+      "location": "Localização",
+      "hours": "Horários",
+      "service": "Atendimento"
+    },
+    "profileCard": {
+      "title": "Perfil do Negócio",
+      "description": "Complete as informações para aparecer corretamente"
+    },
+    "basicInfo": {
+      "nameLabel": "Nome do Negócio",
+      "namePlaceholder": "Ex: Clínica São Paulo",
+      "nameHelp": "Use o nome oficial como aparece na fachada",
+      "categoriesLabel": "Categorias",
+      "categoriesHint": "selecione uma ou mais",
+      "selectCategories": "Selecione as categorias",
+      "categoriesSelected": "{count} categoria(s) selecionada(s)",
+      "categoriesHelp": "Isso define quais especialidades estarão disponíveis para os profissionais",
+      "descriptionLabel": "Descrição",
+      "descriptionPlaceholder": "Descreva os serviços oferecidos...",
+      "summaryLabel": "Resumo para Saudação (IA)",
+      "generateButton": "Gerar",
+      "summaryHelp": "Clique em \"Gerar\" para criar um resumo automático da sua descrição para a saudação do bot."
+    },
+    "contact": {
+      "phoneLabel": "Telefone",
+      "emailLabel": "Email",
+      "emailPlaceholder": "contato@clinica.com",
+      "invalidEmail": "Email inválido",
+      "websiteLabel": "Website",
+      "websitePlaceholder": "https://www.suaclinica.com.br"
+    },
+    "location": {
+      "addressLabel": "Endereço Completo",
+      "addressPlaceholder": "Digite o endereço e selecione da lista",
+      "addressHelp": "Selecione da lista para obter as coordenadas automaticamente"
+    },
+    "hours": {
+      "title": "Horários por Dia",
+      "to": "às"
+    },
+    "days": {
+      "seg": "Seg",
+      "segFull": "Segunda",
+      "ter": "Ter",
+      "terFull": "Terça",
+      "qua": "Qua",
+      "quaFull": "Quarta",
+      "qui": "Qui",
+      "quiFull": "Quinta",
+      "sex": "Sex",
+      "sexFull": "Sexta",
+      "sab": "Sáb",
+      "sabFull": "Sábado",
+      "dom": "Dom",
+      "domFull": "Domingo"
+    },
+    "service": {
+      "description": "Selecione as formas de pagamento aceitas pela clínica",
+      "particularLabel": "Particular",
+      "particularDesc": "Aceita pagamento direto do paciente",
+      "insuranceLabel": "Convênio",
+      "insuranceDesc": "Aceita planos de saúde",
+      "acceptedInsurance": "Convênios Aceitos",
+      "insurancePlaceholder": "Nome do convênio",
+      "suggestions": "Sugestões"
+    },
+    "preview": {
+      "title": "Prévia do WhatsApp",
+      "description": "Como seu bot aparece para os pacientes"
+    },
+    "toasts": {
+      "fixErrors": "Corrija os erros antes de salvar",
+      "saveSuccess": "Configurações salvas com sucesso",
+      "saveError": "Erro ao salvar configurações",
+      "summaryGenerated": "Resumo gerado com sucesso!",
+      "summaryError": "Erro ao gerar resumo"
+    }
   }
 }

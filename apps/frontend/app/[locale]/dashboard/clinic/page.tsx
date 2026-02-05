@@ -33,7 +33,7 @@ import { clinicCategories, getCategoryName } from '@/lib/clinic-categories';
 import { X, ChevronDown, Check, CreditCard, Plus } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 
-// Days of the week
+// Days of the week - label/full are for parsing saved data, UI uses translations
 const DAYS = [
   { key: 'seg', label: 'Seg', full: 'Segunda' },
   { key: 'ter', label: 'Ter', full: 'Terça' },
@@ -211,7 +211,7 @@ export default function ClinicSettingsPage() {
   const handleEmailChange = (value: string) => {
     setFormData((prev) => ({ ...prev, email: value }));
     if (value && !isValidEmail(value)) {
-      setEmailError('Email inválido');
+      setEmailError('invalid');
     } else {
       setEmailError('');
     }
@@ -279,7 +279,7 @@ export default function ClinicSettingsPage() {
     e.preventDefault();
 
     if (emailError) {
-      toast.error('Corrija os erros antes de salvar');
+      toast.error(t('clinicPage.toasts.fixErrors'));
       return;
     }
 
@@ -300,7 +300,7 @@ export default function ClinicSettingsPage() {
         addressData,
         paymentSettings: mergedPaymentSettings,
       });
-      toast.success('Configurações salvas com sucesso');
+      toast.success(t('clinicPage.toasts.saveSuccess'));
 
       // Check if all tabs will be complete after this save
       const willHaveBasicInfo = !!(formData.name && formData.categories.length > 0);
@@ -314,7 +314,7 @@ export default function ClinicSettingsPage() {
         router.push(getNextStepUrl('clinic', locale));
       }
     } catch (error) {
-      toast.error('Erro ao salvar configurações');
+      toast.error(t('clinicPage.toasts.saveError'));
     }
   };
 
@@ -328,11 +328,11 @@ export default function ClinicSettingsPage() {
   const completedTabs = [hasBasicInfo, hasContact, hasLocation, hasHours, hasAtendimento].filter(Boolean).length;
 
   const tabs: { key: TabKey; icon: React.ReactNode; label: string; completed: boolean }[] = [
-    { key: 'basic', icon: <Info className="h-4 w-4" />, label: 'Informações', completed: hasBasicInfo },
-    { key: 'contact', icon: <Phone className="h-4 w-4" />, label: 'Contato', completed: hasContact },
-    { key: 'location', icon: <MapPin className="h-4 w-4" />, label: 'Localização', completed: hasLocation },
-    { key: 'hours', icon: <Clock className="h-4 w-4" />, label: 'Horários', completed: hasHours },
-    { key: 'atendimento', icon: <CreditCard className="h-4 w-4" />, label: 'Atendimento', completed: hasAtendimento },
+    { key: 'basic', icon: <Info className="h-4 w-4" />, label: t('clinicPage.tabs.basic'), completed: hasBasicInfo },
+    { key: 'contact', icon: <Phone className="h-4 w-4" />, label: t('clinicPage.tabs.contact'), completed: hasContact },
+    { key: 'location', icon: <MapPin className="h-4 w-4" />, label: t('clinicPage.tabs.location'), completed: hasLocation },
+    { key: 'hours', icon: <Clock className="h-4 w-4" />, label: t('clinicPage.tabs.hours'), completed: hasHours },
+    { key: 'atendimento', icon: <CreditCard className="h-4 w-4" />, label: t('clinicPage.tabs.service'), completed: hasAtendimento },
   ];
 
   if (isLoading) {
@@ -347,8 +347,8 @@ export default function ClinicSettingsPage() {
     <div className="space-y-4 sm:space-y-6 page-transition">
       {/* Header */}
       <div>
-        <h1 className="text-2xl sm:text-2xl font-semibold text-gray-900">Configurações da Clínica</h1>
-        <p className="text-sm sm:text-base text-gray-600 mt-1">Configure as informações do seu negócio</p>
+        <h1 className="text-2xl sm:text-2xl font-semibold text-gray-900">{t('clinicPage.title')}</h1>
+        <p className="text-sm sm:text-base text-gray-600 mt-1">{t('clinicPage.description')}</p>
       </div>
 
       {/* Main Content - Side by side layout on desktop */}
@@ -360,8 +360,8 @@ export default function ClinicSettingsPage() {
         <CardHeader className="pb-3 sm:pb-6">
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle className="text-base sm:text-lg">Perfil do Negócio</CardTitle>
-              <CardDescription className="text-xs sm:text-sm">Complete as informações para aparecer corretamente</CardDescription>
+              <CardTitle className="text-base sm:text-lg">{t('clinicPage.profileCard.title')}</CardTitle>
+              <CardDescription className="text-xs sm:text-sm">{t('clinicPage.profileCard.description')}</CardDescription>
             </div>
             <div className="text-xs text-muted-foreground">
               {completedTabs}/5
@@ -405,22 +405,22 @@ export default function ClinicSettingsPage() {
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="name">
-                      Nome do Negócio *
+                      {t('clinicPage.basicInfo.nameLabel')} *
                     </Label>
                     <Input
                       id="name"
                       value={formData.name}
                       onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      placeholder="Ex: Clínica São Paulo"
+                      placeholder={t('clinicPage.basicInfo.namePlaceholder')}
                     />
                     <p className="text-xs text-muted-foreground">
-                      Use o nome oficial como aparece na fachada
+                      {t('clinicPage.basicInfo.nameHelp')}
                     </p>
                   </div>
 
                   <div className="space-y-2">
                     <Label>
-                      Categorias * <span className="text-xs text-muted-foreground font-normal">(selecione uma ou mais)</span>
+                      {t('clinicPage.basicInfo.categoriesLabel')} * <span className="text-xs text-muted-foreground font-normal">({t('clinicPage.basicInfo.categoriesHint')})</span>
                     </Label>
                     {/* Multi-select dropdown */}
                     <Popover>
@@ -432,8 +432,8 @@ export default function ClinicSettingsPage() {
                           className="w-full justify-between font-normal rounded-none"
                         >
                           {formData.categories.length === 0
-                            ? 'Selecione as categorias'
-                            : `${formData.categories.length} categoria(s) selecionada(s)`}
+                            ? t('clinicPage.basicInfo.selectCategories')
+                            : t('clinicPage.basicInfo.categoriesSelected', { count: formData.categories.length })}
                           <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                         </Button>
                       </PopoverTrigger>
@@ -503,19 +503,19 @@ export default function ClinicSettingsPage() {
                       </div>
                     )}
                     <p className="text-xs text-muted-foreground">
-                      Isso define quais especialidades estarão disponíveis para os profissionais
+                      {t('clinicPage.basicInfo.categoriesHelp')}
                     </p>
                   </div>
 
                   <div className="space-y-2">
                     <Label htmlFor="description">
-                      Descrição
+                      {t('clinicPage.basicInfo.descriptionLabel')}
                     </Label>
                     <Textarea
                       id="description"
                       value={formData.description}
                       onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                      placeholder="Descreva os serviços oferecidos..."
+                      placeholder={t('clinicPage.basicInfo.descriptionPlaceholder')}
                       rows={3}
                       maxLength={750}
                       className="resize-none min-h-[80px] sm:min-h-[100px]"
@@ -530,7 +530,7 @@ export default function ClinicSettingsPage() {
                     <div className="space-y-2 p-3 bg-gray-50 rounded-lg border">
                       <div className="flex items-center justify-between">
                         <Label className="text-sm font-medium">
-                          Resumo para Saudação (IA)
+                          {t('clinicPage.basicInfo.summaryLabel')}
                         </Label>
                         <Button
                           type="button"
@@ -543,9 +543,9 @@ export default function ClinicSettingsPage() {
                                 clinicName: formData.name,
                               });
                               setFormData({ ...formData, greetingSummary: result.summary });
-                              toast.success('Resumo gerado com sucesso!');
+                              toast.success(t('clinicPage.toasts.summaryGenerated'));
                             } catch (error) {
-                              toast.error('Erro ao gerar resumo');
+                              toast.error(t('clinicPage.toasts.summaryError'));
                             }
                           }}
                           disabled={generateSummary.isPending}
@@ -555,7 +555,7 @@ export default function ClinicSettingsPage() {
                           ) : (
                             <Sparkles className="h-3 w-3 mr-1" />
                           )}
-                          Gerar
+                          {t('clinicPage.basicInfo.generateButton')}
                         </Button>
                       </div>
                       {formData.greetingSummary ? (
@@ -564,7 +564,7 @@ export default function ClinicSettingsPage() {
                         </div>
                       ) : (
                         <p className="text-xs text-muted-foreground">
-                          Clique em "Gerar" para criar um resumo automático da sua descrição para a saudação do bot.
+                          {t('clinicPage.basicInfo.summaryHelp')}
                         </p>
                       )}
                     </div>
@@ -577,7 +577,7 @@ export default function ClinicSettingsPage() {
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="phone">
-                      Telefone *
+                      {t('clinicPage.contact.phoneLabel')} *
                     </Label>
                     <Input
                       id="phone"
@@ -590,30 +590,30 @@ export default function ClinicSettingsPage() {
 
                   <div className="space-y-2">
                     <Label htmlFor="email">
-                      Email
+                      {t('clinicPage.contact.emailLabel')}
                     </Label>
                     <Input
                       id="email"
                       type="email"
                       value={formData.email}
                       onChange={(e) => handleEmailChange(e.target.value)}
-                      placeholder="contato@clinica.com"
+                      placeholder={t('clinicPage.contact.emailPlaceholder')}
                       className={emailError ? 'border-red-500' : ''}
                     />
                     {emailError && (
-                      <p className="text-xs text-red-500">{emailError}</p>
+                      <p className="text-xs text-red-500">{t('clinicPage.contact.invalidEmail')}</p>
                     )}
                   </div>
 
                   <div className="space-y-2">
                     <Label htmlFor="website">
-                      Website
+                      {t('clinicPage.contact.websiteLabel')}
                     </Label>
                     <Input
                       id="website"
                       value={formData.website}
                       onChange={(e) => setFormData({ ...formData, website: e.target.value })}
-                      placeholder="https://www.suaclinica.com.br"
+                      placeholder={t('clinicPage.contact.websitePlaceholder')}
                     />
                   </div>
                 </div>
@@ -624,16 +624,16 @@ export default function ClinicSettingsPage() {
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="address">
-                      Endereço Completo *
+                      {t('clinicPage.location.addressLabel')} *
                     </Label>
                     <AddressAutocomplete
                       value={formData.address}
                       addressData={addressData}
                       onChange={handleAddressChange}
-                      placeholder="Digite o endereço e selecione da lista"
+                      placeholder={t('clinicPage.location.addressPlaceholder')}
                     />
                     <p className="text-xs text-muted-foreground">
-                      Selecione da lista para obter as coordenadas automaticamente
+                      {t('clinicPage.location.addressHelp')}
                     </p>
                     {/* Show address details from local state OR from saved clinic data */}
                     <AddressDetails addressData={addressData || currentClinic?.addressData} />
@@ -644,7 +644,7 @@ export default function ClinicSettingsPage() {
               {/* Hours Tab */}
               {activeTab === 'hours' && (
                 <div className="space-y-2">
-                  <Label className="text-sm">Horários por Dia</Label>
+                  <Label className="text-sm">{t('clinicPage.hours.title')}</Label>
                   <div className="space-y-2">
                     {DAYS.map((day) => (
                       <div
@@ -658,7 +658,7 @@ export default function ClinicSettingsPage() {
                               onCheckedChange={() => handleDayToggle(day.key)}
                             />
                             <Label className={`text-sm ${dayHours[day.key].enabled ? 'font-medium' : 'text-muted-foreground'}`}>
-                              {day.full}
+                              {t(`clinicPage.days.${day.key}Full`)}
                             </Label>
                           </div>
                         </div>
@@ -677,7 +677,7 @@ export default function ClinicSettingsPage() {
                               ))}
                             </SelectContent>
                           </Select>
-                          <span className={cn("text-muted-foreground text-sm", !dayHours[day.key].enabled && "opacity-50")}>às</span>
+                          <span className={cn("text-muted-foreground text-sm", !dayHours[day.key].enabled && "opacity-50")}>{t('clinicPage.hours.to')}</span>
                           <Select
                             value={dayHours[day.key].close}
                             onValueChange={(v) => handleDayTimeChange(day.key, 'close', v)}
@@ -703,15 +703,15 @@ export default function ClinicSettingsPage() {
               {activeTab === 'atendimento' && (
                 <div className="space-y-4">
                   <p className="text-sm text-muted-foreground">
-                    Selecione as formas de pagamento aceitas pela clínica
+                    {t('clinicPage.service.description')}
                   </p>
 
                   {/* Particular */}
                   <div className="flex items-center justify-between p-4 border rounded-lg">
                     <div>
-                      <Label className="font-medium">Particular</Label>
+                      <Label className="font-medium">{t('clinicPage.service.particularLabel')}</Label>
                       <p className="text-sm text-muted-foreground">
-                        Aceita pagamento direto do paciente
+                        {t('clinicPage.service.particularDesc')}
                       </p>
                     </div>
                     <Switch
@@ -729,9 +729,9 @@ export default function ClinicSettingsPage() {
                   >
                     <div className="flex items-center justify-between">
                       <div>
-                        <Label className="font-medium">Convênio</Label>
+                        <Label className="font-medium">{t('clinicPage.service.insuranceLabel')}</Label>
                         <p className="text-sm text-muted-foreground">
-                          Aceita planos de saúde
+                          {t('clinicPage.service.insuranceDesc')}
                         </p>
                       </div>
                       <Switch
@@ -743,7 +743,7 @@ export default function ClinicSettingsPage() {
                     {/* Convenio List */}
                     {paymentSettings.acceptsConvenio && (
                       <div className="mt-4 pt-4 border-t space-y-4">
-                        <Label className="text-sm">Convênios Aceitos</Label>
+                        <Label className="text-sm">{t('clinicPage.service.acceptedInsurance')}</Label>
 
                         {/* Current convenios */}
                         {paymentSettings.convenioList.length > 0 && (
@@ -770,7 +770,7 @@ export default function ClinicSettingsPage() {
                         {/* Add convenio input */}
                         <div className="flex gap-2">
                           <Input
-                            placeholder="Nome do convênio"
+                            placeholder={t('clinicPage.service.insurancePlaceholder')}
                             value={newConvenio}
                             onChange={(e) => setNewConvenio(e.target.value)}
                             onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddConvenio())}
@@ -787,7 +787,7 @@ export default function ClinicSettingsPage() {
 
                         {/* Common convenios suggestions */}
                         <div>
-                          <p className="text-xs text-muted-foreground mb-2">Sugestões:</p>
+                          <p className="text-xs text-muted-foreground mb-2">{t('clinicPage.service.suggestions')}:</p>
                           <div className="flex flex-wrap gap-1">
                             {COMMON_CONVENIOS.filter(
                               (c) => !paymentSettings.convenioList.includes(c)
@@ -822,12 +822,12 @@ export default function ClinicSettingsPage() {
               {updateClinic.isPending ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Salvando...
+                  {t('common.saving')}
                 </>
               ) : (
                 <>
                   <Save className="h-4 w-4 mr-2" />
-                  {t('common.save') || 'Salvar'}
+                  {t('common.save')}
                 </>
               )}
             </Button>
@@ -839,8 +839,8 @@ export default function ClinicSettingsPage() {
           <div className="sticky top-6">
             <Card>
               <CardHeader>
-                <CardTitle>Prévia do WhatsApp</CardTitle>
-                <CardDescription>Como seu bot aparece para os pacientes</CardDescription>
+                <CardTitle>{t('clinicPage.preview.title')}</CardTitle>
+                <CardDescription>{t('clinicPage.preview.description')}</CardDescription>
               </CardHeader>
               <CardContent className="flex justify-center py-4">
                 <ClinicWhatsAppPreview

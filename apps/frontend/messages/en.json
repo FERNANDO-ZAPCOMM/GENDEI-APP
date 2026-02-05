@@ -1630,5 +1630,89 @@
       "saveError": "Error saving the service mode"
     },
     "preview": "Conversation simulation"
+  },
+  "clinicPage": {
+    "title": "Clinic Settings",
+    "description": "Configure your business information",
+    "tabs": {
+      "basic": "Information",
+      "contact": "Contact",
+      "location": "Location",
+      "hours": "Hours",
+      "service": "Service"
+    },
+    "profileCard": {
+      "title": "Business Profile",
+      "description": "Complete the information to appear correctly"
+    },
+    "basicInfo": {
+      "nameLabel": "Business Name",
+      "namePlaceholder": "E.g.: São Paulo Clinic",
+      "nameHelp": "Use the official name as it appears on the facade",
+      "categoriesLabel": "Categories",
+      "categoriesHint": "select one or more",
+      "selectCategories": "Select categories",
+      "categoriesSelected": "{count} category(ies) selected",
+      "categoriesHelp": "This defines which specialties will be available for professionals",
+      "descriptionLabel": "Description",
+      "descriptionPlaceholder": "Describe the services offered...",
+      "summaryLabel": "Greeting Summary (AI)",
+      "generateButton": "Generate",
+      "summaryHelp": "Click \"Generate\" to create an automatic summary of your description for the bot greeting."
+    },
+    "contact": {
+      "phoneLabel": "Phone",
+      "emailLabel": "Email",
+      "emailPlaceholder": "contact@clinic.com",
+      "invalidEmail": "Invalid email",
+      "websiteLabel": "Website",
+      "websitePlaceholder": "https://www.yourclinic.com"
+    },
+    "location": {
+      "addressLabel": "Full Address",
+      "addressPlaceholder": "Type the address and select from the list",
+      "addressHelp": "Select from the list to get coordinates automatically"
+    },
+    "hours": {
+      "title": "Hours by Day",
+      "to": "to"
+    },
+    "days": {
+      "seg": "Mon",
+      "segFull": "Monday",
+      "ter": "Tue",
+      "terFull": "Tuesday",
+      "qua": "Wed",
+      "quaFull": "Wednesday",
+      "qui": "Thu",
+      "quiFull": "Thursday",
+      "sex": "Fri",
+      "sexFull": "Friday",
+      "sab": "Sat",
+      "sabFull": "Saturday",
+      "dom": "Sun",
+      "domFull": "Sunday"
+    },
+    "service": {
+      "description": "Select the payment methods accepted by the clinic",
+      "particularLabel": "Private",
+      "particularDesc": "Accepts direct payment from the patient",
+      "insuranceLabel": "Insurance",
+      "insuranceDesc": "Accepts health plans",
+      "acceptedInsurance": "Accepted Insurance Plans",
+      "insurancePlaceholder": "Insurance plan name",
+      "suggestions": "Suggestions"
+    },
+    "preview": {
+      "title": "WhatsApp Preview",
+      "description": "How your bot appears to patients"
+    },
+    "toasts": {
+      "fixErrors": "Fix errors before saving",
+      "saveSuccess": "Settings saved successfully",
+      "saveError": "Error saving settings",
+      "summaryGenerated": "Summary generated successfully!",
+      "summaryError": "Error generating summary"
+    }
   }
 }

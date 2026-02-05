@@ -28,6 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { MultiSelect } from '@/components/ui/multi-select';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -508,39 +509,16 @@ export default function ProfessionalEditPage() {
                     </div>
                     <div className="space-y-2">
                       <Label>Especialidades <span className="text-red-500">*</span></Label>
-                      <div className="flex flex-wrap gap-2">
-                        {availableSpecialties.map((specialty) => {
-                          const isSelected = formData.specialties.includes(specialty.id);
-                          return (
-                            <button
-                              key={specialty.id}
-                              type="button"
-                              onClick={() => {
-                                if (isSelected) {
-                                  setFormData({
-                                    ...formData,
-                                    specialties: formData.specialties.filter(s => s !== specialty.id)
-                                  });
-                                } else {
-                                  setFormData({
-                                    ...formData,
-                                    specialties: [...formData.specialties, specialty.id]
-                                  });
-                                }
-                              }}
-                              disabled={isSaving}
-                              className={cn(
-                                "px-3 py-1.5 text-sm rounded-full border transition-colors",
-                                isSelected
-                                  ? "bg-black text-white border-black"
-                                  : "bg-white text-gray-700 border-gray-200 hover:border-gray-400"
-                              )}
-                            >
-                              {specialty.name}
-                            </button>
-                          );
-                        })}
-                      </div>
+                      <MultiSelect
+                        options={availableSpecialties.map((specialty) => ({
+                          value: specialty.id,
+                          label: specialty.name,
+                        }))}
+                        selected={formData.specialties}
+                        onChange={(selected) => setFormData({ ...formData, specialties: selected })}
+                        placeholder="Selecione as especialidades..."
+                        disabled={isSaving}
+                      />
                       {formData.specialties.length === 0 && (
                         <p className="text-xs text-amber-600">
                           Selecione pelo menos uma especialidade
@@ -841,7 +819,7 @@ export default function ProfessionalEditPage() {
           ) : (
             <>
               <Save className="w-4 h-4 mr-2" />
-              Salvar Alterações
+              Salvar
             </>
           )}
         </Button>

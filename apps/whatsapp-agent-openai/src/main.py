@@ -68,11 +68,9 @@ VERIFY_TOKEN = os.getenv("META_WEBHOOK_VERIFY_TOKEN", "gendei_verify_token")
 META_API_VERSION = os.getenv("META_API_VERSION", "v24.0")
 DOMAIN = os.getenv("GENDEI_DOMAIN", "https://gendei.com")
 
-# WhatsApp Flows - Two flows for complete scheduling experience
+# WhatsApp Flows - Firestore-driven per clinic/phone
 # Flow 1: Patient Info (ESPECIALIDADE → TIPO_ATENDIMENTO → INFO_CONVENIO → DADOS_PACIENTE)
 # Flow 2: Booking (BOOKING - date picker + time dropdown)
-CLINICA_MEDICA_FORMULARIO_FLOW_ID = os.getenv("CLINICA_MEDICA_FORMULARIO_FLOW_ID", "")  # Flow 1: Patient info
-CLINICA_MEDICA_AGENDAMENTO_FLOW_ID = os.getenv("CLINICA_MEDICA_AGENDAMENTO_FLOW_ID", "")  # Flow 2: Booking
 
 # Booking settings
 DEFAULT_MIN_BOOKING_LEAD_TIME_HOURS = 2  # Minimum hours before a slot can be booked
@@ -156,6 +154,57 @@ def _looks_like_greeting_only(text: str) -> bool:
         t.startswith(prefix)
         for prefix in ("oi", "olá", "ola", "bom dia", "boa tarde", "boa noite", "tudo bem")
     ) and len(t) <= 25
+
+
+def is_simple_greeting(text: str) -> bool:
+    """Deterministic greeting detection (no intent)."""
+    import re
+
+    t = (text or "").strip().lower()
+    if not t:
+        return False
+    # If it includes scheduling/intent keywords, it's not a pure greeting.
+    if any(k in t for k in ("agendar", "marcar", "consulta", "horário", "horarios", "disponibilidade")):
+        return False
+    # Strip punctuation for robust matching
+    cleaned = re.sub(r"[^\w\s]", "", t).strip()
+    if _looks_like_greeting_only(cleaned):
+        return True
+    # Extra safety for common greetings
+    if cleaned in ("oi", "ola", "olá", "oi tudo bem", "tudo bem", "bom dia", "boa tarde", "boa noite"):
+        return True
+    return False
+
+
+def build_deterministic_greeting(clinic_id: str) -> str:
+    """Build deterministic greeting using clinic description/summary when available."""
+    summary = ""
+    clinic_name = ""
+    if db:
+        clinic = db.get_clinic(clinic_id)
+        if clinic:
+            clinic_name = getattr(clinic, "name", "") or ""
+            summary = getattr(clinic, "greeting_summary", "") or ""
+            if not summary:
+                description = (getattr(clinic, "description", "") or "").strip()
+                if description:
+                    summary = description.split(".")[0].strip() or description[:180].strip()
+
+    if summary:
+        return (
+            f"Oi! Tudo bem? 😊\n\n"
+            f"{summary}\n\n"
+            "Como posso ajudar você hoje?"
+        )
+
+    if clinic_name:
+        return (
+            f"Oi! Tudo bem? 😊\n\n"
+            f"Se precisar de informações sobre a clínica {clinic_name}, estou aqui para ajudar!\n\n"
+            "Como posso ajudar você hoje?"
+        )
+
+    return "Oi! Tudo bem? 😊\n\nComo posso ajudar você hoje?"
 
 
 def _adaptive_buffer_seconds(first_message_text: str) -> float:
@@ -2749,10 +2798,6 @@ async def handle_flow_completion(
                 booking_flow_id = whatsapp_config.get('bookingFlowId', '')
                 logger.info(f"📱 Using clinic-specific booking flow ID: {booking_flow_id}")
 
-        # Fallback to environment variable if not in clinic config
-        if not booking_flow_id:
-            booking_flow_id = CLINICA_MEDICA_AGENDAMENTO_FLOW_ID
-
         if not booking_flow_id:
             # Fallback: create appointment with just the collected info
             logger.warning("⚠️ No booking flow ID configured (not in clinic config or env var)")
@@ -3127,7 +3172,7 @@ async def handle_scheduling_intent(
     # Get clinic-specific flow ID from Firestore (created during Embedded Signup)
     # Falls back to environment variable for backward compatibility
     whatsapp_config = clinic.whatsapp_config or {}
-    flow_id_to_use = whatsapp_config.get('patientInfoFlowId', '') or CLINICA_MEDICA_FORMULARIO_FLOW_ID
+    flow_id_to_use = whatsapp_config.get('patientInfoFlowId', '')
 
     logger.info(f"🔍 Flow ID for clinic {clinic_id}: {flow_id_to_use or 'NOT CONFIGURED'}")
     logger.info(f"🔍 Clinic whatsapp_config: {whatsapp_config}")
@@ -3399,6 +3444,18 @@ async def process_message(
             phone_number_id, access_token,
             reason=f"Solicitação de atendimento humano - Mensagem: {message[:100]}",
             auto_takeover=True
+        )
+        return
+
+    # =============================================
+    # DETERMINISTIC GREETING (NO AGENT)
+    # =============================================
+    if is_simple_greeting(message):
+        logger.info(f"👋 Deterministic greeting sent to {phone}")
+        await send_whatsapp_message(
+            phone_number_id, phone,
+            build_deterministic_greeting(clinic_id),
+            access_token
         )
         return
 

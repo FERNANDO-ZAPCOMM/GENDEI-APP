@@ -8,6 +8,18 @@ interface ChatBubbleProps {
   variant?: 'clone' | 'whatsapp';
 }
 
+// Format timestamp in São Paulo timezone (America/Sao_Paulo)
+function formatTimestamp(date: Date): string {
+  return new Intl.DateTimeFormat('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date);
+}
+
 function parsePrompt(text: string): React.ReactNode {
   const parts = text.split(/(\*\*[^*]+\*\*)/g);
   return parts.map((part, index) => {
@@ -76,6 +88,14 @@ export function ChatBubble({ message, variant = 'clone' }: ChatBubbleProps) {
             </div>
           )}
           <div>{parsePrompt(message.text)}</div>
+          {message.timestamp && (
+            <div className={cn(
+              'text-[10px] mt-1 text-right',
+              isBot ? 'text-slate-400' : 'text-slate-500'
+            )}>
+              {formatTimestamp(message.timestamp)}
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -169,6 +169,19 @@ class OpenAIAgentFactory(BaseAgentFactory):
         if clinic.get("phone"):
             lines.append(f"Telefone: {clinic['phone']}")
 
+        greeting_summary = clinic.get("greeting_summary")
+        if not greeting_summary:
+            description = (clinic.get("description") or "").strip()
+            if description:
+                # Simple fallback summary: first sentence or first 180 chars.
+                summary = description.split(".")[0].strip()
+                if not summary:
+                    summary = description[:180].strip()
+                if summary:
+                    greeting_summary = summary
+        if greeting_summary:
+            lines.append(f"Resumo saudação: {greeting_summary}")
+
         # Payment settings
         payment = clinic.get("payment_settings", {})
         if payment.get("acceptsParticular"):
