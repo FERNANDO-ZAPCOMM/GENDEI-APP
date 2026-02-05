@@ -1039,267 +1039,6 @@ export async function createReminderTemplates(
 // ============================================
 
 /**
- * WhatsApp Flow JSON for patient info collection (CLINIC_PATIENT_FORM)
- * Screens: ESPECIALIDADE → TIPO_ATENDIMENTO → INFO_CONVENIO → DADOS_PACIENTE (terminal)
- */
-const PATIENT_INFO_FLOW_JSON = {
-  version: '6.2',
-  data_api_version: '3.0',
-  routing_model: {
-    ESPECIALIDADE: ['TIPO_ATENDIMENTO'],
-    TIPO_ATENDIMENTO: ['INFO_CONVENIO'],
-    INFO_CONVENIO: ['DADOS_PACIENTE'],
-    DADOS_PACIENTE: [],
-  },
-  screens: [
-    {
-      id: 'ESPECIALIDADE',
-      title: 'Agendar Consulta',
-      data: {
-        especialidades: {
-          type: 'array',
-          items: {
-            type: 'object',
-            properties: {
-              id: { type: 'string' },
-              title: { type: 'string' },
-              description: { type: 'string' },
-            },
-          },
-          __example__: [
-            { id: 'prof_1', title: 'Cardiologia', description: 'Dr. João Silva' },
-            { id: 'prof_2', title: 'Dermatologia', description: 'Dra. Maria Santos' },
-          ],
-        },
-        error_message: {
-          type: 'string',
-          __example__: '',
-        },
-      },
-      layout: {
-        type: 'SingleColumnLayout',
-        children: [
-          {
-            type: 'Form',
-            name: 'form_especialidade',
-            children: [
-              {
-                type: 'RadioButtonsGroup',
-                name: 'especialidade',
-                label: 'Escolha o profissional',
-                required: true,
-                'data-source': '${data.especialidades}',
-              },
-              {
-                type: 'Footer',
-                label: 'Continuar',
-                'on-click-action': {
-                  name: 'data_exchange',
-                  payload: { especialidade: '${form.especialidade}' },
-                },
-              },
-            ],
-          },
-        ],
-      },
-    },
-    {
-      id: 'TIPO_ATENDIMENTO',
-      title: 'Tipo de Atendimento',
-      data: {
-        especialidade: { type: 'string', __example__: 'prof_1' },
-        professional_id: { type: 'string', __example__: 'prof_1' },
-        professional_name: { type: 'string', __example__: 'Dr. João Silva' },
-        specialty_name: { type: 'string', __example__: 'Cardiologia' },
-        tipos_pagamento: {
-          type: 'array',
-          items: {
-            type: 'object',
-            properties: {
-              id: { type: 'string' },
-              title: { type: 'string' },
-              description: { type: 'string' },
-            },
-          },
-          __example__: [
-            { id: 'convenio', title: 'Convênio', description: 'Tenho plano de saúde' },
-            { id: 'particular', title: 'Particular', description: 'Pagamento direto' },
-          ],
-        },
-        error_message: { type: 'string', __example__: '' },
-      },
-      layout: {
-        type: 'SingleColumnLayout',
-        children: [
-          {
-            type: 'Form',
-            name: 'form_pagamento',
-            children: [
-              {
-                type: 'TextHeading',
-                text: '${data.specialty_name}',
-              },
-              {
-                type: 'TextSubheading',
-                text: '${data.professional_name}',
-              },
-              {
-                type: 'RadioButtonsGroup',
-                name: 'tipo_pagamento',
-                label: 'Tipo de atendimento',
-                required: true,
-                'data-source': '${data.tipos_pagamento}',
-              },
-              {
-                type: 'Footer',
-                label: 'Continuar',
-                'on-click-action': {
-                  name: 'data_exchange',
-                  payload: {
-                    especialidade: '${data.especialidade}',
-                    professional_id: '${data.professional_id}',
-                    professional_name: '${data.professional_name}',
-                    specialty_name: '${data.specialty_name}',
-                    tipo_pagamento: '${form.tipo_pagamento}',
-                  },
-                },
-              },
-            ],
-          },
-        ],
-      },
-    },
-    {
-      id: 'INFO_CONVENIO',
-      title: 'Dados do Convênio',
-      data: {
-        especialidade: { type: 'string', __example__: 'prof_1' },
-        professional_id: { type: 'string', __example__: 'prof_1' },
-        professional_name: { type: 'string', __example__: 'Dr. João Silva' },
-        specialty_name: { type: 'string', __example__: 'Cardiologia' },
-        tipo_pagamento: { type: 'string', __example__: 'convenio' },
-        convenios: {
-          type: 'array',
-          items: {
-            type: 'object',
-            properties: {
-              id: { type: 'string' },
-              title: { type: 'string' },
-            },
-          },
-          __example__: [
-            { id: 'unimed', title: 'Unimed' },
-            { id: 'bradesco', title: 'Bradesco Saúde' },
-          ],
-        },
-        show_convenio_fields: { type: 'boolean', __example__: true },
-        error_message: { type: 'string', __example__: '' },
-      },
-      layout: {
-        type: 'SingleColumnLayout',
-        children: [
-          {
-            type: 'Form',
-            name: 'form_convenio',
-            children: [
-              {
-                type: 'Dropdown',
-                name: 'convenio_nome',
-                label: 'Seu convênio',
-                required: false,
-                visible: '${data.show_convenio_fields}',
-                'data-source': '${data.convenios}',
-              },
-              {
-                type: 'Footer',
-                label: 'Continuar',
-                'on-click-action': {
-                  name: 'data_exchange',
-                  payload: {
-                    especialidade: '${data.especialidade}',
-                    professional_id: '${data.professional_id}',
-                    professional_name: '${data.professional_name}',
-                    specialty_name: '${data.specialty_name}',
-                    tipo_pagamento: '${data.tipo_pagamento}',
-                    convenio_nome: '${form.convenio_nome}',
-                  },
-                },
-              },
-            ],
-          },
-        ],
-      },
-    },
-    {
-      id: 'DADOS_PACIENTE',
-      title: 'Dados do Paciente',
-      terminal: true,
-      data: {
-        especialidade: { type: 'string', __example__: 'prof_1' },
-        professional_id: { type: 'string', __example__: 'prof_1' },
-        professional_name: { type: 'string', __example__: 'Dr. João Silva' },
-        specialty_name: { type: 'string', __example__: 'Cardiologia' },
-        tipo_pagamento: { type: 'string', __example__: 'convenio' },
-        convenio_nome: { type: 'string', __example__: 'unimed' },
-        error_message: { type: 'string', __example__: '' },
-      },
-      layout: {
-        type: 'SingleColumnLayout',
-        children: [
-          {
-            type: 'Form',
-            name: 'form_paciente',
-            children: [
-              {
-                type: 'TextHeading',
-                text: '${data.specialty_name}',
-              },
-              {
-                type: 'TextSubheading',
-                text: '${data.professional_name}',
-              },
-              {
-                type: 'TextInput',
-                name: 'nome',
-                label: 'Nome completo',
-                'input-type': 'text',
-                required: true,
-                'helper-text': 'Como consta no documento',
-              },
-              {
-                type: 'TextInput',
-                name: 'email',
-                label: 'E-mail',
-                'input-type': 'email',
-                required: true,
-                'helper-text': 'Para confirmação do agendamento',
-              },
-              {
-                type: 'Footer',
-                label: 'Ver Horários',
-                'on-click-action': {
-                  name: 'complete',
-                  payload: {
-                    especialidade: '${data.especialidade}',
-                    professional_id: '${data.professional_id}',
-                    professional_name: '${data.professional_name}',
-                    specialty_name: '${data.specialty_name}',
-                    tipo_pagamento: '${data.tipo_pagamento}',
-                    convenio_nome: '${data.convenio_nome}',
-                    nome: '${form.nome}',
-                    email: '${form.email}',
-                  },
-                },
-              },
-            ],
-          },
-        ],
-      },
-    },
-  ],
-};
-
-/**
  * WhatsApp Flow JSON for booking date/time selection (CLINIC_PATIENT_DATEPICKER)
  * Single terminal screen for date and time selection
  */
@@ -1388,12 +1127,311 @@ const BOOKING_FLOW_JSON = {
 };
 
 /**
+ * WhatsApp Flow JSON for CONVENIO patients (skip TIPO_ATENDIMENTO)
+ * Screens: ESPECIALIDADE → INFO_CONVENIO → DADOS_PACIENTE (terminal)
+ */
+const PATIENT_INFO_CONVENIO_FLOW_JSON = {
+  version: '6.2',
+  data_api_version: '3.0',
+  routing_model: {
+    ESPECIALIDADE: ['INFO_CONVENIO'],
+    INFO_CONVENIO: ['DADOS_PACIENTE'],
+    DADOS_PACIENTE: [],
+  },
+  screens: [
+    {
+      id: 'ESPECIALIDADE',
+      title: 'Agendar Consulta',
+      data: {
+        especialidades: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'string' },
+              title: { type: 'string' },
+              description: { type: 'string' },
+            },
+          },
+          __example__: [
+            { id: 'prof_1', title: 'Cardiologia', description: 'Dr. João Silva' },
+            { id: 'prof_2', title: 'Dermatologia', description: 'Dra. Maria Santos' },
+          ],
+        },
+        error_message: { type: 'string', __example__: '' },
+      },
+      layout: {
+        type: 'SingleColumnLayout',
+        children: [
+          {
+            type: 'Form',
+            name: 'form_especialidade',
+            children: [
+              {
+                type: 'RadioButtonsGroup',
+                name: 'especialidade',
+                label: 'ESCOLHA O PROFISSIONAL',
+                required: true,
+                'data-source': '${data.especialidades}',
+              },
+              {
+                type: 'Footer',
+                label: 'Continuar',
+                'on-click-action': {
+                  name: 'data_exchange',
+                  payload: { especialidade: '${form.especialidade}' },
+                },
+              },
+            ],
+          },
+        ],
+      },
+    },
+    {
+      id: 'INFO_CONVENIO',
+      title: 'Dados do Convênio',
+      data: {
+        especialidade: { type: 'string', __example__: 'prof_1' },
+        professional_id: { type: 'string', __example__: 'prof_1' },
+        professional_name: { type: 'string', __example__: 'Dr. João Silva' },
+        specialty_name: { type: 'string', __example__: 'Cardiologia' },
+        convenios: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'string' },
+              title: { type: 'string' },
+            },
+          },
+          __example__: [
+            { id: 'unimed', title: 'Unimed' },
+            { id: 'bradesco', title: 'Bradesco Saúde' },
+          ],
+        },
+        error_message: { type: 'string', __example__: '' },
+      },
+      layout: {
+        type: 'SingleColumnLayout',
+        children: [
+          {
+            type: 'Form',
+            name: 'form_convenio',
+            children: [
+              {
+                type: 'Dropdown',
+                name: 'convenio_nome',
+                label: 'SEU CONVÊNIO',
+                required: true,
+                'data-source': '${data.convenios}',
+              },
+              {
+                type: 'Footer',
+                label: 'Continuar',
+                'on-click-action': {
+                  name: 'data_exchange',
+                  payload: {
+                    especialidade: '${data.especialidade}',
+                    professional_id: '${data.professional_id}',
+                    professional_name: '${data.professional_name}',
+                    specialty_name: '${data.specialty_name}',
+                    tipo_pagamento: 'convenio',
+                    convenio_nome: '${form.convenio_nome}',
+                  },
+                },
+              },
+            ],
+          },
+        ],
+      },
+    },
+    {
+      id: 'DADOS_PACIENTE',
+      title: 'Dados do Paciente',
+      terminal: true,
+      data: {
+        especialidade: { type: 'string', __example__: 'prof_1' },
+        professional_id: { type: 'string', __example__: 'prof_1' },
+        professional_name: { type: 'string', __example__: 'Dr. João Silva' },
+        specialty_name: { type: 'string', __example__: 'Cardiologia' },
+        tipo_pagamento: { type: 'string', __example__: 'convenio' },
+        convenio_nome: { type: 'string', __example__: 'unimed' },
+        error_message: { type: 'string', __example__: '' },
+      },
+      layout: {
+        type: 'SingleColumnLayout',
+        children: [
+          {
+            type: 'Form',
+            name: 'form_paciente',
+            children: [
+              {
+                type: 'TextInput',
+                name: 'nome',
+                label: 'Nome completo',
+                'input-type': 'text',
+                required: true,
+                'helper-text': 'Como consta no documento',
+              },
+              {
+                type: 'TextInput',
+                name: 'email',
+                label: 'E-mail',
+                'input-type': 'email',
+                required: true,
+                'helper-text': 'Para confirmação do agendamento',
+              },
+              {
+                type: 'Footer',
+                label: 'Ver Horários',
+                'on-click-action': {
+                  name: 'complete',
+                  payload: {
+                    especialidade: '${data.especialidade}',
+                    professional_id: '${data.professional_id}',
+                    professional_name: '${data.professional_name}',
+                    specialty_name: '${data.specialty_name}',
+                    tipo_pagamento: '${data.tipo_pagamento}',
+                    convenio_nome: '${data.convenio_nome}',
+                    nome: '${form.nome}',
+                    email: '${form.email}',
+                  },
+                },
+              },
+            ],
+          },
+        ],
+      },
+    },
+  ],
+};
+
+/**
+ * WhatsApp Flow JSON for PARTICULAR patients (skip TIPO_ATENDIMENTO and INFO_CONVENIO)
+ * Screens: ESPECIALIDADE → DADOS_PACIENTE (terminal)
+ */
+const PATIENT_INFO_PARTICULAR_FLOW_JSON = {
+  version: '6.2',
+  data_api_version: '3.0',
+  routing_model: {
+    ESPECIALIDADE: ['DADOS_PACIENTE'],
+    DADOS_PACIENTE: [],
+  },
+  screens: [
+    {
+      id: 'ESPECIALIDADE',
+      title: 'Agendar Consulta',
+      data: {
+        especialidades: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'string' },
+              title: { type: 'string' },
+              description: { type: 'string' },
+            },
+          },
+          __example__: [
+            { id: 'prof_1', title: 'Cardiologia', description: 'Dr. João Silva' },
+            { id: 'prof_2', title: 'Dermatologia', description: 'Dra. Maria Santos' },
+          ],
+        },
+        error_message: { type: 'string', __example__: '' },
+      },
+      layout: {
+        type: 'SingleColumnLayout',
+        children: [
+          {
+            type: 'Form',
+            name: 'form_especialidade',
+            children: [
+              {
+                type: 'RadioButtonsGroup',
+                name: 'especialidade',
+                label: 'ESCOLHA O PROFISSIONAL',
+                required: true,
+                'data-source': '${data.especialidades}',
+              },
+              {
+                type: 'Footer',
+                label: 'Continuar',
+                'on-click-action': {
+                  name: 'data_exchange',
+                  payload: { especialidade: '${form.especialidade}' },
+                },
+              },
+            ],
+          },
+        ],
+      },
+    },
+    {
+      id: 'DADOS_PACIENTE',
+      title: 'Dados do Paciente',
+      terminal: true,
+      data: {
+        especialidade: { type: 'string', __example__: 'prof_1' },
+        professional_id: { type: 'string', __example__: 'prof_1' },
+        professional_name: { type: 'string', __example__: 'Dr. João Silva' },
+        specialty_name: { type: 'string', __example__: 'Cardiologia' },
+        error_message: { type: 'string', __example__: '' },
+      },
+      layout: {
+        type: 'SingleColumnLayout',
+        children: [
+          {
+            type: 'Form',
+            name: 'form_paciente',
+            children: [
+              {
+                type: 'TextInput',
+                name: 'nome',
+                label: 'Nome completo',
+                'input-type': 'text',
+                required: true,
+                'helper-text': 'Como consta no documento',
+              },
+              {
+                type: 'TextInput',
+                name: 'email',
+                label: 'E-mail',
+                'input-type': 'email',
+                required: true,
+                'helper-text': 'Para confirmação do agendamento',
+              },
+              {
+                type: 'Footer',
+                label: 'Ver Horários',
+                'on-click-action': {
+                  name: 'complete',
+                  payload: {
+                    especialidade: '${data.especialidade}',
+                    professional_id: '${data.professional_id}',
+                    professional_name: '${data.professional_name}',
+                    specialty_name: '${data.specialty_name}',
+                    tipo_pagamento: 'particular',
+                    convenio_nome: '',
+                    nome: '${form.nome}',
+                    email: '${form.email}',
+                  },
+                },
+              },
+            ],
+          },
+        ],
+      },
+    },
+  ],
+};
+
+/**
  * Create WhatsApp Flows for scheduling during Embedded Signup
  * Creates the flows under the specific WABA so they can be used with that WABA's phone numbers
  */
 export async function createSchedulingFlows(
   wabaId: string
-): Promise<{ flowIds: { patientInfo?: string; booking?: string }; errors: string[] }> {
+): Promise<{ flowIds: { patientInfo?: string; booking?: string; patientInfoConvenio?: string; patientInfoParticular?: string }; errors: string[] }> {
   const bisuToken = getMetaBisuToken();
   const apiVersion = getMetaApiVersion();
   const flowsEndpointUrl = getWhatsAppAgentUrl();
@@ -1406,16 +1444,22 @@ export async function createSchedulingFlows(
     console.warn('⚠️ GENDEI_WHATSAPP_AGENT_URL not set, flows will not have endpoint configured');
   }
 
-  const flowIds: { patientInfo?: string; booking?: string } = {};
+  const flowIds: { patientInfo?: string; booking?: string; patientInfoConvenio?: string; patientInfoParticular?: string } = {};
   const errors: string[] = [];
 
-  // Flows to create
+  // Flows to create (only the 3 required flows)
   const flows = [
     {
-      key: 'patientInfo' as const,
-      name: 'CLINICA_MEDICA_FORMULARIO',
+      key: 'patientInfoConvenio' as const,
+      name: 'CLINICA_MEDICA_FORMULARIO_CONVENIO',
       categories: ['APPOINTMENT_BOOKING'],
-      json: PATIENT_INFO_FLOW_JSON,
+      json: PATIENT_INFO_CONVENIO_FLOW_JSON,
+    },
+    {
+      key: 'patientInfoParticular' as const,
+      name: 'CLINICA_MEDICA_FORMULARIO_PARTICULAR',
+      categories: ['APPOINTMENT_BOOKING'],
+      json: PATIENT_INFO_PARTICULAR_FLOW_JSON,
     },
     {
       key: 'booking' as const,
@@ -1540,7 +1584,8 @@ export async function createSchedulingFlows(
  */
 export async function updateExistingFlows(
   wabaId: string,
-  patientInfoFlowId?: string,
+  patientInfoConvenioFlowId?: string,
+  patientInfoParticularFlowId?: string,
   bookingFlowId?: string
 ): Promise<{ updated: string[]; errors: string[] }> {
   const bisuToken = getMetaBisuToken();
@@ -1554,9 +1599,10 @@ export async function updateExistingFlows(
   const updated: string[] = [];
   const errors: string[] = [];
 
-  // Flows to update
+  // Flows to update (only the 3 required flows)
   const flowsToUpdate = [
-    { id: patientInfoFlowId, name: 'CLINICA_MEDICA_FORMULARIO', json: PATIENT_INFO_FLOW_JSON },
+    { id: patientInfoConvenioFlowId, name: 'CLINICA_MEDICA_FORMULARIO_CONVENIO', json: PATIENT_INFO_CONVENIO_FLOW_JSON },
+    { id: patientInfoParticularFlowId, name: 'CLINICA_MEDICA_FORMULARIO_PARTICULAR', json: PATIENT_INFO_PARTICULAR_FLOW_JSON },
     { id: bookingFlowId, name: 'CLINICA_MEDICA_AGENDAMENTO', json: BOOKING_FLOW_JSON },
   ].filter((f) => f.id);
 
@@ -2370,36 +2416,73 @@ export async function listFlows(wabaId: string): Promise<any[]> {
 }
 
 /**
- * Sync existing flows from WhatsApp to clinic config
- * This finds flows by name and returns their IDs without creating new ones
+ * Flow status information
  */
-export async function syncExistingFlows(
-  wabaId: string
-): Promise<{ flowIds: { patientInfo?: string; booking?: string }; found: string[] }> {
+export interface FlowInfo {
+  id: string;
+  status: 'DRAFT' | 'PUBLISHED' | 'DEPRECATED' | 'BLOCKED' | 'THROTTLED';
+}
+
+export interface SyncFlowsResult {
+  flowIds: {
+    patientInfo?: string;
+    booking?: string;
+    patientInfoConvenio?: string;
+    patientInfoParticular?: string;
+  };
+  flowStatuses: {
+    patientInfo?: FlowInfo;
+    booking?: FlowInfo;
+    patientInfoConvenio?: FlowInfo;
+    patientInfoParticular?: FlowInfo;
+  };
+  found: string[];
+}
+
+/**
+ * Sync existing flows from WhatsApp to clinic config
+ * This finds flows by name and returns their IDs and statuses without creating new ones
+ */
+export async function syncExistingFlows(wabaId: string): Promise<SyncFlowsResult> {
   const flows = await listFlows(wabaId);
-  const flowIds: { patientInfo?: string; booking?: string } = {};
+  const flowIds: SyncFlowsResult['flowIds'] = {};
+  const flowStatuses: SyncFlowsResult['flowStatuses'] = {};
   const found: string[] = [];
 
   // Expected flow names
   const expectedFlows = {
     patientInfo: 'CLINICA_MEDICA_FORMULARIO',
     booking: 'CLINICA_MEDICA_AGENDAMENTO',
+    patientInfoConvenio: 'CLINICA_MEDICA_FORMULARIO_CONVENIO',
+    patientInfoParticular: 'CLINICA_MEDICA_FORMULARIO_PARTICULAR',
   };
 
   for (const flow of flows) {
     if (flow.name === expectedFlows.patientInfo) {
       flowIds.patientInfo = flow.id;
+      flowStatuses.patientInfo = { id: flow.id, status: flow.status };
       found.push(`${expectedFlows.patientInfo} (ID: ${flow.id}, Status: ${flow.status})`);
       console.log(`✅ Found existing patientInfo flow: ${flow.id} (Status: ${flow.status})`);
     } else if (flow.name === expectedFlows.booking) {
       flowIds.booking = flow.id;
+      flowStatuses.booking = { id: flow.id, status: flow.status };
       found.push(`${expectedFlows.booking} (ID: ${flow.id}, Status: ${flow.status})`);
       console.log(`✅ Found existing booking flow: ${flow.id} (Status: ${flow.status})`);
+    } else if (flow.name === expectedFlows.patientInfoConvenio) {
+      flowIds.patientInfoConvenio = flow.id;
+      flowStatuses.patientInfoConvenio = { id: flow.id, status: flow.status };
+      found.push(`${expectedFlows.patientInfoConvenio} (ID: ${flow.id}, Status: ${flow.status})`);
+      console.log(`✅ Found existing patientInfoConvenio flow: ${flow.id} (Status: ${flow.status})`);
+    } else if (flow.name === expectedFlows.patientInfoParticular) {
+      flowIds.patientInfoParticular = flow.id;
+      flowStatuses.patientInfoParticular = { id: flow.id, status: flow.status };
+      found.push(`${expectedFlows.patientInfoParticular} (ID: ${flow.id}, Status: ${flow.status})`);
+      console.log(`✅ Found existing patientInfoParticular flow: ${flow.id} (Status: ${flow.status})`);
     }
   }
 
   console.log(`📱 Sync result: Found ${found.length} existing flows for WABA ${wabaId}`);
-  return { flowIds, found };
+  return { flowIds, flowStatuses, found };
 }
 
 /**

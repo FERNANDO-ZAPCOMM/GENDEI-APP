@@ -1,32 +1,34 @@
 {
   "version": "6.2",
   "data_api_version": "3.0",
-  "routing_model": {},
+  "routing_model": {
+    "BOOKING": []
+  },
   "screens": [
     {
       "id": "BOOKING",
-      "title": "Agendar Consulta",
+      "title": "Escolha o Horário",
       "terminal": true,
       "data": {
         "doctor_name": {
           "type": "string",
-          "__example__": "Dr. Silva"
+          "__example__": "Dr. Ricardo Mendes"
         },
         "specialty_name": {
           "type": "string",
-          "__example__": "Clínico Geral"
+          "__example__": "Dermatologia Clínica"
         },
         "professional_id": {
           "type": "string",
-          "__example__": "prof1"
+          "__example__": "prof_1"
         },
         "patient_name": {
           "type": "string",
           "__example__": "Maria Silva"
         },
-        "patient_cpf": {
+        "patient_email": {
           "type": "string",
-          "__example__": "12345678900"
+          "__example__": "maria@email.com"
         },
         "available_times": {
           "type": "array",
@@ -45,7 +47,7 @@
         },
         "min_date": {
           "type": "string",
-          "__example__": "2026-01-20"
+          "__example__": "2026-01-21"
         },
         "max_date": {
           "type": "string",
@@ -61,15 +63,11 @@
         "children": [
           {
             "type": "TextHeading",
-            "text": "${data.doctor_name}"
-          },
-          {
-            "type": "TextSubheading",
             "text": "${data.specialty_name}"
           },
           {
-            "type": "TextBody",
-            "text": "Selecione a data e horário para sua consulta:"
+            "type": "TextSubheading",
+            "text": "${data.doctor_name}"
           },
           {
             "type": "Form",
@@ -78,7 +76,7 @@
               {
                 "type": "DatePicker",
                 "name": "date",
-                "label": "Data da Consulta",
+                "label": "Data da consulta",
                 "required": true,
                 "min-date": "${data.min_date}",
                 "max-date": "${data.max_date}"
@@ -92,16 +90,17 @@
               },
               {
                 "type": "Footer",
-                "label": "Confirmar Agendamento",
+                "label": "Confirmar Horário",
                 "on-click-action": {
                   "name": "complete",
                   "payload": {
+                    "date": "${form.date}",
+                    "time": "${form.time}",
                     "professional_id": "${data.professional_id}",
                     "doctor_name": "${data.doctor_name}",
+                    "specialty_name": "${data.specialty_name}",
                     "patient_name": "${data.patient_name}",
-                    "patient_cpf": "${data.patient_cpf}",
-                    "date": "${form.date}",
-                    "time": "${form.time}"
+                    "patient_email": "${data.patient_email}"
                   }
                 }
               }

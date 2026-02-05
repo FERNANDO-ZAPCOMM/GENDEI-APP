@@ -538,6 +538,44 @@ class FlowsHandler:
         patient_name = data.get("patient_name", "")
         patient_email = data.get("patient_email", "")
 
+        # Validate that the selected date+time is actually available
+        if self.db and professional_id:
+            from src.scheduler.availability import get_professional_availability
+
+            available_times = get_professional_availability(
+                db=self.db,
+                clinic_id=clinic_id,
+                professional_id=professional_id,
+                date_str=selected_date
+            )
+
+            if not available_times:
+                # Professional doesn't work on this day (e.g., weekend)
+                try:
+                    dt = datetime.strptime(selected_date, "%Y-%m-%d")
+                    day_names = ["segunda", "terça", "quarta", "quinta", "sexta", "sábado", "domingo"]
+                    day_name = day_names[dt.weekday()]
+                except ValueError:
+                    day_name = "este dia"
+
+                return {
+                    "screen": "BOOKING",
+                    "data": {
+                        **data,
+                        "error_message": f"O profissional não atende na {day_name}. Por favor, escolha outro dia."
+                    }
+                }
+
+            if selected_time not in available_times:
+                # Time slot not available (already booked or outside working hours)
+                return {
+                    "screen": "BOOKING",
+                    "data": {
+                        **data,
+                        "error_message": f"O horário {selected_time} não está disponível nesta data. Por favor, escolha outro horário."
+                    }
+                }
+
         # Create the appointment
         try:
             from src.scheduler.appointments import create_appointment

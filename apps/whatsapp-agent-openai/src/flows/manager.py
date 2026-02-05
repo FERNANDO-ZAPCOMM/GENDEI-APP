@@ -225,7 +225,7 @@ async def send_whatsapp_flow(
     flow_action: str = "data_exchange",
     initial_screen: str = "SELECT_PROFESSIONAL",
     initial_data: Dict[str, Any] = None,
-    mode: str = "draft",  # "draft" for unpublished flows, "published" for published flows
+    mode: str = "published",  # "published" for published flows, "draft" for unpublished
 ) -> bool:
     """
     Send a WhatsApp Flow message to a user.
@@ -273,7 +273,7 @@ async def send_whatsapp_flow(
                     "flow_id": flow_id,
                     "flow_cta": flow_cta,
                     "flow_action": flow_action,
-                    "mode": mode,  # "draft" for unpublished flows
+                    "mode": mode,
                 }
             }
         }
@@ -336,7 +336,7 @@ async def send_booking_flow(
     available_times: list,
     min_date: str,
     max_date: str,
-    mode: str = "draft",  # "draft" for unpublished flows
+    mode: str = "published",  # "published" for published flows
 ) -> bool:
     """
     Send the Booking Flow (Flow 2) after Patient Info flow completes.
@@ -377,7 +377,7 @@ async def send_booking_flow(
         flow_id=flow_id,
         flow_token=flow_token,
         flow_cta="Escolher Horário",
-        header_text="Escolher Horário 📅",
+        header_text="Escolher Horário",
         body_text=f"Selecione a data e horário com {professional_name}",
         access_token=access_token,
         flow_action="navigate",  # "navigate" for client-side flows

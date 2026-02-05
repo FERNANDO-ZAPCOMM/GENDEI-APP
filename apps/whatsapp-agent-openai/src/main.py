@@ -190,21 +190,22 @@ def build_deterministic_greeting(clinic_id: str) -> str:
                 if description:
                     summary = description.split(".")[0].strip() or description[:180].strip()
 
-    if summary:
+    if summary and clinic_name:
         return (
-            f"Oi! Tudo bem? 😊\n\n"
+            f"Olá! Tudo bem?\n\n"
             f"{summary}\n\n"
             "Como posso ajudar você hoje?"
         )
 
     if clinic_name:
         return (
-            f"Oi! Tudo bem? 😊\n\n"
-            f"Se precisar de informações sobre a clínica {clinic_name}, estou aqui para ajudar!\n\n"
+            f"Olá! Tudo bem?\n\n"
+            f"Seja bem-vindo(a) à {clinic_name}. "
+            f"Estou aqui para ajudá-lo(a) com informações e agendamentos.\n\n"
             "Como posso ajudar você hoje?"
         )
 
-    return "Oi! Tudo bem? 😊\n\nComo posso ajudar você hoje?"
+    return "Olá! Tudo bem?\n\nComo posso ajudar você hoje?"
 
 
 def _adaptive_buffer_seconds(first_message_text: str) -> float:
@@ -1696,16 +1697,26 @@ async def handle_conversational_booking(
                         await send_whatsapp_message(
                             phone_number_id, phone,
                             f"💳 *Sinal necessário:* {format_payment_amount(signal_cents)}\n\n"
-                            "Vou te enviar o PIX agora. 👇",
+                            "Vou te enviar o PIX agora.",
                             access_token
                         )
-                        await send_pix_payment_to_customer(
-                            phone=phone,
-                            payment_info=payment_info,
-                            amount=signal_cents,
-                            product_name="a confirmação da sua consulta",
-                            order_id=appointment.id
-                        )
+                        # Set runtime context for messaging functions
+                        runtime_token = set_runtime(Runtime(
+                            clinic_id=clinic_id,
+                            db=db,
+                            phone_number_id=phone_number_id,
+                            access_token=access_token
+                        ))
+                        try:
+                            await send_pix_payment_to_customer(
+                                phone=phone,
+                                payment_info=payment_info,
+                                amount=signal_cents,
+                                product_name="a confirmação da sua consulta",
+                                order_id=appointment.id
+                            )
+                        finally:
+                            reset_runtime(runtime_token)
                 else:
                     pix_key = payment_settings.get('pixKey') or getattr(clinic, 'pix_key', None)
                     if pix_key:
@@ -3040,14 +3051,23 @@ async def handle_flow_completion(
                         )
                         await send_whatsapp_message(phone_number_id, phone, confirmation_msg, access_token)
 
-                        # Send PIX payment
-                        await send_pix_payment_to_customer(
-                            phone=phone,
-                            payment_info=payment_info,
-                            amount=appointment.signal_cents,
-                            product_name="a confirmação da sua consulta",
-                            order_id=appointment.id
-                        )
+                        # Send PIX payment (set runtime context for messaging functions)
+                        runtime_token = set_runtime(Runtime(
+                            clinic_id=clinic_id,
+                            db=db,
+                            phone_number_id=phone_number_id,
+                            access_token=access_token
+                        ))
+                        try:
+                            await send_pix_payment_to_customer(
+                                phone=phone,
+                                payment_info=payment_info,
+                                amount=appointment.signal_cents,
+                                product_name="a confirmação da sua consulta",
+                                order_id=appointment.id
+                            )
+                        finally:
+                            reset_runtime(runtime_token)
 
                         logger.info(f"💳 PIX payment sent to {phone}")
                     else:
@@ -3211,7 +3231,7 @@ async def handle_scheduling_intent(
             flow_id=flow_id_to_use,
             flow_token=flow_token,
             flow_cta="Agendar Consulta",
-            header_text="Seus Dados 👇",
+            header_text="Seus Dados",
             body_text=f"Preencha seus dados para agendar sua consulta na *{clinic.name}*",
             access_token=access_token,
             flow_action="navigate",  # "navigate" for client-side flows
@@ -3448,14 +3468,14 @@ async def process_message(
         return
 
     # =============================================
-    # DETERMINISTIC GREETING (NO AGENT)
+    # GREETING - ROUTE TO AGENT
     # =============================================
     if is_simple_greeting(message):
-        logger.info(f"👋 Deterministic greeting sent to {phone}")
-        await send_whatsapp_message(
-            phone_number_id, phone,
-            build_deterministic_greeting(clinic_id),
-            access_token
+        logger.info(f"Greeting detected, routing to agent for {phone}")
+        await run_agent_response(
+            clinic_id, phone, message,
+            phone_number_id, access_token,
+            contact_name=contact_name
         )
         return
 
