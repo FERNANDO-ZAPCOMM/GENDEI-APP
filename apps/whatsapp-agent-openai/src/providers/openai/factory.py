@@ -200,9 +200,15 @@ class OpenAIAgentFactory(BaseAgentFactory):
 
         lines = []
         for s in services:
-            name = s.get('name', 'Serviço')
-            duration = s.get('duration', 30)
-            price = s.get('price', 0)
+            name = getattr(s, "name", None) or s.get('name', 'Serviço')
+            duration = getattr(s, "duration_minutes", None)
+            if duration is None:
+                duration = s.get('duration', 30)
+            price_cents = getattr(s, "price_cents", None)
+            if price_cents is None:
+                price = s.get('price', 0)
+            else:
+                price = price_cents / 100
             line = f"- {name} ({duration} min)"
             if price and price > 0:
                 line += f" - R$ {price:.2f}".replace('.', ',')

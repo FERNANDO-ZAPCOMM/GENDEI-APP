@@ -31,7 +31,7 @@ ROUTER_MODEL = ModelConfig(
     openai_model="gpt-4o-mini",
     max_tokens=50,
     temperature=0.1,
-    tool_choice="required",
+    tool_choice="auto",
 )
 
 

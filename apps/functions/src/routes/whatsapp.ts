@@ -134,6 +134,71 @@ router.get(
   }
 );
 
+// GET /whatsapp/display-name - Get display name and status
+router.get(
+  '/display-name',
+  verifyAuth,
+  async (req: Request, res: Response) => {
+    try {
+      const { phoneNumberId } = req.query;
+      const clinicId = req.user!.clinicId;
+
+      if (!clinicId) {
+        res.status(401).json({ error: 'Clinic not found' });
+        return;
+      }
+
+      if (!phoneNumberId || typeof phoneNumberId !== 'string') {
+        res.status(400).json({ error: 'phoneNumberId is required' });
+        return;
+      }
+
+      const status = await metaService.getDisplayNameStatus(phoneNumberId, clinicId);
+      res.json(status);
+    } catch (error) {
+      console.error('Error fetching display name status:', error);
+      res.status(400).json({
+        error: (error as Error).message || 'Failed to fetch display name status',
+      });
+    }
+  }
+);
+
+// POST /whatsapp/display-name - Update display name via API
+router.post(
+  '/display-name',
+  verifyAuth,
+  async (req: Request, res: Response) => {
+    try {
+      const { phoneNumberId, newDisplayName } = req.body;
+      const clinicId = req.user!.clinicId;
+
+      if (!clinicId) {
+        res.status(401).json({ error: 'Clinic not found' });
+        return;
+      }
+
+      if (!phoneNumberId) {
+        res.status(400).json({ error: 'phoneNumberId is required' });
+        return;
+      }
+
+      if (!newDisplayName || typeof newDisplayName !== 'string') {
+        res.status(400).json({ error: 'newDisplayName is required' });
+        return;
+      }
+
+      await metaService.updateDisplayName(phoneNumberId, clinicId, newDisplayName);
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Error updating display name:', error);
+      res.status(400).json({
+        error: (error as Error).message || 'Failed to update display name',
+      });
+    }
+  }
+);
+
 // POST /whatsapp/business-profile - Update WhatsApp Business Profile
 router.post(
   '/business-profile',

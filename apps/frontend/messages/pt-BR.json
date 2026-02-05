@@ -626,7 +626,16 @@
         "displayName": "Nome de Exibição",
         "displayNameHint": "O nome exibido nas conversas do WhatsApp",
         "displayNameNotSet": "Não configurado",
-        "editDisplayName": "Editar"
+        "editDisplayName": "Editar",
+        "displayNamePlaceholder": "Digite o novo nome de exibição",
+        "displayNameSave": "Salvar",
+        "displayNameCancel": "Cancelar",
+        "displayNameReviewHint": "Após salvar, o nome será revisado pelo WhatsApp.",
+        "displayNameStatus": "Status",
+        "displayNamePending": "Novo nome",
+        "displayNameUpdated": "Nome de exibição atualizado",
+        "displayNameUpdateError": "Erro ao atualizar nome de exibição",
+        "displayNameEmpty": "Nome de exibição é obrigatório"
       },
       "shareLink": {
         "title": "Seu Link do WhatsApp",

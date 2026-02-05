@@ -50,6 +50,9 @@ try:
     from src.flows.handler import FlowsHandler, CLINICA_MEDICA_SPECIALTIES
     from src.flows.manager import send_whatsapp_flow, send_booking_flow, generate_flow_token
     from src.flows.crypto import handle_encrypted_flow_request, prepare_flow_response, is_encryption_configured
+    from src.agents.orchestrator import get_orchestrator
+    from src.runtime.context import Runtime, set_runtime, reset_runtime
+    from src.providers.tools.base import register_tool_implementations
     logger.info("✅ Gendei modules imported successfully")
     if is_encryption_configured():
         logger.info("🔐 WhatsApp Flows encryption is configured")
@@ -83,6 +86,43 @@ flows_handler: Optional[FlowsHandler] = None
 
 # Note: Message deduplication and conversation state are now Firestore-backed
 # See db.is_message_processed() and db.load_conversation_state()
+
+
+async def run_agent_response(
+    clinic_id: str,
+    phone: str,
+    message: str,
+    phone_number_id: str,
+    access_token: str,
+    contact_name: Optional[str] = None
+) -> None:
+    """Run OpenAI Agents SDK orchestration and send response if needed."""
+    if not db:
+        return
+
+    token = set_runtime(Runtime(
+        clinic_id=clinic_id,
+        db=db,
+        phone_number_id=phone_number_id,
+        access_token=access_token
+    ))
+    try:
+        orchestrator = get_orchestrator(clinic_id, db)
+        result = await orchestrator.process_message(
+            phone=phone,
+            message=message,
+            contact_name=contact_name
+        )
+    finally:
+        reset_runtime(token)
+
+    # If agent didn't call tools to send a message, send response directly
+    if result and result.success and result.response and not result.tool_calls:
+        await send_whatsapp_message(
+            phone_number_id, phone,
+            result.response,
+            access_token
+        )
 
 
 # ============================================
@@ -503,6 +543,1319 @@ def format_appointment_date(date_str: str, time_str: str) -> str:
         return f"{date_str} às {time_str}"
 
 
+def parse_requested_date(message: str) -> Optional[str]:
+    """Parse a requested date from user message and return YYYY-MM-DD if found."""
+    import re
+
+    msg = (message or "").lower()
+    today = datetime.now().date()
+
+    if "amanhã" in msg or "amanha" in msg:
+        return (today + timedelta(days=1)).isoformat()
+    if "hoje" in msg:
+        return today.isoformat()
+
+    # Match DD/MM or DD/MM/YYYY
+    m = re.search(r'(\d{1,2})/(\d{1,2})(?:/(\d{2,4}))?', msg)
+    if m:
+        day = int(m.group(1))
+        month = int(m.group(2))
+        year_str = m.group(3)
+        if year_str:
+            year = int(year_str)
+            if year < 100:
+                year += 2000
+        else:
+            year = today.year
+            if month < today.month or (month == today.month and day < today.day):
+                year += 1
+        try:
+            return datetime(year, month, day).date().isoformat()
+        except ValueError:
+            return None
+
+    return None
+
+
+def parse_period(message: str) -> Optional[str]:
+    """Parse preferred period from message: morning/afternoon/any."""
+    msg = (message or "").lower()
+    if any(k in msg for k in ["qualquer", "tanto faz", "indiferente"]):
+        return "any"
+    if any(k in msg for k in ["manha", "manhã", "cedo"]):
+        return "morning"
+    if any(k in msg for k in ["tarde", "depois do almoço", "depois do almoco"]):
+        return "afternoon"
+    return None
+
+
+def parse_weekday(message: str) -> Optional[int]:
+    """Parse weekday from message. Returns 0=Monday..6=Sunday, or None for any."""
+    msg = (message or "").lower()
+    if any(k in msg for k in ["qualquer", "tanto faz", "indiferente"]):
+        return None
+
+    mapping = {
+        "segunda": 0,
+        "terca": 1,
+        "terça": 1,
+        "quarta": 2,
+        "quinta": 3,
+        "sexta": 4,
+        "sabado": 5,
+        "sábado": 5,
+        "domingo": 6,
+    }
+    for key, val in mapping.items():
+        if key in msg:
+            return val
+    return None
+
+
+def parse_yes_no(message: str) -> Optional[bool]:
+    """Parse yes/no intent from message."""
+    msg = (message or "").lower().strip()
+    if msg in ("sim", "s", "claro", "confirmo", "ok", "pode", "isso"):
+        return True
+    if msg in ("nao", "não", "n", "negativo", "melhor nao", "melhor não"):
+        return False
+    if any(k in msg for k in ["sim", "pode", "confirmo", "claro"]):
+        return True
+    if any(k in msg for k in ["nao", "não", "negativo", "não quero", "melhor não"]):
+        return False
+    return None
+
+
+def parse_choice_number(message: str, max_choice: int) -> Optional[int]:
+    """Parse a number choice from message (1..max_choice)."""
+    import re
+
+    msg = (message or "").strip()
+    m = re.search(r'(\d+)', msg)
+    if not m:
+        return None
+    val = int(m.group(1))
+    if 1 <= val <= max_choice:
+        return val
+    return None
+
+
+def parse_time_from_message(message: str, default_period: Optional[str] = None) -> Optional[str]:
+    """Parse time from message, returns HH:MM."""
+    import re
+
+    msg = (message or "").lower()
+    m = re.search(r'(\d{1,2})(?:[:h](\d{2}))?', msg)
+    if not m:
+        return None
+
+    hour = int(m.group(1))
+    minute = int(m.group(2)) if m.group(2) else 0
+
+    if hour > 23 or minute > 59:
+        return None
+
+    # If period is afternoon and hour is ambiguous, shift to 12+.
+    if default_period == "afternoon" and hour < 12:
+        hour += 12
+
+    return f"{hour:02d}:{minute:02d}"
+
+
+def parse_date_range_from_message(message: str) -> Optional[Dict[str, str]]:
+    """Parse a date range (start/end) from message if possible."""
+    msg = (message or "").lower()
+    today = datetime.now().date()
+
+    if "semana que vem" in msg:
+        # Next week Monday..Sunday
+        days_ahead = (7 - today.weekday()) % 7
+        if days_ahead == 0:
+            days_ahead = 7
+        start = today + timedelta(days=days_ahead)
+        end = start + timedelta(days=6)
+        return {"start": start.isoformat(), "end": end.isoformat()}
+
+    if "essa semana" in msg:
+        start = today
+        end = today + timedelta(days=(6 - today.weekday()))
+        return {"start": start.isoformat(), "end": end.isoformat()}
+
+    return None
+
+
+def get_clinic_payment_options(clinic, service=None) -> Dict[str, Any]:
+    """Determine payment options based on clinic and service."""
+    payment_settings = getattr(clinic, 'payment_settings', {}) or {}
+    clinic_accepts_particular = payment_settings.get("acceptsParticular", True)
+    clinic_accepts_convenio = payment_settings.get("acceptsConvenio", False)
+    clinic_convenios = payment_settings.get("convenioList", []) or payment_settings.get("convenios", [])
+
+    service_accepts_particular = True
+    service_accepts_convenio = True
+    service_convenios = []
+    if service:
+        service_accepts_particular = getattr(service, "accepts_particular", True)
+        service_accepts_convenio = getattr(service, "accepts_convenio", True)
+        service_convenios = getattr(service, "convenios", []) or []
+
+    accepts_particular = clinic_accepts_particular and service_accepts_particular
+    accepts_convenio = clinic_accepts_convenio and service_accepts_convenio
+    convenios = service_convenios if service_convenios else clinic_convenios
+
+    if not accepts_particular and not accepts_convenio:
+        accepts_particular = True
+
+    return {
+        "accepts_particular": accepts_particular,
+        "accepts_convenio": accepts_convenio,
+        "convenios": convenios,
+    }
+
+
+def get_services_for_professional(services: List[Any], professional_id: Optional[str]) -> List[Any]:
+    """Filter services by professional if possible."""
+    if not professional_id:
+        return services
+    filtered = []
+    for s in services:
+        prof_ids = getattr(s, "professional_ids", []) or []
+        if not prof_ids or professional_id in prof_ids:
+            filtered.append(s)
+    return filtered
+
+
+def summarize_availability_for_professional(
+    clinic_id: str,
+    professional_id: str,
+    start_date: str,
+    end_date: str
+) -> List[str]:
+    """Return up to 2 summary strings like 'Qui manhã' or 'Sex tarde'."""
+    slots = get_available_slots(
+        db,
+        clinic_id,
+        professional_id=professional_id,
+        start_date=start_date,
+        end_date=end_date
+    )
+
+    min_lead_hours = get_clinic_min_lead_time(clinic_id)
+    if slots and min_lead_hours > 0:
+        slots = filter_slots_by_lead_time(slots, min_lead_hours)
+
+    if not slots:
+        return []
+
+    summaries = []
+    seen = set()
+    for slot in slots:
+        s_date = slot.date if hasattr(slot, 'date') else slot.get('date', '')
+        s_time = slot.time if hasattr(slot, 'time') else slot.get('time', '')
+        if not s_date or not s_time:
+            continue
+
+        try:
+            dt = datetime.strptime(s_date, "%Y-%m-%d")
+            day_names = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
+            day_label = day_names[dt.weekday()]
+        except ValueError:
+            day_label = s_date
+
+        hour = int(s_time.split(":")[0])
+        period = "manhã" if hour < 12 else "tarde"
+        key = f"{day_label}-{period}"
+        if key in seen:
+            continue
+        seen.add(key)
+        summaries.append(f"{day_label} {period}")
+        if len(summaries) >= 2:
+            break
+
+    return summaries
+
+
+def pick_best_slot(
+    clinic_id: str,
+    professional_id: Optional[str],
+    service_id: Optional[str],
+    requested_date: Optional[str],
+    weekday: Optional[int],
+    period: Optional[str]
+) -> Optional[Any]:
+    """Pick the earliest slot that matches preferences."""
+    if not db:
+        return None
+
+    today = datetime.now().date()
+    start_date = requested_date or (today + timedelta(days=1)).isoformat()
+    end_date = requested_date or (today + timedelta(days=14)).isoformat()
+
+    slots = get_available_slots(
+        db,
+        clinic_id,
+        professional_id=professional_id,
+        service_id=service_id,
+        start_date=start_date,
+        end_date=end_date
+    )
+
+    # Apply lead time
+    min_lead_hours = get_clinic_min_lead_time(clinic_id)
+    if slots and min_lead_hours > 0:
+        slots = filter_slots_by_lead_time(slots, min_lead_hours)
+
+    def slot_matches(s):
+        s_date = s.date if hasattr(s, 'date') else s.get('date', '')
+        s_time = s.time if hasattr(s, 'time') else s.get('time', '')
+        if weekday is not None:
+            try:
+                dt = datetime.strptime(s_date, "%Y-%m-%d")
+                if dt.weekday() != weekday:
+                    return False
+            except ValueError:
+                return False
+        if period == "morning":
+            try:
+                hour = int(s_time.split(":")[0])
+                if hour >= 12:
+                    return False
+            except Exception:
+                return False
+        if period == "afternoon":
+            try:
+                hour = int(s_time.split(":")[0])
+                if hour < 12:
+                    return False
+            except Exception:
+                return False
+        return True
+
+    for slot in slots:
+        if slot_matches(slot):
+            return slot
+
+    return None
+
+
+async def start_conversational_booking(
+    clinic_id: str,
+    phone: str,
+    phone_number_id: str,
+    access_token: str,
+    initial_message: Optional[str] = None
+) -> None:
+    """Start conversational booking flow (no buttons)."""
+    if not db:
+        return
+    state = db.load_conversation_state(clinic_id, phone)
+    date_range = parse_date_range_from_message(initial_message or "") or {}
+    requested_date = parse_requested_date(initial_message or "")
+
+    state["state"] = "conv_booking"
+    state["conv_booking"] = {
+        "step": "intro",
+        "clinic_id": clinic_id,
+        "start_date": date_range.get("start"),
+        "end_date": date_range.get("end"),
+        "requested_date": requested_date,
+        "initial_message": initial_message,
+    }
+    db.save_conversation_state(clinic_id, phone, state)
+
+    await send_whatsapp_message(
+        phone_number_id, phone,
+        "Perfeito! Vamos agendar sua consulta por aqui. 😊",
+        access_token
+    )
+
+    # Proactively send availability summary and ask for professional
+    professionals = db.get_clinic_professionals(clinic_id)
+    if professionals:
+        start_date = date_range.get("start") or (datetime.now().date() + timedelta(days=1)).isoformat()
+        end_date = date_range.get("end") or (datetime.now().date() + timedelta(days=7)).isoformat()
+
+        lines = ["Consultei a agenda para os próximos dias:"]
+        options = []
+        for idx, prof in enumerate(professionals, start=1):
+            summaries = summarize_availability_for_professional(
+                clinic_id, prof.id, start_date, end_date
+            )
+            prof_name = prof.full_name or prof.name
+            if summaries:
+                lines.append(f"{idx}. {prof_name}: {', '.join(summaries)}")
+            else:
+                lines.append(f"{idx}. {prof_name}: sem horários no período")
+            options.append(prof_name)
+
+        lines.append("\nCom qual profissional você deseja agendar?")
+        await send_whatsapp_message(
+            phone_number_id, phone,
+            "\n".join(lines),
+            access_token
+        )
+
+        state = db.load_conversation_state(clinic_id, phone)
+        state["conv_booking"]["step"] = "ask_professional"
+        state["conv_booking"]["professional_options"] = options
+        db.save_conversation_state(clinic_id, phone, state)
+
+
+async def handle_conversational_booking(
+    clinic_id: str,
+    phone: str,
+    message: str,
+    phone_number_id: str,
+    access_token: str,
+    state: Dict[str, Any]
+) -> bool:
+    """Handle conversational booking steps. Returns True if handled."""
+    if not db:
+        return False
+
+    clinic = db.get_clinic(clinic_id)
+    professionals = db.get_clinic_professionals(clinic_id)
+    services = db.get_clinic_services(clinic_id)
+
+    conv = state.get("conv_booking", {})
+    step = conv.get("step", "ask_period")
+    msg_lower = (message or "").lower()
+
+    # Step: intro with availability summary and professionals list
+    if step == "intro":
+        if not professionals:
+            await send_whatsapp_message(
+                phone_number_id, phone,
+                "Desculpe, não há profissionais disponíveis no momento.",
+                access_token
+            )
+            return True
+
+        start_date = conv.get("start_date") or (datetime.now().date() + timedelta(days=1)).isoformat()
+        end_date = conv.get("end_date") or (datetime.now().date() + timedelta(days=7)).isoformat()
+
+        lines = ["Consultei a agenda para os próximos dias:"]
+        options = []
+        for idx, prof in enumerate(professionals, start=1):
+            summaries = summarize_availability_for_professional(
+                clinic_id, prof.id, start_date, end_date
+            )
+            prof_name = prof.full_name or prof.name
+            if summaries:
+                lines.append(f"{idx}. {prof_name}: {', '.join(summaries)}")
+            else:
+                lines.append(f"{idx}. {prof_name}: sem horários no período")
+            options.append(prof_name)
+
+        lines.append("\nCom qual profissional você deseja agendar?")
+        await send_whatsapp_message(
+            phone_number_id, phone,
+            "\n".join(lines),
+            access_token
+        )
+
+        conv["step"] = "ask_professional"
+        conv["professional_options"] = options
+        state["conv_booking"] = conv
+        db.save_conversation_state(clinic_id, phone, state)
+        return True
+
+    # Step: ask preferred period
+    if step == "ask_period":
+        period = parse_period(message)
+        requested_date = parse_requested_date(message)
+        if period is None and requested_date is None:
+            await send_whatsapp_message(
+                phone_number_id, phone,
+                "Você prefere *manhã* ou *tarde*? Se não tiver preferência, responda *qualquer*.",
+                access_token
+            )
+            return True
+
+        conv["period"] = None if period == "any" else period
+        if requested_date:
+            conv["requested_date"] = requested_date
+            conv["step"] = "ask_professional"
+        else:
+            conv["step"] = "ask_weekday"
+
+        state["conv_booking"] = conv
+        db.save_conversation_state(clinic_id, phone, state)
+
+        if conv["step"] == "ask_weekday":
+            await send_whatsapp_message(
+                phone_number_id, phone,
+                "Qual o melhor *dia da semana*? (ex: segunda, terça...)\n"
+                "Se não tiver preferência, responda *qualquer*.",
+                access_token
+            )
+        else:
+            await send_whatsapp_message(
+                phone_number_id, phone,
+                "Você tem preferência por algum profissional? "
+                "Se sim, me diga o nome. Se não, responda *qualquer*.",
+                access_token
+            )
+        return True
+
+    # Step: ask weekday
+    if step == "ask_weekday":
+        requested_date = parse_requested_date(message)
+        weekday = parse_weekday(message)
+        if requested_date:
+            conv["requested_date"] = requested_date
+        else:
+            if "qualquer" in msg_lower or "tanto faz" in msg_lower:
+                conv["weekday"] = None
+            elif weekday is None:
+                await send_whatsapp_message(
+                    phone_number_id, phone,
+                    "Não entendi o dia. Pode responder com algo como *segunda*, *terça* ou *qualquer*?",
+                    access_token
+                )
+                return True
+            else:
+                conv["weekday"] = weekday
+
+        conv["step"] = "ask_professional"
+        state["conv_booking"] = conv
+        db.save_conversation_state(clinic_id, phone, state)
+
+        await send_whatsapp_message(
+            phone_number_id, phone,
+            "Você tem preferência por algum profissional? "
+            "Se sim, me diga o nome. Se não, responda *qualquer*.",
+            access_token
+        )
+        return True
+
+    # Step: ask professional
+    if step == "ask_professional":
+        if not professionals:
+            await send_whatsapp_message(
+                phone_number_id, phone,
+                "Desculpe, não há profissionais disponíveis no momento.",
+                access_token
+            )
+            return True
+
+        # Try match by name
+        if "qualquer" in msg_lower or "tanto faz" in msg_lower:
+            conv["professional_id"] = None
+            conv["professional_name"] = None
+        else:
+            prof = find_professional_in_message(message, professionals)
+            if not prof:
+                options = [p.full_name or p.name for p in professionals]
+                conv["professional_options"] = options
+                state["conv_booking"] = conv
+                db.save_conversation_state(clinic_id, phone, state)
+
+                lines = ["Qual profissional você prefere? Responda com o nome ou número:"]
+                for idx, name in enumerate(options, start=1):
+                    lines.append(f"{idx}. {name}")
+                await send_whatsapp_message(
+                    phone_number_id, phone,
+                    "\n".join(lines),
+                    access_token
+                )
+                return True
+
+            conv["professional_id"] = prof.id
+            conv["professional_name"] = prof.full_name or prof.name
+
+        # Show availability summary for the chosen professional
+        start_date = conv.get("start_date") or (datetime.now().date() + timedelta(days=1)).isoformat()
+        end_date = conv.get("end_date") or (datetime.now().date() + timedelta(days=7)).isoformat()
+        summaries = summarize_availability_for_professional(
+            clinic_id, conv.get("professional_id"), start_date, end_date
+        )
+        if summaries:
+            await send_whatsapp_message(
+                phone_number_id, phone,
+                f"Perfeito! Acabei de acessar a agenda e ele(a) tem disponibilidade: "
+                f"{', '.join(summaries)}.\n\n"
+                "Qual você prefere? (ex: 'sexta à tarde')",
+                access_token
+            )
+        else:
+            await send_whatsapp_message(
+                phone_number_id, phone,
+                "Perfeito! Vamos buscar o melhor horário disponível.\n"
+                "Você prefere *manhã* ou *tarde*?",
+                access_token
+            )
+            conv["step"] = "ask_period"
+            state["conv_booking"] = conv
+            db.save_conversation_state(clinic_id, phone, state)
+            return True
+
+        conv["step"] = "ask_preference"
+        state["conv_booking"] = conv
+        db.save_conversation_state(clinic_id, phone, state)
+        return True
+
+    # Step: ask preference (weekday/period/time)
+    if step == "ask_preference":
+        period = parse_period(message)
+        weekday = parse_weekday(message)
+        requested_date = parse_requested_date(message)
+        requested_time = parse_time_from_message(message, conv.get("period"))
+
+        if period == "any":
+            period = None
+        conv["period"] = period if period is not None else conv.get("period")
+        conv["weekday"] = weekday if weekday is not None else conv.get("weekday")
+        if requested_date:
+            conv["requested_date"] = requested_date
+
+        if requested_time and (requested_date or conv.get("requested_date")):
+            date_to_use = requested_date or conv.get("requested_date")
+            available = get_professional_availability(
+                db, clinic_id, conv.get("professional_id"), date_to_use
+            )
+            if requested_time in available:
+                conv["selected_date"] = date_to_use
+                conv["selected_time"] = requested_time
+                conv["step"] = "confirm_slot"
+                state["conv_booking"] = conv
+                db.save_conversation_state(clinic_id, phone, state)
+                await send_whatsapp_message(
+                    phone_number_id, phone,
+                    f"Ok, {format_date_short(date_to_use)} às {requested_time} pode ser?",
+                    access_token
+                )
+                return True
+            else:
+                # Propose closest available
+                slot = pick_best_slot(
+                    clinic_id=clinic_id,
+                    professional_id=conv.get("professional_id"),
+                    service_id=conv.get("service_id"),
+                    requested_date=date_to_use,
+                    weekday=None,
+                    period=conv.get("period"),
+                )
+                if slot:
+                    conv["selected_date"] = slot.date
+                    conv["selected_time"] = slot.time
+                    conv["step"] = "confirm_slot"
+                    state["conv_booking"] = conv
+                    db.save_conversation_state(clinic_id, phone, state)
+                    await send_whatsapp_message(
+                        phone_number_id, phone,
+                        f"Esse horário não está disponível. Ele consegue às {slot.time}. Pode ser?",
+                        access_token
+                    )
+                    return True
+
+        # If no direct time, try to find best slot for preferences
+        slot = pick_best_slot(
+            clinic_id=clinic_id,
+            professional_id=conv.get("professional_id"),
+            service_id=conv.get("service_id"),
+            requested_date=conv.get("requested_date"),
+            weekday=conv.get("weekday"),
+            period=conv.get("period"),
+        )
+        if slot:
+            conv["selected_date"] = slot.date
+            conv["selected_time"] = slot.time
+            conv["step"] = "confirm_slot"
+            state["conv_booking"] = conv
+            db.save_conversation_state(clinic_id, phone, state)
+            await send_whatsapp_message(
+                phone_number_id, phone,
+                f"Ok, {format_date_short(slot.date)} às {slot.time} pode ser?",
+                access_token
+            )
+            return True
+
+        await send_whatsapp_message(
+            phone_number_id, phone,
+            "Não encontrei horário com essa preferência. Você pode indicar outro dia ou período?",
+            access_token
+        )
+        return True
+        filtered_services = get_services_for_professional(services, conv.get("professional_id"))
+        if not filtered_services:
+            conv["service_id"] = None
+            conv["service_name"] = None
+            conv["step"] = "select_slot"
+        elif len(filtered_services) == 1:
+            s = filtered_services[0]
+            conv["service_id"] = s.id
+            conv["service_name"] = s.name
+            conv["step"] = "select_slot"
+        else:
+            conv["step"] = "ask_service"
+
+        state["conv_booking"] = conv
+        db.save_conversation_state(clinic_id, phone, state)
+
+        if conv["step"] == "ask_service":
+            await send_whatsapp_message(
+                phone_number_id, phone,
+                "Qual tipo de consulta você deseja? Vou listar as opções.",
+                access_token
+            )
+            return True
+
+    # Step: ask service
+    if step == "ask_service":
+        prof_id = conv.get("professional_id")
+        filtered_services = get_services_for_professional(services, prof_id)
+
+        if not filtered_services:
+            conv["service_id"] = None
+            conv["service_name"] = None
+            conv["step"] = "select_slot"
+            state["conv_booking"] = conv
+            db.save_conversation_state(clinic_id, phone, state)
+            # continue to select slot below
+        else:
+            if "qualquer" in msg_lower or "tanto faz" in msg_lower:
+                conv["service_id"] = None
+                conv["service_name"] = None
+                conv["step"] = "select_slot"
+                state["conv_booking"] = conv
+                db.save_conversation_state(clinic_id, phone, state)
+            else:
+                if len(filtered_services) == 1:
+                    s = filtered_services[0]
+                    conv["service_id"] = s.id
+                    conv["service_name"] = s.name
+                    conv["step"] = "select_slot"
+                    state["conv_booking"] = conv
+                    db.save_conversation_state(clinic_id, phone, state)
+                else:
+                    # Try match by name or number
+                    options = [s.name for s in filtered_services]
+                    choice_idx = parse_choice_number(message, len(options))
+                    if choice_idx is not None:
+                        s = filtered_services[choice_idx - 1]
+                        conv["service_id"] = s.id
+                        conv["service_name"] = s.name
+                        conv["step"] = "select_slot"
+                        state["conv_booking"] = conv
+                        db.save_conversation_state(clinic_id, phone, state)
+                    else:
+                        matched = None
+                        for s in filtered_services:
+                            if s.name.lower() in msg_lower:
+                                matched = s
+                                break
+                        if not matched:
+                            lines = ["Escolha o tipo de consulta (nome ou número):"]
+                            for idx, name in enumerate(options, start=1):
+                                lines.append(f"{idx}. {name}")
+                            await send_whatsapp_message(
+                                phone_number_id, phone,
+                                "\n".join(lines),
+                                access_token
+                            )
+                            return True
+                        conv["service_id"] = matched.id
+                        conv["service_name"] = matched.name
+                        conv["step"] = "select_slot"
+                        state["conv_booking"] = conv
+                        db.save_conversation_state(clinic_id, phone, state)
+
+    # Step: select slot
+    if conv.get("step") == "select_slot":
+        slot = pick_best_slot(
+            clinic_id=clinic_id,
+            professional_id=conv.get("professional_id"),
+            service_id=conv.get("service_id"),
+            requested_date=conv.get("requested_date"),
+            weekday=conv.get("weekday"),
+            period=conv.get("period"),
+        )
+
+        if not slot:
+            conv["step"] = "ask_period"
+            conv.pop("requested_date", None)
+            conv.pop("weekday", None)
+            conv.pop("period", None)
+            state["conv_booking"] = conv
+            db.save_conversation_state(clinic_id, phone, state)
+            await send_whatsapp_message(
+                phone_number_id, phone,
+                "Não encontrei horários com essas preferências. "
+                "Vamos tentar de novo: prefere *manhã* ou *tarde*? "
+                "Se tanto faz, responda *qualquer*.",
+                access_token
+            )
+            return True
+
+        conv["selected_date"] = slot.date
+        conv["selected_time"] = slot.time
+        conv["step"] = "confirm_slot"
+        state["conv_booking"] = conv
+        db.save_conversation_state(clinic_id, phone, state)
+
+        professional_name = conv.get("professional_name") or "Profissional disponível"
+        service_name = conv.get("service_name")
+        date_display = format_appointment_date(slot.date, slot.time)
+        service_text = f" para *{service_name}*" if service_name else ""
+
+        await send_whatsapp_message(
+            phone_number_id, phone,
+            f"Encontrei horário {date_display} com *{professional_name}*{service_text}. "
+            "Posso confirmar?",
+            access_token
+        )
+        return True
+
+    # Step: confirm slot
+    if step == "confirm_slot":
+        # Allow user to propose a different time
+        proposed_time = parse_time_from_message(message, conv.get("period"))
+        if proposed_time and conv.get("selected_date"):
+            date_to_use = conv.get("selected_date")
+            available = get_professional_availability(
+                db, clinic_id, conv.get("professional_id"), date_to_use
+            )
+            if proposed_time in available:
+                conv["selected_time"] = proposed_time
+                state["conv_booking"] = conv
+                db.save_conversation_state(clinic_id, phone, state)
+                await send_whatsapp_message(
+                    phone_number_id, phone,
+                    f"Perfeito, {format_date_short(date_to_use)} às {proposed_time}, correto?",
+                    access_token
+                )
+                return True
+            else:
+                slot = pick_best_slot(
+                    clinic_id=clinic_id,
+                    professional_id=conv.get("professional_id"),
+                    service_id=conv.get("service_id"),
+                    requested_date=date_to_use,
+                    weekday=None,
+                    period=conv.get("period"),
+                )
+                if slot:
+                    conv["selected_time"] = slot.time
+                    state["conv_booking"] = conv
+                    db.save_conversation_state(clinic_id, phone, state)
+                    await send_whatsapp_message(
+                        phone_number_id, phone,
+                        f"Ele só consegue às {slot.time}. Pode ser?",
+                        access_token
+                    )
+                    return True
+
+        yn = parse_yes_no(message)
+        if yn is None:
+            await send_whatsapp_message(
+                phone_number_id, phone,
+                "Você pode responder *sim* para confirmar ou *não* para buscar outro horário.",
+                access_token
+            )
+            return True
+        if yn is False:
+            conv["step"] = "ask_period"
+            conv.pop("requested_date", None)
+            conv.pop("weekday", None)
+            conv.pop("period", None)
+            conv.pop("selected_date", None)
+            conv.pop("selected_time", None)
+            state["conv_booking"] = conv
+            db.save_conversation_state(clinic_id, phone, state)
+            await send_whatsapp_message(
+                phone_number_id, phone,
+                "Certo! Prefere atendimento pela *manhã* ou *tarde*? "
+                "Se tanto faz, responda *qualquer*.",
+                access_token
+            )
+            return True
+
+        conv["step"] = "ask_patient_name"
+        state["conv_booking"] = conv
+        db.save_conversation_state(clinic_id, phone, state)
+        await send_whatsapp_message(
+            phone_number_id, phone,
+            "Perfeito! Qual seu *nome completo*?",
+            access_token
+        )
+        return True
+
+    # Step: patient name
+    if step == "ask_patient_name":
+        patient_name = message.strip()
+        if len(patient_name) < 3:
+            await send_whatsapp_message(
+                phone_number_id, phone,
+                "Por favor, informe seu *nome completo*.",
+                access_token
+            )
+            return True
+        conv["patient_name"] = patient_name
+        conv["step"] = "ask_patient_email"
+        state["conv_booking"] = conv
+        db.save_conversation_state(clinic_id, phone, state)
+        await send_whatsapp_message(
+            phone_number_id, phone,
+            "Qual seu *e-mail*? (se não tiver, responda *não tenho*)",
+            access_token
+        )
+        return True
+
+    # Step: patient email
+    if step == "ask_patient_email":
+        email = message.strip()
+        if "nao tenho" in msg_lower or "não tenho" in msg_lower:
+            email = None
+        elif "@" not in email:
+            await send_whatsapp_message(
+                phone_number_id, phone,
+                "Não consegui identificar um e-mail. Pode informar novamente ou responder *não tenho*?",
+                access_token
+            )
+            return True
+
+        conv["patient_email"] = email
+        # Determine payment type needs
+        service = None
+        if conv.get("service_id"):
+            service = next((s for s in services if s.id == conv["service_id"]), None)
+        pay_opts = get_clinic_payment_options(clinic, service)
+        accepts_particular = pay_opts["accepts_particular"]
+        accepts_convenio = pay_opts["accepts_convenio"]
+
+        if accepts_particular and accepts_convenio:
+            conv["step"] = "ask_payment_type"
+            state["conv_booking"] = conv
+            db.save_conversation_state(clinic_id, phone, state)
+            await send_whatsapp_message(
+                phone_number_id, phone,
+                "O agendamento será *particular* ou por *convênio*?",
+                access_token
+            )
+            return True
+
+        if accepts_convenio and not accepts_particular:
+            conv["payment_type"] = "convenio"
+            conv["step"] = "ask_convenio_name"
+        else:
+            conv["payment_type"] = "particular"
+            conv["step"] = "create_appointment"
+
+        state["conv_booking"] = conv
+        db.save_conversation_state(clinic_id, phone, state)
+        # fall through to next steps below
+
+    # Step: ask payment type
+    if step == "ask_payment_type":
+        if "convenio" in msg_lower or "convênio" in msg_lower or "plano" in msg_lower:
+            conv["payment_type"] = "convenio"
+            conv["step"] = "ask_convenio_name"
+        elif "particular" in msg_lower or "dinheiro" in msg_lower or "cartao" in msg_lower or "cartão" in msg_lower:
+            conv["payment_type"] = "particular"
+            conv["step"] = "create_appointment"
+        else:
+            await send_whatsapp_message(
+                phone_number_id, phone,
+                "Você pode responder *particular* ou *convênio*.",
+                access_token
+            )
+            return True
+
+        state["conv_booking"] = conv
+        db.save_conversation_state(clinic_id, phone, state)
+        # fall through
+
+    # Step: convenio name
+    if conv.get("step") == "ask_convenio_name":
+        service = None
+        if conv.get("service_id"):
+            service = next((s for s in services if s.id == conv["service_id"]), None)
+        pay_opts = get_clinic_payment_options(clinic, service)
+        convenios = pay_opts.get("convenios", [])
+
+        if convenios:
+            choice_idx = parse_choice_number(message, len(convenios))
+            if choice_idx is None:
+                lines = ["Qual convênio você usa? Responda com o nome ou número:"]
+                for idx, name in enumerate(convenios, start=1):
+                    lines.append(f"{idx}. {name}")
+                await send_whatsapp_message(
+                    phone_number_id, phone,
+                    "\n".join(lines),
+                    access_token
+                )
+                return True
+            convenio_name = convenios[choice_idx - 1]
+        else:
+            convenio_name = message.strip()
+            if len(convenio_name) < 2:
+                await send_whatsapp_message(
+                    phone_number_id, phone,
+                    "Por favor, informe o nome do convênio.",
+                    access_token
+                )
+                return True
+
+        conv["convenio_name"] = convenio_name
+        conv["step"] = "ask_convenio_number"
+        state["conv_booking"] = conv
+        db.save_conversation_state(clinic_id, phone, state)
+        await send_whatsapp_message(
+            phone_number_id, phone,
+            "Qual o *número da carteirinha* do convênio?",
+            access_token
+        )
+        return True
+
+    # Step: convenio number
+    if conv.get("step") == "ask_convenio_number":
+        convenio_number = message.strip()
+        if len(convenio_number) < 3:
+            await send_whatsapp_message(
+                phone_number_id, phone,
+                "Por favor, informe o número da carteirinha.",
+                access_token
+            )
+            return True
+        conv["convenio_number"] = convenio_number
+        conv["step"] = "create_appointment"
+        state["conv_booking"] = conv
+        db.save_conversation_state(clinic_id, phone, state)
+        # fall through
+
+    # Step: create appointment
+    if conv.get("step") == "create_appointment":
+        professional_id = conv.get("professional_id")
+        professional_name = conv.get("professional_name")
+        service_id = conv.get("service_id")
+        service = next((s for s in services if s.id == service_id), None) if service_id else None
+        patient_name = conv.get("patient_name")
+        patient_email = conv.get("patient_email")
+        date_str = conv.get("selected_date")
+        time_str = conv.get("selected_time")
+        payment_type = conv.get("payment_type", "particular")
+        convenio_name = conv.get("convenio_name")
+        convenio_number = conv.get("convenio_number")
+
+        if not professional_id:
+            # fallback: pick professional from slot search by reselecting
+            await send_whatsapp_message(
+                phone_number_id, phone,
+                "Desculpe, preciso do profissional escolhido para finalizar o agendamento.",
+                access_token
+            )
+            return True
+
+        # Determine pricing and signal settings
+        total_cents = getattr(service, "price_cents", 0) if service else 0
+        duration_minutes = getattr(service, "duration_minutes", 30) if service else 30
+        signal_percentage = (
+            getattr(service, "signal_percentage", None)
+            if service and getattr(service, "signal_percentage", None) is not None
+            else getattr(clinic, "signal_percentage", 15)
+        )
+
+        payment_settings = getattr(clinic, 'payment_settings', None) or {}
+        requires_deposit = payment_settings.get('requiresDeposit', False)
+        if "depositPercentage" in payment_settings:
+            signal_percentage = payment_settings.get('depositPercentage', signal_percentage)
+        if not total_cents:
+            total_cents = payment_settings.get('defaultConsultationPrice', 20000)
+
+        appointment = create_appointment(
+            db=db,
+            clinic_id=clinic_id,
+            patient_phone=phone,
+            professional_id=professional_id,
+            date_str=date_str,
+            time_str=time_str,
+            patient_name=patient_name,
+            patient_email=patient_email,
+            professional_name=professional_name or "Profissional",
+            service_id=service_id,
+            payment_type=payment_type,
+            total_cents=total_cents if payment_type == "particular" else 0,
+            signal_percentage=signal_percentage,
+            convenio_name=convenio_name if payment_type == "convenio" else None,
+            convenio_number=convenio_number if payment_type == "convenio" else None,
+            duration_minutes=duration_minutes,
+        )
+
+        if not appointment:
+            conv["step"] = "ask_period"
+            state["conv_booking"] = conv
+            db.save_conversation_state(clinic_id, phone, state)
+            await send_whatsapp_message(
+                phone_number_id, phone,
+                "Desculpe, esse horário ficou indisponível. Vamos tentar outro? "
+                "Prefere *manhã* ou *tarde*?",
+                access_token
+            )
+            return True
+
+        # Confirmation message
+        dt = datetime.strptime(date_str, "%Y-%m-%d")
+        day_names = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"]
+        day_name = day_names[dt.weekday()]
+        formatted_date = dt.strftime("%d/%m/%Y")
+
+        confirmation_msg = (
+            f"✅ *Agendamento Confirmado!*\n\n"
+            f"📅 *{day_name}, {formatted_date}*\n"
+            f"🕐 *{time_str}*\n"
+            f"👨‍⚕️ *{professional_name or 'Profissional'}*\n"
+            f"👤 *{patient_name}*\n"
+        )
+        if payment_type == "convenio" and convenio_name:
+            confirmation_msg += f"📋 Convênio: {convenio_name}\n"
+
+        await send_whatsapp_message(
+            phone_number_id, phone,
+            confirmation_msg,
+            access_token
+        )
+
+        # Send payment link if required
+        if payment_type == "particular" and requires_deposit:
+            signal_cents = int(total_cents * signal_percentage / 100)
+            if signal_cents >= 100:
+                from src.utils.payment import (
+                    create_pagseguro_pix_order,
+                    send_pix_payment_to_customer,
+                    format_payment_amount,
+                    is_pagseguro_configured,
+                    PAGSEGURO_MIN_PIX_AMOUNT_CENTS
+                )
+
+                if signal_cents >= PAGSEGURO_MIN_PIX_AMOUNT_CENTS and is_pagseguro_configured():
+                    payment_info = await create_pagseguro_pix_order(
+                        order_id=appointment.id,
+                        amount=signal_cents,
+                        customer_name=patient_name,
+                        customer_phone=phone,
+                        product_name=f"Sinal - Consulta {professional_name or 'Profissional'}"
+                    )
+                    if payment_info:
+                        if db:
+                            db.update_appointment(appointment.id, {
+                                "signalPaymentId": payment_info.get("payment_id")
+                            })
+                        await send_whatsapp_message(
+                            phone_number_id, phone,
+                            f"💳 *Sinal necessário:* {format_payment_amount(signal_cents)}\n\n"
+                            "Vou te enviar o PIX agora. 👇",
+                            access_token
+                        )
+                        await send_pix_payment_to_customer(
+                            phone=phone,
+                            payment_info=payment_info,
+                            amount=signal_cents,
+                            product_name="a confirmação da sua consulta",
+                            order_id=appointment.id
+                        )
+                else:
+                    pix_key = payment_settings.get('pixKey') or getattr(clinic, 'pix_key', None)
+                    if pix_key:
+                        from src.utils.payment import format_payment_amount
+                        await send_whatsapp_message(
+                            phone_number_id, phone,
+                            f"💳 *Sinal necessário:* {format_payment_amount(signal_cents)}\n"
+                            f"Chave PIX: `{pix_key}`\n\n"
+                            "Envie o comprovante aqui após o pagamento.",
+                            access_token
+                        )
+
+        # Clear conversation state
+        db.save_conversation_state(clinic_id, phone, {"state": "new", "context": {}})
+        return True
+
+    return False
+
+
+def format_date_short(date_str: str) -> str:
+    """Format YYYY-MM-DD as DD/MM."""
+    try:
+        dt = datetime.strptime(date_str, "%Y-%m-%d")
+        return dt.strftime("%d/%m")
+    except ValueError:
+        return date_str
+
+
+def find_professional_in_message(message: str, professionals: List[Any]) -> Optional[Any]:
+    """Try to find a professional mentioned by name in the message."""
+    msg = (message or "").lower()
+    for prof in professionals:
+        name = (prof.full_name or prof.name or "").lower()
+        if name and name in msg:
+            return prof
+        # Try first name match for longer names
+        first = name.split(" ")[0] if name else ""
+        if first and len(first) >= 3 and first in msg:
+            return prof
+    return None
+
+
+async def show_professional_slots_for_date(
+    clinic_id: str,
+    phone: str,
+    professional_id: str,
+    professional_name: str,
+    specialty: str,
+    date_str: str,
+    phone_number_id: str,
+    access_token: str
+) -> None:
+    """Show available slots for a professional on a specific date."""
+    slots = get_available_slots(
+        db,
+        clinic_id,
+        professional_id=professional_id,
+        start_date=date_str,
+        end_date=date_str
+    )
+
+    # Filter by minimum booking lead time
+    min_lead_hours = get_clinic_min_lead_time(clinic_id)
+    if slots and min_lead_hours > 0:
+        slots = filter_slots_by_lead_time(slots, min_lead_hours)
+
+    if not slots:
+        await send_whatsapp_message(
+            phone_number_id, phone,
+            f"Não encontrei horários para *{professional_name}* em {format_date_short(date_str)}. "
+            "Posso verificar outra data?",
+            access_token
+        )
+        return
+
+    # Build list for a single date
+    rows = []
+    slot_map = {}
+    for slot in slots[:10]:  # WhatsApp list limit
+        time_str = slot.time if hasattr(slot, 'time') else slot.get('time', '')
+        slot_id = f"slot_{date_str}_{time_str.replace(':', '')}"
+        slot_map[slot_id] = {"date": date_str, "time": time_str}
+        rows.append({
+            "id": slot_id,
+            "title": time_str,
+            "description": professional_name[:72]
+        })
+
+    # Save state
+    new_state = {
+        "state": "selecting_slot",
+        "clinic_id": clinic_id,
+        "professional_id": professional_id,
+        "professional_name": professional_name,
+        "slot_map": slot_map,
+    }
+    if db:
+        db.save_conversation_state(clinic_id, phone, new_state)
+
+    specialty_text = f" ({specialty})" if specialty else ""
+    await send_whatsapp_list(
+        phone_number_id, phone,
+        "Horários Disponíveis",
+        f"📅 *{professional_name}*{specialty_text}\n\nHorários para {format_date_short(date_str)}:",
+        "Ver horários",
+        [{"title": format_date_short(date_str), "rows": rows}],
+        access_token
+    )
+
+
+async def send_availability_by_professional(
+    clinic_id: str,
+    phone: str,
+    requested_date: str,
+    phone_number_id: str,
+    access_token: str
+) -> None:
+    """Send availability summary per professional for a specific date."""
+    if not db:
+        return
+
+    professionals = db.get_clinic_professionals(clinic_id)
+    if not professionals:
+        await send_whatsapp_message(
+            phone_number_id, phone,
+            "Desculpe, não há profissionais disponíveis no momento.",
+            access_token
+        )
+        return
+
+    # Fetch slots for requested date
+    slots = get_available_slots(
+        db,
+        clinic_id,
+        start_date=requested_date,
+        end_date=requested_date
+    )
+
+    # Apply lead time filter
+    min_lead_hours = get_clinic_min_lead_time(clinic_id)
+    if slots and min_lead_hours > 0:
+        slots = filter_slots_by_lead_time(slots, min_lead_hours)
+
+    slots_by_prof: Dict[str, List[str]] = {}
+    for slot in slots:
+        prof_id = slot.professional_id if hasattr(slot, 'professional_id') else slot.get('professional_id')
+        time_str = slot.time if hasattr(slot, 'time') else slot.get('time', '')
+        if not prof_id or not time_str:
+            continue
+        slots_by_prof.setdefault(prof_id, []).append(time_str)
+
+    # Build response lines
+    lines = [f"📅 *Horários para {format_date_short(requested_date)}:*"]
+    for prof in professionals:
+        prof_name = prof.full_name or prof.name
+        times = slots_by_prof.get(prof.id, [])
+        if times:
+            times_sorted = sorted(times)
+            preview = ", ".join(times_sorted[:3])
+            suffix = f" (+{len(times_sorted) - 3})" if len(times_sorted) > 3 else ""
+            lines.append(f"• *{prof_name}*: {preview}{suffix}")
+        else:
+            # Find next available slot within 14 days
+            next_slots = get_available_slots(
+                db,
+                clinic_id,
+                professional_id=prof.id,
+                start_date=requested_date,
+                days_ahead=14
+            )
+            if next_slots and min_lead_hours > 0:
+                next_slots = filter_slots_by_lead_time(next_slots, min_lead_hours)
+            next_slot = None
+            for s in next_slots:
+                s_date = s.date if hasattr(s, 'date') else s.get('date', '')
+                if s_date and s_date > requested_date:
+                    next_slot = s
+                    break
+            if next_slot:
+                next_date = next_slot.date if hasattr(next_slot, 'date') else next_slot.get('date', '')
+                next_time = next_slot.time if hasattr(next_slot, 'time') else next_slot.get('time', '')
+                lines.append(
+                    f"• *{prof_name}*: próximo em {format_date_short(next_date)} às {next_time}"
+                )
+            else:
+                lines.append(f"• *{prof_name}*: sem horários nos próximos dias")
+
+    lines.append("\nQual profissional você prefere?")
+
+    # Save state to await professional choice
+    state = db.load_conversation_state(clinic_id, phone)
+    state["state"] = "awaiting_professional_after_availability"
+    state["requested_date"] = requested_date
+    db.save_conversation_state(clinic_id, phone, state)
+
+    await send_whatsapp_message(
+        phone_number_id, phone,
+        "\n".join(lines),
+        access_token
+    )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler."""
@@ -510,6 +1863,7 @@ async def lifespan(app: FastAPI):
     logger.info("🚀 Starting Gendei WhatsApp Agent...")
     db = GendeiDatabase()
     flows_handler = FlowsHandler(db)
+    register_tool_implementations()
     logger.info("✅ Database initialized")
     yield
     logger.info("👋 Shutting down Gendei WhatsApp Agent...")
@@ -1417,36 +2771,45 @@ async def handle_flow_completion(
         patient_name = flow_response.get("nome", "")
         patient_email = flow_response.get("email", "")
 
-        # Get available times for the professional
+        # Get available times for the professional based on real availability
         available_times = []
         if db and professional_id:
-            professional = db.get_professional(clinic_id, professional_id)
-            if professional:
-                # Professional is a dataclass, use attribute access
-                working_hours = getattr(professional, 'working_hours', {}) or {}
-                duration = getattr(professional, 'appointment_duration', 30) or 30
+            # Calculate date range
+            today = datetime.now()
+            min_date = (today + timedelta(days=1)).strftime("%Y-%m-%d")
+            max_date = (today + timedelta(days=30)).strftime("%Y-%m-%d")
 
-                # Generate time slots from working hours
-                time_slots = set()
-                for day_key, day_hours in working_hours.items():
-                    for period in day_hours:
-                        start_str = period.get("start", "09:00")
-                        end_str = period.get("end", "18:00")
+            slots = get_available_slots(
+                db,
+                clinic_id,
+                professional_id=professional_id,
+                start_date=min_date,
+                end_date=max_date
+            )
 
-                        try:
-                            start_time = datetime.strptime(start_str, "%H:%M")
-                            end_time = datetime.strptime(end_str, "%H:%M")
+            # Filter by minimum booking lead time
+            min_lead_hours = get_clinic_min_lead_time(clinic_id)
+            if slots and min_lead_hours > 0:
+                slots = filter_slots_by_lead_time(slots, min_lead_hours)
 
-                            current = start_time
-                            while current < end_time:
-                                time_slots.add(current.strftime("%H:%M"))
-                                current += timedelta(minutes=duration)
-                        except ValueError:
-                            continue
+            # Build unique times from available slots
+            time_set = set()
+            for slot in slots:
+                time_str = slot.time if hasattr(slot, 'time') else slot.get('time', '')
+                if time_str:
+                    time_set.add(time_str)
 
-                available_times = [{"id": t, "title": t} for t in sorted(time_slots)][:20]
+            available_times = [{"id": t, "title": t} for t in sorted(time_set)][:20]
 
         if not available_times:
+            if db and professional_id:
+                await send_whatsapp_message(
+                    phone_number_id, phone,
+                    "No momento não há horários disponíveis para esse profissional. "
+                    "Posso verificar outra data ou outro profissional?",
+                    access_token
+                )
+                return
             available_times = [
                 {"id": "08:00", "title": "08:00"},
                 {"id": "09:00", "title": "09:00"},
@@ -1560,6 +2923,7 @@ async def handle_flow_completion(
                 date_str=selected_date,
                 time_str=selected_time,
                 patient_name=patient_name,
+                patient_email=patient_email,
                 professional_name=professional_name,
                 duration_minutes=30,
                 payment_type=tipo_pagamento,
@@ -1568,7 +2932,16 @@ async def handle_flow_completion(
                 convenio_name=convenio_nome if tipo_pagamento == "convenio" else None,
             )
 
-            logger.info(f"✅ Appointment created: {appointment.id if appointment else 'N/A'}")
+            if not appointment:
+                await send_whatsapp_message(
+                    phone_number_id, phone,
+                    "Desculpe, esse horário acabou de ficar indisponível. "
+                    "Posso verificar outro horário para você?",
+                    access_token
+                )
+                return
+
+            logger.info(f"✅ Appointment created: {appointment.id}")
 
             # Check if payment signal is required (particular with signal > 0)
             needs_payment = (
@@ -1692,7 +3065,8 @@ async def handle_scheduling_intent(
     phone: str,
     message: str,
     phone_number_id: str,
-    access_token: str
+    access_token: str,
+    contact_name: Optional[str] = None
 ) -> None:
     """Handle appointment scheduling intent with interactive WhatsApp flows."""
     clinic = db.get_clinic(clinic_id)
@@ -1755,6 +3129,16 @@ async def handle_scheduling_intent(
     logger.info(f"🔍 Flow ID for clinic {clinic_id}: {flow_id_to_use or 'NOT CONFIGURED'}")
     logger.info(f"🔍 Clinic whatsapp_config: {whatsapp_config}")
 
+    flow_errors = (whatsapp_config.get('flowsUpdateResult') or {}).get('errors', [])
+    if flow_errors:
+        logger.warning(f"⚠️ Flow config has errors; skipping flow: {flow_errors}")
+        await run_agent_response(
+            clinic_id, phone, message,
+            phone_number_id, access_token,
+            contact_name=contact_name
+        )
+        return
+
     if flow_id_to_use and professionals:
         logger.info(f"📱 Using WhatsApp Flow for scheduling (flow_id: {flow_id_to_use})")
 
@@ -1809,8 +3193,13 @@ async def handle_scheduling_intent(
             logger.info(f"✅ Patient Info Flow sent to {phone}")
             return
         else:
-            logger.warning(f"⚠️ Failed to send flow, falling back to list messages")
-            # Fall through to regular flow below
+            logger.warning(f"⚠️ Failed to send flow, falling back to Agents SDK")
+            await run_agent_response(
+                clinic_id, phone, message,
+                phone_number_id, access_token,
+                contact_name=contact_name
+            )
+            return
 
     if not professionals:
         await send_whatsapp_message(
@@ -1820,71 +3209,13 @@ async def handle_scheduling_intent(
         )
         return
 
-    # Helper to get specialty display for a professional
-    def get_prof_specialty_display(p):
-        specialties = getattr(p, 'specialties', []) or []
-        return ", ".join(specialties) if specialties else getattr(p, 'specialty', '')
-
-    # If only one professional, show time slots directly with buttons
-    if len(professionals) == 1:
-        prof = professionals[0]
-        await show_professional_slots(
-            clinic_id, phone, prof.id, prof.full_name or prof.name,
-            get_prof_specialty_display(prof),
-            phone_number_id, access_token
-        )
-    elif len(professionals) <= 3:
-        # 2-3 professionals: use buttons
-        buttons = [
-            {"id": f"prof_{p.id}", "title": (p.full_name or p.name)[:20]}
-            for p in professionals[:3]
-        ]
-        # Save state
-        prof_map = {f"prof_{p.id}": {"id": p.id, "name": p.full_name or p.name, "specialty": get_prof_specialty_display(p)} for p in professionals}
-        new_state = {
-            "state": "selecting_professional",
-            "clinic_id": clinic_id,
-            "professionals_map": prof_map,
-        }
-        if db:
-            db.save_conversation_state(clinic_id, phone, new_state)
-
-        await send_whatsapp_buttons(
-            phone_number_id, phone,
-            f"👋 Olá! Vamos agendar sua consulta.\n\n*{clinic.name}*\n\nSelecione o profissional:",
-            buttons,
-            access_token
-        )
-    else:
-        # More than 3 professionals: use list
-        rows = [
-            {
-                "id": f"prof_{p.id}",
-                "title": (p.full_name or p.name)[:24],
-                "description": get_prof_specialty_display(p)[:72] or "Profissional"
-            }
-            for p in professionals[:10]
-        ]
-        sections = [{"title": "Profissionais", "rows": rows}]
-
-        # Save state
-        prof_map = {f"prof_{p.id}": {"id": p.id, "name": p.full_name or p.name, "specialty": get_prof_specialty_display(p)} for p in professionals}
-        new_state = {
-            "state": "selecting_professional",
-            "clinic_id": clinic_id,
-            "professionals_map": prof_map,
-        }
-        if db:
-            db.save_conversation_state(clinic_id, phone, new_state)
-
-        await send_whatsapp_list(
-            phone_number_id, phone,
-            "Agendar Consulta",
-            f"👋 Olá! Vamos agendar sua consulta na *{clinic.name}*.\n\nSelecione o profissional desejado:",
-            "Ver profissionais",
-            sections,
-            access_token
-        )
+    # Fallback to Agents SDK scheduling flow (no buttons/list)
+    await run_agent_response(
+        clinic_id, phone, message,
+        phone_number_id, access_token,
+        contact_name=contact_name
+    )
+    return
 
 
 async def show_professional_slots(
@@ -2056,6 +3387,71 @@ async def process_message(
     msg_lower = message.lower().strip()
 
     # =============================================
+    # SENTIMENT / HUMAN ESCALATION (PRIORITY)
+    # =============================================
+    if detect_frustrated_sentiment(message):
+        logger.warning(f"😤 Frustrated sentiment detected from {phone}: {message[:50]}...")
+        await escalate_to_human(
+            clinic_id, phone,
+            phone_number_id, access_token,
+            reason=f"Usuário frustrado/irritado - Mensagem: {message[:100]}",
+            auto_takeover=True
+        )
+        return
+
+    if detect_human_escalation_request(message):
+        logger.info(f"🙋 User {phone} requested human escalation: {message[:50]}...")
+        await escalate_to_human(
+            clinic_id, phone,
+            phone_number_id, access_token,
+            reason=f"Solicitação de atendimento humano - Mensagem: {message[:100]}",
+            auto_takeover=True
+        )
+        return
+
+    # =============================================
+    # AGENTS SDK HANDLER (PRIMARY NON-FLOW PATH)
+    # =============================================
+    appointment_keywords = [
+        "minha consulta", "minhas consultas", "meu agendamento",
+        "cancelar", "desmarcar", "remarcar", "reagendar",
+    ]
+
+    if any(kw in msg_lower for kw in appointment_keywords):
+        await run_agent_response(
+            clinic_id, phone, message,
+            phone_number_id, access_token,
+            contact_name=contact_name
+        )
+        return
+
+    scheduling_keywords = [
+        "agendar", "marcar", "agendamento",
+        "quero agendar", "preciso agendar", "quero marcar",
+        "horário", "horarios", "disponibilidade",
+        "tem horario", "tem horário",
+        "qual profissional", "quais profissionais",
+        "quais opções", "quais opcoes", "qual opção",
+    ]
+
+    # If scheduling intent detected, try Flow first (inside handler), otherwise use Agents SDK
+    if any(kw in msg_lower for kw in scheduling_keywords):
+        logger.info(f"📅 Scheduling intent detected: {message[:50]}...")
+        await handle_scheduling_intent(
+            clinic_id, phone, message,
+            phone_number_id, access_token, contact_name
+        )
+        return
+
+    # For all other messages, route to Agents SDK
+    await run_agent_response(
+        clinic_id, phone, message,
+        phone_number_id, access_token,
+        contact_name=contact_name
+    )
+    return
+
+    # =============================================
     # DETECT GREETING AND RESET STATE IF NEEDED
     # If user sends a greeting while in middle of flow, reset and start fresh
     # =============================================
@@ -2153,13 +3549,24 @@ async def process_message(
             prof_map = state.get("professionals_map", {})
             prof_data = prof_map.get(button_payload)
             if prof_data:
-                await show_professional_slots(
-                    clinic_id, phone,
-                    prof_data["id"],
-                    prof_data["name"],
-                    prof_data.get("specialty", ""),
-                    phone_number_id, access_token
-                )
+                requested_date = state.get("requested_date")
+                if requested_date:
+                    await show_professional_slots_for_date(
+                        clinic_id, phone,
+                        prof_data["id"],
+                        prof_data["name"],
+                        prof_data.get("specialty", ""),
+                        requested_date,
+                        phone_number_id, access_token
+                    )
+                else:
+                    await show_professional_slots(
+                        clinic_id, phone,
+                        prof_data["id"],
+                        prof_data["name"],
+                        prof_data.get("specialty", ""),
+                        phone_number_id, access_token
+                    )
                 return
 
         # Slot selection from list
@@ -2308,10 +3715,96 @@ async def process_message(
             return
         # Otherwise, continue to AI chat below
 
+    # Conversational booking flow (no buttons)
+    if current_state == "conv_booking":
+        handled = await handle_conversational_booking(
+            clinic_id, phone, message,
+            phone_number_id, access_token,
+            state
+        )
+        if handled:
+            return
+
+    # Handle state after availability summary (waiting for professional choice)
+    if current_state == "awaiting_professional_after_availability":
+        professionals = db.get_clinic_professionals(clinic_id) if db else []
+        requested_date = state.get("requested_date")
+        matched_prof = find_professional_in_message(message, professionals) if professionals else None
+
+        if matched_prof and requested_date:
+            await show_professional_slots_for_date(
+                clinic_id, phone,
+                matched_prof.id,
+                matched_prof.full_name or matched_prof.name,
+                ", ".join(getattr(matched_prof, 'specialties', []) or []) or getattr(matched_prof, 'specialty', ''),
+                requested_date,
+                phone_number_id, access_token
+            )
+            return
+
+        # If no match, present buttons/list to choose
+        if professionals:
+            def get_prof_specialty_display(p):
+                specialties = getattr(p, 'specialties', []) or []
+                return ", ".join(specialties) if specialties else getattr(p, 'specialty', '')
+
+            if len(professionals) <= 3:
+                buttons = [
+                    {"id": f"prof_{p.id}", "title": (p.full_name or p.name)[:20]}
+                    for p in professionals[:3]
+                ]
+                prof_map = {f"prof_{p.id}": {"id": p.id, "name": p.full_name or p.name, "specialty": get_prof_specialty_display(p)} for p in professionals}
+                new_state = {
+                    "state": "selecting_professional",
+                    "clinic_id": clinic_id,
+                    "professionals_map": prof_map,
+                    "requested_date": requested_date,
+                }
+                if db:
+                    db.save_conversation_state(clinic_id, phone, new_state)
+
+                await send_whatsapp_buttons(
+                    phone_number_id, phone,
+                    "Selecione o profissional:",
+                    buttons,
+                    access_token
+                )
+            else:
+                rows = [
+                    {
+                        "id": f"prof_{p.id}",
+                        "title": (p.full_name or p.name)[:24],
+                        "description": get_prof_specialty_display(p)[:72] or "Profissional"
+                    }
+                    for p in professionals[:10]
+                ]
+                sections = [{"title": "Profissionais", "rows": rows}]
+
+                prof_map = {f"prof_{p.id}": {"id": p.id, "name": p.full_name or p.name, "specialty": get_prof_specialty_display(p)} for p in professionals}
+                new_state = {
+                    "state": "selecting_professional",
+                    "clinic_id": clinic_id,
+                    "professionals_map": prof_map,
+                    "requested_date": requested_date,
+                }
+                if db:
+                    db.save_conversation_state(clinic_id, phone, new_state)
+
+                await send_whatsapp_list(
+                    phone_number_id, phone,
+                    "Profissionais",
+                    "Selecione o profissional desejado:",
+                    "Ver profissionais",
+                    sections,
+                    access_token
+                )
+            return
+
     # Handle ongoing conversation flows
     if current_state == "selecting_professional":
         # User is selecting a professional (text fallback - buttons handled above)
         prof_map = state.get("professionals_map", {})
+        requested_date = state.get("requested_date")
 
         # Try to match by name in text
         selected = None
@@ -2322,13 +3815,23 @@ async def process_message(
                 break
 
         if selected:
-            await show_professional_slots(
-                clinic_id, phone,
-                selected["id"],
-                selected["name"],
-                selected.get("specialty", ""),
-                phone_number_id, access_token
-            )
+            if requested_date:
+                await show_professional_slots_for_date(
+                    clinic_id, phone,
+                    selected["id"],
+                    selected["name"],
+                    selected.get("specialty", ""),
+                    requested_date,
+                    phone_number_id, access_token
+                )
+            else:
+                await show_professional_slots(
+                    clinic_id, phone,
+                    selected["id"],
+                    selected["name"],
+                    selected.get("specialty", ""),
+                    phone_number_id, access_token
+                )
         else:
             # Re-show the professional selection
             await send_whatsapp_message(
@@ -2452,6 +3955,7 @@ async def process_message(
             date_str=state["date"],
             time_str=state["time"],
             patient_name=patient_name,
+            patient_email=state.get("patient_email"),
             professional_name=state["professional_name"],
             payment_type="particular",
             total_cents=service_price_cents,

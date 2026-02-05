@@ -220,12 +220,13 @@ def _get_professionals_impl(service_id: Optional[str] = None) -> str:
         if not professionals:
             return "Não há profissionais cadastrados no momento."
 
-        # Filter by service if specified
+        # Filter by service if specified (service links stored on Service.professional_ids)
         if service_id:
-            professionals = [
-                p for p in professionals
-                if hasattr(p, 'services') and service_id in (p.services or [])
-            ]
+            services = runtime.db.get_clinic_services(runtime.clinic_id)
+            service = next((s for s in services if getattr(s, "id", "") == service_id), None)
+            prof_ids = getattr(service, "professional_ids", []) if service else []
+            if prof_ids:
+                professionals = [p for p in professionals if p.id in prof_ids]
             if not professionals:
                 return "Não há profissionais disponíveis para este serviço."
 
@@ -233,7 +234,8 @@ def _get_professionals_impl(service_id: Optional[str] = None) -> str:
 
         for prof in professionals:
             name = prof.full_name if hasattr(prof, 'full_name') else prof.name
-            specialty = getattr(prof, 'specialty', '')
+            specialties = getattr(prof, 'specialties', []) or []
+            specialty = ", ".join(specialties) if specialties else getattr(prof, 'specialty', '')
             line = f"• *{name}*"
             if specialty:
                 line += f" - {specialty}"
@@ -274,9 +276,10 @@ def _get_services_impl() -> str:
         lines = ["🩺 *Serviços Disponíveis:*\n"]
 
         for service in services:
-            name = service.get('name', 'Serviço')
-            duration = service.get('duration', 30)
-            price = service.get('price', 0)
+            name = getattr(service, "name", "Serviço")
+            duration = getattr(service, "duration_minutes", 30)
+            price_cents = getattr(service, "price_cents", 0)
+            price = price_cents / 100 if price_cents else 0
 
             line = f"• *{name}*"
             if duration:
@@ -323,12 +326,21 @@ def _get_available_slots_impl(
         prof_name = professional.full_name if professional else "Profissional"
 
         # Get available slots
-        slots = get_available_slots(
-            runtime.db,
-            runtime.clinic_id,
-            professional_id=professional_id,
-            days_ahead=days_ahead
-        )
+        if date:
+            slots = get_available_slots(
+                runtime.db,
+                runtime.clinic_id,
+                professional_id=professional_id,
+                start_date=date,
+                end_date=date
+            )
+        else:
+            slots = get_available_slots(
+                runtime.db,
+                runtime.clinic_id,
+                professional_id=professional_id,
+                days_ahead=days_ahead
+            )
 
         if not slots:
             return f"Não há horários disponíveis para {prof_name} nos próximos {days_ahead} dias."
@@ -368,6 +380,7 @@ async def _create_appointment_impl(
     date: str,
     time: str,
     patient_name: str,
+    patient_email: Optional[str] = None,
     service_id: Optional[str] = None,
     payment_type: str = "particular",
     convenio_name: Optional[str] = None,
@@ -394,15 +407,24 @@ async def _create_appointment_impl(
 
         # Get service price if specified
         total_cents = 0
+        duration_minutes = 30
+        service = None
         if service_id:
             services = runtime.db.get_clinic_services(runtime.clinic_id)
-            service = next((s for s in services if s.get('id') == service_id), None)
+            service = next((s for s in services if getattr(s, "id", "") == service_id), None)
             if service:
-                total_cents = int(service.get('price', 0) * 100)
+                total_cents = getattr(service, "price_cents", 0) or 0
+                duration_minutes = getattr(service, "duration_minutes", 30) or 30
 
-        # Get clinic's deposit percentage
+        # Get clinic's deposit percentage and payment settings
         clinic = runtime.db.get_clinic(runtime.clinic_id)
         signal_percentage = clinic.signal_percentage if clinic else 0
+        payment_settings = getattr(clinic, "payment_settings", {}) if clinic else {}
+        requires_deposit = payment_settings.get("requiresDeposit", False)
+        if "depositPercentage" in payment_settings:
+            signal_percentage = payment_settings.get("depositPercentage", signal_percentage)
+        if total_cents == 0:
+            total_cents = payment_settings.get("defaultConsultationPrice", 20000)
 
         # Create the appointment
         appointment = create_appointment(
@@ -413,6 +435,7 @@ async def _create_appointment_impl(
             date_str=date,
             time_str=time,
             patient_name=patient_name,
+            patient_email=patient_email,
             professional_name=prof_name,
             service_id=service_id,
             payment_type=payment_type,
@@ -420,6 +443,7 @@ async def _create_appointment_impl(
             convenio_number=convenio_number,
             total_cents=total_cents,
             signal_percentage=signal_percentage,
+            duration_minutes=duration_minutes,
         )
 
         if appointment:
@@ -429,14 +453,66 @@ async def _create_appointment_impl(
             day_name = day_names[dt.weekday()]
             formatted_date = dt.strftime("%d/%m/%Y")
 
-            return (
+            confirmation = (
                 f"✅ *Consulta agendada com sucesso!*\n\n"
                 f"📅 *{day_name}, {formatted_date}*\n"
                 f"🕐 *{time}*\n"
                 f"👨‍⚕️ *{prof_name}*\n"
-                f"👤 *Paciente:* {patient_name}\n\n"
-                f"Você receberá um lembrete antes da consulta."
+                f"👤 *Paciente:* {patient_name}\n"
             )
+
+            # Send payment link if required
+            if payment_type == "particular" and requires_deposit:
+                signal_cents = int(total_cents * signal_percentage / 100)
+                if signal_cents >= 100:
+                    from src.utils.payment import (
+                        create_pagseguro_pix_order,
+                        send_pix_payment_to_customer,
+                        format_payment_amount,
+                        is_pagseguro_configured,
+                        PAGSEGURO_MIN_PIX_AMOUNT_CENTS
+                    )
+
+                    if signal_cents >= PAGSEGURO_MIN_PIX_AMOUNT_CENTS and is_pagseguro_configured():
+                        payment_info = await create_pagseguro_pix_order(
+                            order_id=appointment.id,
+                            amount=signal_cents,
+                            customer_name=patient_name,
+                            customer_phone=phone,
+                            product_name=f"Sinal - Consulta {prof_name}"
+                        )
+                        if payment_info:
+                            runtime.db.update_appointment(appointment.id, {
+                                "signalPaymentId": payment_info.get("payment_id")
+                            })
+                            await send_pix_payment_to_customer(
+                                phone=phone,
+                                payment_info=payment_info,
+                                amount=signal_cents,
+                                product_name="a confirmação da sua consulta",
+                                order_id=appointment.id
+                            )
+                            confirmation += (
+                                f"\n💳 *Sinal necessário:* {format_payment_amount(signal_cents)}\n"
+                                "Enviei o PIX para confirmar sua consulta. 👇"
+                            )
+                        else:
+                            confirmation += (
+                                f"\n💳 *Sinal necessário:* {format_payment_amount(signal_cents)}\n"
+                                "Não consegui gerar o PIX agora. Nossa equipe entrará em contato."
+                            )
+                    else:
+                        pix_key = payment_settings.get('pixKey') or getattr(clinic, 'pix_key', None)
+                        if pix_key:
+                            from src.utils.payment import format_payment_amount
+                            confirmation += (
+                                f"\n💳 *Sinal necessário:* {format_payment_amount(signal_cents)}\n"
+                                f"Chave PIX: `{pix_key}`\n"
+                                "Envie o comprovante após o pagamento."
+                            )
+
+            confirmation += "\n\nVocê receberá um lembrete antes da consulta."
+            return confirmation
         else:
             return "❌ Erro ao criar agendamento. Por favor, tente novamente."
 
@@ -452,6 +528,7 @@ async def create_appointment(
     date: str,
     time: str,
     patient_name: str,
+    patient_email: Optional[str] = None,
     service_id: Optional[str] = None,
     payment_type: str = "particular",
     convenio_name: Optional[str] = None,
@@ -466,6 +543,7 @@ async def create_appointment(
         date: Appointment date in YYYY-MM-DD format.
         time: Appointment time in HH:MM format.
         patient_name: Full name of the patient.
+        patient_email: Patient email if available.
         service_id: Optional ID of the service.
         payment_type: Payment type - "particular" or "convenio".
         convenio_name: Name of the health insurance (if convenio).
@@ -475,7 +553,7 @@ async def create_appointment(
         Success message with appointment details or error.
     """
     return await _create_appointment_impl(
-        phone, professional_id, date, time, patient_name,
+        phone, professional_id, date, time, patient_name, patient_email,
         service_id, payment_type, convenio_name, convenio_number
     )
 

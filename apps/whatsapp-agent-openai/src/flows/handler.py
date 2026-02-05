@@ -550,6 +550,7 @@ class FlowsHandler:
                 date_str=selected_date,
                 time_str=selected_time,
                 patient_name=patient_name,
+                patient_email=patient_email,
                 professional_name=professional_name,
                 duration_minutes=30,
             )

@@ -113,6 +113,12 @@ TOOL_DEFINITIONS: Dict[str, Dict[str, Any]] = {
                 "required": True,
             },
             {
+                "name": "patient_email",
+                "type": "string",
+                "description": "Patient email address (if available).",
+                "required": False,
+            },
+            {
                 "name": "service_id",
                 "type": "string",
                 "description": "Optional ID of the service.",

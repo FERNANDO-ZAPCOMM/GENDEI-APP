@@ -331,7 +331,6 @@
     "viewFile": "View",
     "selectPlaceholder": "Select...",
     "generate": "Generate",
-    "uploading": "Uploading...",
     "generating": "Generating...",
     "thumbnailUpdated": "Cover image updated!",
     "thumbnailGenerated": "Cover generated successfully!",
@@ -601,7 +600,16 @@
         "displayName": "Display Name",
         "displayNameHint": "The name displayed in WhatsApp conversations",
         "displayNameNotSet": "Not set",
-        "editDisplayName": "Edit"
+        "editDisplayName": "Edit",
+        "displayNamePlaceholder": "Enter the new display name",
+        "displayNameSave": "Save",
+        "displayNameCancel": "Cancel",
+        "displayNameReviewHint": "After saving, the name will be reviewed by WhatsApp.",
+        "displayNameStatus": "Status",
+        "displayNamePending": "New name",
+        "displayNameUpdated": "Display name updated",
+        "displayNameUpdateError": "Failed to update display name",
+        "displayNameEmpty": "Display name is required"
       },
       "shareLink": {
         "title": "Your WhatsApp Link",

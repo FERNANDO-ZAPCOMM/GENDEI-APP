@@ -1,10 +1,14 @@
 'use client';
 
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { CheckCircle2, XCircle, AlertCircle, RefreshCw, ExternalLink, Pencil } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { toast } from 'sonner';
+import { CheckCircle2, XCircle, AlertCircle, RefreshCw, Pencil, Save, X } from 'lucide-react';
 import type { WhatsAppStatus } from '@/lib/types';
+import { useAuth } from '@/hooks/use-auth';
 
 /**
  * Format phone number for display (add spaces for readability)
@@ -33,15 +37,128 @@ export function ConnectionStatusCardContent({
   isSyncing = false,
 }: ConnectionStatusCardProps) {
   const t = useTranslations();
+  const { getIdToken } = useAuth();
 
   const hasBusinessManager = !!status.meta?.businessManagerId;
   const hasWABA = !!status.meta?.wabaId;
   const hasPhone = !!status.meta?.phoneNumberId;
   const isVerified = status.whatsappConfig?.isVerified || false;
+  const phoneNumberId = status.meta?.phoneNumberId;
 
   // Get the phone number for display
   const rawPhoneNumber = status.meta?.displayPhoneNumber || status.meta?.phoneNumber || '';
   const displayPhoneNumber = formatPhoneForDisplay(rawPhoneNumber);
+
+  const [displayNameStatus, setDisplayNameStatus] = useState<{
+    verified_name?: string;
+    name_status?: string;
+    new_display_name?: string;
+    new_name_status?: string;
+  } | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [newDisplayName, setNewDisplayName] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+
+  const effectiveDisplayName = useMemo(() => {
+    return (
+      displayNameStatus?.verified_name ||
+      status.meta?.verifiedName ||
+      status.meta?.wabaName ||
+      t('settings.whatsapp.connection.displayNameNotSet') ||
+      'Não configurado'
+    );
+  }, [displayNameStatus?.verified_name, status.meta?.verifiedName, status.meta?.wabaName, t]);
+
+  const loadDisplayNameStatus = async () => {
+    if (!phoneNumberId) return;
+    const token = await getIdToken();
+    if (!token) return;
+
+    const response = await fetch(
+      `/api/whatsapp/display-name?phoneNumberId=${phoneNumberId}`,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+      }
+    );
+
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => ({}));
+      console.error('Display name status request failed', {
+        status: response.status,
+        errorBody,
+      });
+      const message =
+        errorBody.error ||
+        errorBody.message ||
+        `Failed to fetch display name status (HTTP ${response.status})`;
+      throw new Error(message);
+    }
+
+    const data = await response.json();
+    setDisplayNameStatus(data);
+  };
+
+  useEffect(() => {
+    if (!hasPhone) return;
+    loadDisplayNameStatus().catch((err) => {
+      console.error('Failed to load display name status:', err);
+    });
+  }, [hasPhone, phoneNumberId]);
+
+  const startEditing = () => {
+    setNewDisplayName(
+      displayNameStatus?.new_display_name ||
+      displayNameStatus?.verified_name ||
+      status.meta?.verifiedName ||
+      ''
+    );
+    setIsEditing(true);
+  };
+
+  const cancelEditing = () => {
+    setIsEditing(false);
+    setNewDisplayName('');
+  };
+
+  const saveDisplayName = async () => {
+    if (!phoneNumberId) return;
+    const trimmed = newDisplayName.trim();
+    if (!trimmed) {
+      toast.error(t('settings.whatsapp.connection.displayNameEmpty') || 'Nome de exibição é obrigatório');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const token = await getIdToken();
+      if (!token) throw new Error('Not authenticated');
+
+      const response = await fetch('/api/whatsapp/display-name', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          phoneNumberId,
+          newDisplayName: trimmed,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.error || 'Failed to update display name');
+      }
+
+      toast.success(t('settings.whatsapp.connection.displayNameUpdated') || 'Display name atualizado');
+      await loadDisplayNameStatus();
+      setIsEditing(false);
+    } catch (err) {
+      toast.error((err as Error).message || t('settings.whatsapp.connection.displayNameUpdateError') || 'Erro ao atualizar');
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   return (
     <div className="space-y-4 pt-4">
@@ -154,23 +271,57 @@ export function ConnectionStatusCardContent({
               </div>
               <div className="mt-1 ml-7">
                 <p className="text-sm text-gray-600">
-                  {status.meta?.verifiedName || status.meta?.wabaName || t('settings.whatsapp.connection.displayNameNotSet') || 'Não configurado'}
+                  {effectiveDisplayName}
                 </p>
+                {displayNameStatus?.name_status && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {t('settings.whatsapp.connection.displayNameStatus') || 'Status'}: {displayNameStatus.name_status}
+                  </p>
+                )}
+                {displayNameStatus?.new_display_name && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {t('settings.whatsapp.connection.displayNamePending') || 'Novo nome'}: {displayNameStatus.new_display_name}
+                    {displayNameStatus.new_name_status ? ` (${displayNameStatus.new_name_status})` : ''}
+                  </p>
+                )}
                 <p className="text-xs text-muted-foreground mt-1">
                   {t('settings.whatsapp.connection.displayNameHint') || 'O nome exibido nas conversas do WhatsApp'}
                 </p>
+                {isEditing && (
+                  <div className="mt-3 space-y-2">
+                    <Input
+                      value={newDisplayName}
+                      onChange={(e) => setNewDisplayName(e.target.value)}
+                      maxLength={128}
+                      placeholder={t('settings.whatsapp.connection.displayNamePlaceholder') || 'Digite o novo nome de exibição'}
+                    />
+                    <div className="flex items-center gap-2">
+                      <Button size="sm" onClick={saveDisplayName} disabled={isSaving}>
+                        {isSaving ? (
+                          <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                        ) : (
+                          <Save className="h-4 w-4 mr-2" />
+                        )}
+                        {t('settings.whatsapp.connection.displayNameSave') || 'Salvar'}
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={cancelEditing} disabled={isSaving}>
+                        <X className="h-4 w-4 mr-2" />
+                        {t('settings.whatsapp.connection.displayNameCancel') || 'Cancelar'}
+                      </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {t('settings.whatsapp.connection.displayNameReviewHint') || 'Após salvar, o nome será revisado pelo WhatsApp.'}
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
-            <a
-              href={`https://business.facebook.com/wa/manage/phone-numbers/${status.meta?.businessManagerId ? `?business_id=${status.meta.businessManagerId}` : ''}${status.meta?.wabaId ? `&waba_id=${status.meta.wabaId}` : ''}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1 text-xs text-primary hover:underline"
-            >
-              <Pencil className="h-3 w-3" />
-              {t('settings.whatsapp.connection.editDisplayName') || 'Editar'}
-              <ExternalLink className="h-3 w-3" />
-            </a>
+            {!isEditing && (
+              <Button size="sm" variant="outline" onClick={startEditing}>
+                <Pencil className="h-3 w-3 mr-2" />
+                {t('settings.whatsapp.connection.editDisplayName') || 'Editar'}
+              </Button>
+            )}
           </div>
         )}
 

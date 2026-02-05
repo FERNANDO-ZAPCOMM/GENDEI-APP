@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
 import uuid
 from .models import Appointment, AppointmentStatus, PaymentType, Patient
+from .availability import get_professional_availability
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +20,7 @@ def create_appointment(
     time_str: str,
     patient_name: str,
     professional_name: str,
+    patient_email: Optional[str] = None,
     service_id: Optional[str] = None,
     payment_type: str = "particular",
     total_cents: int = 0,
@@ -36,6 +38,20 @@ def create_appointment(
         Created Appointment object or None if failed
     """
     try:
+        # Validate availability before creating appointment
+        available_times = get_professional_availability(
+            db=db,
+            clinic_id=clinic_id,
+            professional_id=professional_id,
+            date_str=date_str
+        )
+        if time_str not in available_times:
+            logger.warning(
+                f"Slot not available for appointment: {date_str} {time_str} "
+                f"(clinic={clinic_id}, professional={professional_id})"
+            )
+            return None
+
         # Generate appointment ID
         appointment_id = f"apt_{uuid.uuid4().hex[:12]}"
 
@@ -53,6 +69,7 @@ def create_appointment(
             name=patient_name,
             cpf=patient_cpf,
             birth_date=patient_birth_date,
+            email=patient_email,
             convenio_name=convenio_name,
             convenio_number=convenio_number,
             clinic_ids=[clinic_id]
@@ -341,5 +358,3 @@ def get_appointment_by_id(db, appointment_id: str) -> Optional[Appointment]:
     except Exception as e:
         logger.error(f"Error getting appointment {appointment_id}: {e}")
         return None
-
-

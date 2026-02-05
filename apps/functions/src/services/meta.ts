@@ -2457,6 +2457,14 @@ export interface WhatsAppBusinessProfile {
   websites?: string[];
 }
 
+export interface WhatsAppDisplayNameStatus {
+  verified_name?: string;
+  name_status?: string;
+  new_display_name?: string;
+  new_name_status?: string;
+  id?: string;
+}
+
 /**
  * Get WhatsApp Business Profile for a phone number
  * @see https://developers.facebook.com/docs/whatsapp/cloud-api/reference/business-profiles
@@ -2556,6 +2564,71 @@ export async function updateBusinessProfile(
   }
 
   console.log(`Successfully updated business profile for phone ${phoneNumberId}`);
+  return true;
+}
+
+/**
+ * Get display name and status for a phone number
+ * @see https://developers.facebook.com/docs/whatsapp/cloud-api/reference/phone-numbers
+ */
+export async function getDisplayNameStatus(
+  phoneNumberId: string,
+  clinicId: string
+): Promise<WhatsAppDisplayNameStatus> {
+  const accessToken = await getAccessToken(clinicId);
+  const apiVersion = getMetaApiVersion();
+
+  const fields = 'verified_name,name_status,new_display_name,new_name_status';
+  const url = `https://graph.facebook.com/${apiVersion}/${phoneNumberId}?fields=${fields}`;
+
+  const response = await fetch(url, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    console.error('Failed to fetch display name status:', error);
+    throw new Error(error?.error?.message || 'Failed to fetch display name status');
+  }
+
+  return response.json();
+}
+
+/**
+ * Update display name for a phone number
+ * @see https://developers.facebook.com/docs/whatsapp/cloud-api/reference/phone-numbers
+ */
+export async function updateDisplayName(
+  phoneNumberId: string,
+  clinicId: string,
+  newDisplayName: string
+): Promise<boolean> {
+  const accessToken = await getAccessToken(clinicId);
+  const apiVersion = getMetaApiVersion();
+
+  const trimmedName = newDisplayName.trim();
+  if (!trimmedName) {
+    throw new Error('Display name cannot be empty');
+  }
+
+  const params = new URLSearchParams({ new_display_name: trimmedName });
+  const url = `https://graph.facebook.com/${apiVersion}/${phoneNumberId}?${params.toString()}`;
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({}),
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    console.error('Failed to update display name:', error);
+    throw new Error(error?.error?.message || 'Failed to update display name');
+  }
+
   return true;
 }
 
