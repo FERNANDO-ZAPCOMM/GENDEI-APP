@@ -117,7 +117,6 @@ async def _send_whatsapp_buttons_impl(
         return f"Error: {str(e)}"
 
 
-@function_tool
 async def send_whatsapp_buttons(
     phone: str,
     body_text: str,
@@ -128,30 +127,8 @@ async def send_whatsapp_buttons(
     """
     Send a WhatsApp message with interactive quick reply buttons (up to 3 buttons).
 
-    PREFERRED for greetings, menu options, yes/no questions, and any choice-based interactions.
-    Use this instead of send_text_message when offering choices to the patient.
-
-    Args:
-        phone: Patient phone number in E.164 format (e.g., +5511999999999).
-        body_text: Main message text. Supports WhatsApp formatting.
-        buttons: List of button objects. Each must have 'id' and 'title' keys.
-                 Maximum 3 buttons. Example: [{"id": "yes", "title": "Sim"}, {"id": "no", "title": "Não"}]
-        header_text: Optional header text displayed above the body.
-        footer_text: Optional footer text displayed below buttons.
-
-    Returns:
-        Success or error message.
-
-    Example:
-        send_whatsapp_buttons(
-            phone="+5511999999999",
-            body_text="Olá! Como posso ajudar?",
-            buttons=[
-                {"id": "agendar", "title": "Agendar consulta"},
-                {"id": "consultas", "title": "Minhas consultas"},
-                {"id": "info", "title": "Informações"}
-            ]
-        )
+    Note: This function is not exposed as an Agents SDK tool to avoid strict schema
+    issues with complex object parameters. Use in non-agent flows only.
     """
     return await _send_whatsapp_buttons_impl(phone, body_text, buttons, header_text, footer_text)
 

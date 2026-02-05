@@ -74,15 +74,15 @@ export default function PaymentsPage() {
   const handleSave = async () => {
     // Validate PIX key is required
     if (!settings.pixKey || !settings.pixKey.trim()) {
-      setPixKeyError('A chave PIX é obrigatória');
-      toast.error('A chave PIX é obrigatória para receber pagamentos.');
+      setPixKeyError(t('paymentSettings.pixKeyRequired'));
+      toast.error(t('paymentSettings.pixKeyRequiredDesc'));
       return;
     }
 
     // Validate PIX key confirmation
     if (settings.pixKey !== confirmPixKey) {
-      setPixKeyError('As chaves PIX não coincidem');
-      toast.error('As chaves PIX não coincidem. Por favor, verifique.');
+      setPixKeyError(t('paymentSettings.pixKeyMismatch'));
+      toast.error(t('paymentSettings.pixKeyMismatchDesc'));
       return;
     }
     setPixKeyError('');
@@ -99,12 +99,12 @@ export default function PaymentsPage() {
         pixKey: settings.pixKey, // Also save at root level for easier access
         depositPercentage: settings.depositPercentage, // Always save since deposit is always required
       } as Record<string, unknown>);
-      toast.success('Configurações de pagamento salvas!');
+      toast.success(t('paymentSettings.savedSuccess'));
 
       // Redirect to WhatsApp page after saving
       router.push(getNextStepUrl('payments', locale));
     } catch {
-      toast.error('Erro ao salvar configurações');
+      toast.error(t('paymentSettings.saveError'));
     } finally {
       setIsSaving(false);
     }
@@ -122,8 +122,8 @@ export default function PaymentsPage() {
     <div className="space-y-6 page-transition">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-semibold text-gray-900">Configurações de Pagamento</h1>
-        <p className="text-gray-600 mt-1">Configure as formas de pagamento e opções de cobrança</p>
+        <h1 className="text-2xl font-semibold text-gray-900">{t('paymentSettings.title')}</h1>
+        <p className="text-gray-600 mt-1">{t('paymentSettings.description')}</p>
       </div>
 
       {/* Content wrapper - 75% width on large screens */}
@@ -133,32 +133,32 @@ export default function PaymentsPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
             <Percent className="w-4 h-4" />
-            Sinal / Depósito
+            {t('paymentSettings.depositCard.title')}
           </CardTitle>
-          <CardDescription>Configure o sinal para confirmar agendamentos</CardDescription>
+          <CardDescription>{t('paymentSettings.depositCard.description')}</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="p-4 border rounded-lg border-green-200 bg-green-50/30">
             <div className="flex items-center justify-between">
               <div>
-                <Label className="font-medium">Sinal Obrigatório</Label>
+                <Label className="font-medium">{t('paymentSettings.depositRequired')}</Label>
                 <p className="text-sm text-muted-foreground">
-                  Pagamento antecipado para confirmar consulta
+                  {t('paymentSettings.depositDesc')}
                 </p>
               </div>
-              <Badge variant="default" className="bg-green-600">Ativo</Badge>
+              <Badge variant="default" className="bg-green-600">{t('paymentSettings.active')}</Badge>
             </div>
 
             <div className="mt-4 pt-4 border-t space-y-4">
               <div className="space-y-2">
-                <Label className="text-sm">Porcentagem do Sinal</Label>
+                <Label className="text-sm">{t('paymentSettings.depositPercentage')}</Label>
                 <Select
                   value={String(settings.depositPercentage)}
                   onValueChange={(value) => updateSettings({ depositPercentage: Number(value) })}
                   disabled={isSaving}
                 >
                   <SelectTrigger className="w-full max-w-[200px]">
-                    <SelectValue placeholder="Selecione a porcentagem" />
+                    <SelectValue placeholder={t('paymentSettings.selectPercentage')} />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="10">10%</SelectItem>
@@ -172,7 +172,7 @@ export default function PaymentsPage() {
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">
-                  Porcentagem do valor da consulta a ser cobrada como sinal
+                  {t('paymentSettings.depositHelp')}
                 </p>
               </div>
             </div>
@@ -185,17 +185,17 @@ export default function PaymentsPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
             <Key className="w-4 h-4" />
-            Chave PIX
+            {t('paymentSettings.pixCard.title')}
             <span className="text-red-500">*</span>
           </CardTitle>
-          <CardDescription>Informe a chave PIX para recebimento de pagamentos</CardDescription>
+          <CardDescription>{t('paymentSettings.pixCard.description')}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {/* Tipo de Chave - alone at top, same width as fields below */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="pixKeyType">
-                Tipo de Chave <span className="text-red-500">*</span>
+                {t('paymentSettings.pixCard.keyType')} <span className="text-red-500">*</span>
               </Label>
               <Select
                 value={settings.pixKeyType || 'cpf'}
@@ -203,14 +203,14 @@ export default function PaymentsPage() {
                 disabled={isSaving}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Selecione o tipo" />
+                  <SelectValue placeholder={t('paymentSettings.pixCard.selectType')} />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="cpf">CPF</SelectItem>
                   <SelectItem value="cnpj">CNPJ</SelectItem>
                   <SelectItem value="email">Email</SelectItem>
-                  <SelectItem value="phone">Telefone</SelectItem>
-                  <SelectItem value="random">Chave Aleatória</SelectItem>
+                  <SelectItem value="phone">{t('paymentSettings.pixCard.phone')}</SelectItem>
+                  <SelectItem value="random">{t('paymentSettings.pixCard.randomKey')}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -220,7 +220,7 @@ export default function PaymentsPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="pixKey">
-                Chave PIX <span className="text-red-500">*</span>
+                {t('paymentSettings.pixCard.pixKey')} <span className="text-red-500">*</span>
               </Label>
               <Input
                 id="pixKey"
@@ -229,7 +229,7 @@ export default function PaymentsPage() {
                   settings.pixKeyType === 'cnpj' ? '00.000.000/0000-00' :
                   settings.pixKeyType === 'email' ? 'exemplo@email.com' :
                   settings.pixKeyType === 'phone' ? '+55 11 99999-9999' :
-                  'Chave aleatória'
+                  t('paymentSettings.pixCard.randomKey')
                 }
                 value={settings.pixKey || ''}
                 onChange={(e) => {
@@ -243,11 +243,11 @@ export default function PaymentsPage() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="confirmPixKey">
-                Confirme a Chave PIX <span className="text-red-500">*</span>
+                {t('paymentSettings.pixCard.confirmPixKey')} <span className="text-red-500">*</span>
               </Label>
               <Input
                 id="confirmPixKey"
-                placeholder="Digite a chave PIX novamente"
+                placeholder={t('paymentSettings.pixCard.confirmPlaceholder')}
                 value={confirmPixKey}
                 onChange={(e) => {
                   setConfirmPixKey(e.target.value);
@@ -263,7 +263,7 @@ export default function PaymentsPage() {
             <p className="text-sm text-red-500">{pixKeyError}</p>
           )}
           <p className="text-xs text-muted-foreground">
-            Esta chave será usada para gerar QR codes de pagamento. Digite duas vezes para confirmar.
+            {t('paymentSettings.pixCard.help')}
           </p>
         </CardContent>
       </Card>
@@ -274,12 +274,12 @@ export default function PaymentsPage() {
           {isSaving ? (
             <>
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              Salvando...
+              {t('common.saving')}
             </>
           ) : (
             <>
               <Save className="h-4 w-4 mr-2" />
-              {t('common.save') || 'Salvar'}
+              {t('common.save')}
             </>
           )}
         </Button>

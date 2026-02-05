@@ -49,11 +49,11 @@ import {
 // Service modality type
 type ServiceModality = 'presencial' | 'online' | 'ambos';
 
-const modalityConfig: Record<ServiceModality, { label: string; icon: any; color: string }> = {
-  presencial: { label: 'Presencial', icon: MapPin, color: 'bg-blue-100 text-blue-700' },
-  online: { label: 'Online', icon: Video, color: 'bg-purple-100 text-purple-700' },
-  ambos: { label: 'Presencial e Online', icon: MonitorSmartphone, color: 'bg-indigo-100 text-indigo-700' },
-};
+const getModalityConfig = (t: (key: string) => string): Record<ServiceModality, { label: string; icon: any; color: string }> => ({
+  presencial: { label: t('servicesPage.modality.presencial'), icon: MapPin, color: 'bg-blue-100 text-blue-700' },
+  online: { label: t('servicesPage.modality.online'), icon: Video, color: 'bg-purple-100 text-purple-700' },
+  ambos: { label: t('servicesPage.modality.both'), icon: MonitorSmartphone, color: 'bg-indigo-100 text-indigo-700' },
+});
 
 interface ServiceFormData {
   name: string;
@@ -82,10 +82,12 @@ function SuggestedServicesSection({
   clinicCategory,
   onAddService,
   onAddCustom,
+  t,
 }: {
   clinicCategory?: string;
   onAddService: (template: ServiceTemplate) => void;
   onAddCustom: () => void;
+  t: (key: string) => string;
 }) {
   const suggestedServices = getSuggestedServices(clinicCategory || 'outro');
 
@@ -95,13 +97,13 @@ function SuggestedServicesSection({
         <div className="w-16 h-16 rounded-full bg-muted/50 flex items-center justify-center mb-4 mx-auto">
           <ClipboardList className="w-8 h-8 text-muted-foreground/50" />
         </div>
-        <p className="text-muted-foreground text-sm">Adicione serviços à sua clínica</p>
+        <p className="text-muted-foreground text-sm">{t('servicesPage.addServices')}</p>
       </div>
 
       {/* Suggested Services */}
       <div className="space-y-4">
         <div>
-          <Label className="text-sm text-muted-foreground">Serviços sugeridos para sua clínica:</Label>
+          <Label className="text-sm text-muted-foreground">{t('servicesPage.suggestedServices')}</Label>
           <div className="flex flex-wrap gap-2 mt-2">
             {suggestedServices.map((template, index) => (
               <Button
@@ -124,7 +126,7 @@ function SuggestedServicesSection({
         <div className="border-t pt-4">
           <Button onClick={onAddCustom} variant="default" className="w-full sm:w-auto">
             <Plus className="w-4 h-4 mr-2" />
-            Criar serviço personalizado
+            {t('servicesPage.createCustom')}
           </Button>
         </div>
       </div>
@@ -136,6 +138,8 @@ export default function ServicesPage() {
   const t = useTranslations();
   const { currentClinic: clinic, isLoading: clinicLoading } = useClinic();
   const { data: services, isLoading, create, update, remove } = useServices(clinic?.id || '');
+
+  const modalityConfig = getModalityConfig(t);
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingService, setEditingService] = useState<any>(null);
@@ -170,7 +174,7 @@ export default function ServicesPage() {
 
   const handleSubmit = async () => {
     if (!formData.name) {
-      toast.error('Nome é obrigatório');
+      toast.error(t('servicesPage.nameRequired'));
       return;
     }
 
@@ -180,25 +184,25 @@ export default function ServicesPage() {
           id: editingService.id,
           data: formData,
         });
-        toast.success('Serviço atualizado!');
+        toast.success(t('servicesPage.updateSuccess'));
       } else {
         await create.mutateAsync(formData);
-        toast.success('Serviço adicionado!');
+        toast.success(t('servicesPage.createSuccess'));
       }
       setIsDialogOpen(false);
     } catch (error: any) {
-      toast.error(error.message || 'Erro ao salvar serviço');
+      toast.error(error.message || t('servicesPage.saveError'));
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Tem certeza que deseja excluir este serviço?')) return;
+    if (!confirm(t('servicesPage.deleteConfirm'))) return;
 
     try {
       await remove.mutateAsync(id);
-      toast.success('Serviço excluído!');
+      toast.success(t('servicesPage.deleteSuccess'));
     } catch (error: any) {
-      toast.error(error.message || 'Erro ao excluir serviço');
+      toast.error(error.message || t('servicesPage.deleteError'));
     }
   };
 
@@ -216,23 +220,23 @@ export default function ServicesPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl sm:text-2xl font-semibold text-gray-900">Serviços</h1>
-          <p className="text-sm sm:text-base text-gray-600 mt-1">Configure os serviços oferecidos pela sua clínica</p>
+          <h1 className="text-2xl sm:text-2xl font-semibold text-gray-900">{t('servicesPage.title')}</h1>
+          <p className="text-sm sm:text-base text-gray-600 mt-1">{t('servicesPage.description')}</p>
         </div>
         <Button onClick={() => handleOpenDialog()} className="w-full sm:w-auto">
           <Plus className="w-4 h-4 mr-2" />
-          Novo Serviço
+          {t('servicesPage.newService')}
         </Button>
       </div>
 
       {/* Services List */}
       <Card>
         <CardHeader>
-          <CardTitle>Lista de Serviços</CardTitle>
+          <CardTitle>{t('servicesPage.listTitle')}</CardTitle>
           <CardDescription>
             {services.length === 0
-              ? 'Nenhum serviço cadastrado'
-              : `${services.length} serviço(s) encontrado(s)`}
+              ? t('servicesPage.noneFound')
+              : `${services.length} ${t('servicesPage.found')}`}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -255,6 +259,7 @@ export default function ServicesPage() {
                 setIsDialogOpen(true);
               }}
               onAddCustom={() => handleOpenDialog()}
+              t={t}
             />
           ) : (
             <>
@@ -276,7 +281,7 @@ export default function ServicesPage() {
                             ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border-0 text-xs'
                             : 'bg-slate-100 text-slate-500 hover:bg-slate-100 border-0 text-xs'
                           }>
-                            {service.active ? 'Ativo' : 'Inativo'}
+                            {service.active ? t('servicesPage.active') : t('servicesPage.inactive')}
                           </Badge>
                           <Badge className={`${modalityConfig[modality].color} hover:${modalityConfig[modality].color} border-0 text-xs`}>
                             <ModalityIcon className="w-3 h-3 mr-1" />
@@ -300,14 +305,14 @@ export default function ServicesPage() {
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem onClick={() => handleOpenDialog(service)}>
                             <Pencil className="w-4 h-4 mr-2" />
-                            Editar
+                            {t('servicesPage.edit')}
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             onClick={() => handleDelete(service.id)}
                             className="text-destructive"
                           >
                             <Trash2 className="w-4 h-4 mr-2" />
-                            Excluir
+                            {t('servicesPage.delete')}
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
@@ -322,12 +327,12 @@ export default function ServicesPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Nome</TableHead>
-                      <TableHead>Modalidade</TableHead>
-                      <TableHead>Duração</TableHead>
-                      <TableHead>Preço</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="text-right">Ações</TableHead>
+                      <TableHead>{t('servicesPage.tableHeaders.name')}</TableHead>
+                      <TableHead>{t('servicesPage.tableHeaders.modality')}</TableHead>
+                      <TableHead>{t('servicesPage.tableHeaders.duration')}</TableHead>
+                      <TableHead>{t('servicesPage.tableHeaders.price')}</TableHead>
+                      <TableHead>{t('servicesPage.tableHeaders.status')}</TableHead>
+                      <TableHead className="text-right">{t('servicesPage.tableHeaders.actions')}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -364,7 +369,7 @@ export default function ServicesPage() {
                             ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border-0'
                             : 'bg-slate-100 text-slate-500 hover:bg-slate-100 border-0'
                           }>
-                            {service.active ? 'Ativo' : 'Inativo'}
+                            {service.active ? t('servicesPage.active') : t('servicesPage.inactive')}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-right">
@@ -377,14 +382,14 @@ export default function ServicesPage() {
                             <DropdownMenuContent align="end">
                               <DropdownMenuItem onClick={() => handleOpenDialog(service)}>
                                 <Pencil className="w-4 h-4 mr-2" />
-                                Editar
+                                {t('servicesPage.edit')}
                               </DropdownMenuItem>
                               <DropdownMenuItem
                                 onClick={() => handleDelete(service.id)}
                                 className="text-destructive"
                               >
                                 <Trash2 className="w-4 h-4 mr-2" />
-                                Excluir
+                                {t('servicesPage.delete')}
                               </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
@@ -405,75 +410,75 @@ export default function ServicesPage() {
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>
-              {editingService ? 'Editar Serviço' : 'Novo Serviço'}
+              {editingService ? t('servicesPage.dialog.editTitle') : t('servicesPage.dialog.newTitle')}
             </DialogTitle>
             <DialogDescription>
               {editingService
-                ? 'Atualize as informações do serviço'
-                : 'Adicione um novo serviço à sua clínica'}
+                ? t('servicesPage.dialog.editDesc')
+                : t('servicesPage.dialog.newDesc')}
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="name">Nome *</Label>
+              <Label htmlFor="name">{t('servicesPage.dialog.nameLabel')} *</Label>
               <Input
                 id="name"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="Ex: Consulta Clínica"
+                placeholder={t('servicesPage.dialog.namePlaceholder')}
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="description">Descrição</Label>
+              <Label htmlFor="description">{t('servicesPage.dialog.descriptionLabel')}</Label>
               <Textarea
                 id="description"
                 value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                placeholder="Descreva o serviço..."
+                placeholder={t('servicesPage.dialog.descriptionPlaceholder')}
                 rows={3}
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="modality">Modalidade *</Label>
+              <Label htmlFor="modality">{t('servicesPage.dialog.modalityLabel')} *</Label>
               <Select
                 value={formData.modality}
                 onValueChange={(value: ServiceModality) => setFormData({ ...formData, modality: value })}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Selecione a modalidade" />
+                  <SelectValue placeholder={t('servicesPage.dialog.modalityPlaceholder')} />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="presencial">
                     <div className="flex items-center gap-2">
                       <MapPin className="w-4 h-4 text-blue-600" />
-                      Presencial
+                      {t('servicesPage.dialog.modalityPresencial')}
                     </div>
                   </SelectItem>
                   <SelectItem value="online">
                     <div className="flex items-center gap-2">
                       <Video className="w-4 h-4 text-purple-600" />
-                      Online (Telemedicina)
+                      {t('servicesPage.dialog.modalityOnline')}
                     </div>
                   </SelectItem>
                   <SelectItem value="ambos">
                     <div className="flex items-center gap-2">
                       <MonitorSmartphone className="w-4 h-4 text-indigo-600" />
-                      Presencial e Online
+                      {t('servicesPage.dialog.modalityBoth')}
                     </div>
                   </SelectItem>
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                Define como o serviço pode ser realizado
+                {t('servicesPage.dialog.modalityHelp')}
               </p>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="duration">Duração (minutos)</Label>
+                <Label htmlFor="duration">{t('servicesPage.dialog.durationLabel')}</Label>
                 <Input
                   id="duration"
                   type="number"
@@ -484,7 +489,7 @@ export default function ServicesPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="price">Preço (R$)</Label>
+                <Label htmlFor="price">{t('servicesPage.dialog.priceLabel')}</Label>
                 <Input
                   id="price"
                   type="number"
@@ -499,8 +504,8 @@ export default function ServicesPage() {
             <div className="space-y-3 pt-2 border-t">
               <div className="flex items-center justify-between">
                 <div>
-                  <Label htmlFor="requiresDeposit">Exigir depósito</Label>
-                  <p className="text-xs text-muted-foreground">Cobrar antecipadamente para confirmar</p>
+                  <Label htmlFor="requiresDeposit">{t('servicesPage.dialog.requireDeposit')}</Label>
+                  <p className="text-xs text-muted-foreground">{t('servicesPage.dialog.requireDepositHelp')}</p>
                 </div>
                 <Switch
                   id="requiresDeposit"
@@ -511,7 +516,7 @@ export default function ServicesPage() {
 
               {formData.requiresDeposit && (
                 <div className="space-y-2">
-                  <Label htmlFor="depositAmount">Valor do depósito (R$)</Label>
+                  <Label htmlFor="depositAmount">{t('servicesPage.dialog.depositAmount')}</Label>
                   <Input
                     id="depositAmount"
                     type="number"
@@ -525,7 +530,7 @@ export default function ServicesPage() {
             </div>
 
             <div className="flex items-center justify-between pt-2 border-t">
-              <Label htmlFor="active">Serviço ativo</Label>
+              <Label htmlFor="active">{t('servicesPage.dialog.serviceActive')}</Label>
               <Switch
                 id="active"
                 checked={formData.active}
@@ -536,7 +541,7 @@ export default function ServicesPage() {
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
-              Cancelar
+              {t('common.cancel')}
             </Button>
             <Button
               onClick={handleSubmit}
@@ -545,12 +550,12 @@ export default function ServicesPage() {
               {create.isPending || update.isPending ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Salvando...
+                  {t('common.saving')}
                 </>
               ) : (
                 <>
                   <Save className="h-4 w-4 mr-2" />
-                  Salvar
+                  {t('common.save')}
                 </>
               )}
             </Button>

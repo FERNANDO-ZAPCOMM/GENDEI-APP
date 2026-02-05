@@ -44,15 +44,15 @@ import { CalendarGrid } from '@/components/calendar/CalendarGrid';
 import { getSpecialtyNames, getProfessionalSpecialties } from '@/lib/specialties';
 import type { Appointment, AppointmentStatus } from '@/lib/clinic-types';
 
-const statusConfig: Record<AppointmentStatus, { label: string; color: string; icon: any }> = {
-  pending: { label: 'Pendente', color: 'bg-yellow-100 text-yellow-700', icon: AlertCircle },
-  confirmed: { label: 'Confirmado', color: 'bg-blue-100 text-blue-700', icon: CheckCircle },
-  awaiting_confirmation: { label: 'Aguardando', color: 'bg-orange-100 text-orange-700', icon: Clock },
-  confirmed_presence: { label: 'Presença Confirmada', color: 'bg-emerald-100 text-emerald-700', icon: CheckCircle },
-  completed: { label: 'Concluído', color: 'bg-green-100 text-green-700', icon: CheckCircle },
-  cancelled: { label: 'Cancelado', color: 'bg-red-100 text-red-700', icon: XCircle },
-  no_show: { label: 'Não Compareceu', color: 'bg-gray-100 text-gray-700', icon: XCircle },
-};
+const getStatusConfig = (t: (key: string) => string): Record<AppointmentStatus, { label: string; color: string; icon: any }> => ({
+  pending: { label: t('appointmentsPage.status.pending'), color: 'bg-yellow-100 text-yellow-700', icon: AlertCircle },
+  confirmed: { label: t('appointmentsPage.status.confirmed'), color: 'bg-blue-100 text-blue-700', icon: CheckCircle },
+  awaiting_confirmation: { label: t('appointmentsPage.status.awaiting'), color: 'bg-orange-100 text-orange-700', icon: Clock },
+  confirmed_presence: { label: t('appointmentsPage.status.confirmedPresence'), color: 'bg-emerald-100 text-emerald-700', icon: CheckCircle },
+  completed: { label: t('appointmentsPage.status.completed'), color: 'bg-green-100 text-green-700', icon: CheckCircle },
+  cancelled: { label: t('appointmentsPage.status.cancelled'), color: 'bg-red-100 text-red-700', icon: XCircle },
+  no_show: { label: t('appointmentsPage.status.noShow'), color: 'bg-gray-100 text-gray-700', icon: XCircle },
+});
 
 // Format price for display
 const formatPrice = (price: number) => {
@@ -78,6 +78,8 @@ export default function AppointmentsPage() {
   const searchParams = useSearchParams();
   const { currentClinic: clinic, isLoading: clinicLoading } = useClinic();
   const { data: professionals = [] } = useProfessionals(clinic?.id || '');
+
+  const statusConfig = getStatusConfig(t);
 
   const [selectedDate, setSelectedDate] = useState(new Date());
 
@@ -130,22 +132,22 @@ export default function AppointmentsPage() {
   const handleStatusChange = async (appointmentId: string, newStatus: AppointmentStatus) => {
     try {
       await updateStatus.mutateAsync({ id: appointmentId, status: newStatus });
-      toast.success('Status atualizado!');
+      toast.success(t('appointmentsPage.statusUpdated'));
       setDetailsDialogOpen(false);
     } catch (error: any) {
-      toast.error(error.message || 'Erro ao atualizar status');
+      toast.error(error.message || t('appointmentsPage.statusUpdateError'));
     }
   };
 
   const handleCancel = async (appointmentId: string) => {
-    if (!confirm('Tem certeza que deseja cancelar esta consulta?')) return;
+    if (!confirm(t('appointmentsPage.cancelConfirm'))) return;
 
     try {
       await cancel.mutateAsync({ id: appointmentId });
-      toast.success('Consulta cancelada!');
+      toast.success(t('appointmentsPage.cancelSuccess'));
       setDetailsDialogOpen(false);
     } catch (error: any) {
-      toast.error(error.message || 'Erro ao cancelar consulta');
+      toast.error(error.message || t('appointmentsPage.cancelError'));
     }
   };
 
@@ -157,18 +159,18 @@ export default function AppointmentsPage() {
   const handleBlockTime = async (block: CreateTimeBlockInput) => {
     try {
       await createBlock.mutateAsync(block);
-      toast.success('Horário bloqueado!');
+      toast.success(t('appointmentsPage.blockSuccess'));
     } catch (error: any) {
-      toast.error(error.message || 'Erro ao bloquear horário');
+      toast.error(error.message || t('appointmentsPage.blockError'));
     }
   };
 
   const handleRemoveBlock = async (blockId: string) => {
     try {
       await deleteBlock.mutateAsync(blockId);
-      toast.success('Bloqueio removido!');
+      toast.success(t('appointmentsPage.unblockSuccess'));
     } catch (error: any) {
-      toast.error(error.message || 'Erro ao remover bloqueio');
+      toast.error(error.message || t('appointmentsPage.unblockError'));
     }
   };
 
@@ -197,8 +199,8 @@ export default function AppointmentsPage() {
     <div className="space-y-6 page-transition">
       {/* Header */}
       <div>
-        <h1 className="text-2xl sm:text-2xl font-semibold text-gray-900">Agenda</h1>
-        <p className="text-sm sm:text-base text-gray-600 mt-1">Gerencie as consultas agendadas</p>
+        <h1 className="text-2xl sm:text-2xl font-semibold text-gray-900">{t('appointmentsPage.title')}</h1>
+        <p className="text-sm sm:text-base text-gray-600 mt-1">{t('appointmentsPage.description')}</p>
       </div>
 
       {/* Stats Cards Row */}
@@ -207,7 +209,7 @@ export default function AppointmentsPage() {
           <Card className="bg-gradient-to-br from-blue-50 to-white border-blue-100">
             <CardContent className="p-4">
               <div className="text-center">
-                <p className="text-xs text-blue-600 font-medium">Hoje</p>
+                <p className="text-xs text-blue-600 font-medium">{t('appointmentsPage.today')}</p>
                 <p className="text-2xl font-bold text-blue-700">{stats.today}</p>
               </div>
             </CardContent>
@@ -216,7 +218,7 @@ export default function AppointmentsPage() {
           <Card className="border-emerald-100" style={{ background: 'linear-gradient(to bottom right, #f5fefa, white)' }}>
             <CardContent className="p-4">
               <div className="text-center">
-                <p className="text-xs text-emerald-600 font-medium">Confirmados</p>
+                <p className="text-xs text-emerald-600 font-medium">{t('appointmentsPage.confirmed')}</p>
                 <p className="text-2xl font-bold text-emerald-700">{stats.confirmed}</p>
               </div>
             </CardContent>
@@ -226,7 +228,7 @@ export default function AppointmentsPage() {
         <Card className="bg-gradient-to-br from-yellow-50 to-white border-yellow-100">
           <CardContent className="p-4">
             <div className="text-center">
-              <p className="text-xs text-yellow-600 font-medium">Pendentes</p>
+              <p className="text-xs text-yellow-600 font-medium">{t('appointmentsPage.pending')}</p>
               <p className="text-2xl font-bold text-yellow-700">{stats.pending}</p>
             </div>
           </CardContent>
@@ -238,7 +240,7 @@ export default function AppointmentsPage() {
         <Card className="bg-gradient-to-br from-blue-50 to-white border-blue-100">
           <CardContent className="p-4">
             <div className="text-center">
-              <p className="text-xs text-blue-600 font-medium">Hoje</p>
+              <p className="text-xs text-blue-600 font-medium">{t('appointmentsPage.today')}</p>
               <p className="text-2xl font-bold text-blue-700">{stats.today}</p>
             </div>
           </CardContent>
@@ -247,7 +249,7 @@ export default function AppointmentsPage() {
         <Card className="border-emerald-100" style={{ background: 'linear-gradient(to bottom right, #f5fefa, white)' }}>
           <CardContent className="p-4">
             <div className="text-center">
-              <p className="text-xs text-emerald-600 font-medium">Confirmados</p>
+              <p className="text-xs text-emerald-600 font-medium">{t('appointmentsPage.confirmed')}</p>
               <p className="text-2xl font-bold text-emerald-700">{stats.confirmed}</p>
             </div>
           </CardContent>
@@ -256,7 +258,7 @@ export default function AppointmentsPage() {
         <Card className="bg-gradient-to-br from-yellow-50 to-white border-yellow-100">
           <CardContent className="p-4">
             <div className="text-center">
-              <p className="text-xs text-yellow-600 font-medium">Pendentes</p>
+              <p className="text-xs text-yellow-600 font-medium">{t('appointmentsPage.pending')}</p>
               <p className="text-2xl font-bold text-yellow-700">{stats.pending}</p>
             </div>
           </CardContent>
@@ -270,8 +272,8 @@ export default function AppointmentsPage() {
           <CardHeader className="pb-3 flex-shrink-0">
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle className="text-base">Calendário</CardTitle>
-                <CardDescription>Visualize e gerencie horários</CardDescription>
+                <CardTitle className="text-base">{t('appointmentsPage.calendar')}</CardTitle>
+                <CardDescription>{t('appointmentsPage.calendarDesc')}</CardDescription>
               </div>
               {/* Date Navigation */}
               <div className="flex items-center gap-2">
@@ -287,7 +289,7 @@ export default function AppointmentsPage() {
                   <ChevronRight className="w-4 h-4" />
                 </Button>
                 <Button variant="ghost" size="sm" onClick={() => setSelectedDate(new Date())}>
-                  Hoje
+                  {t('appointmentsPage.today')}
                 </Button>
               </div>
             </div>
@@ -310,18 +312,18 @@ export default function AppointmentsPage() {
         {/* Professional Filter - aligned with Pendentes */}
         <Card className="h-[calc(100vh-320px)] flex flex-col">
           <CardHeader className="pb-3 flex-shrink-0">
-            <CardTitle className="text-base">Por Profissional</CardTitle>
+            <CardTitle className="text-base">{t('appointmentsPage.byProfessional')}</CardTitle>
             <CardDescription>
               {selectedProfessional === 'all'
-                ? 'Selecione para filtrar'
-                : 'Clique para limpar filtro'}
+                ? t('appointmentsPage.selectToFilter')
+                : t('appointmentsPage.clickToClear')}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-2 flex-1 overflow-y-auto">
             {activeProfessionals.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-center">
                 <User className="w-8 h-8 text-muted-foreground/50 mb-2" />
-                <p className="text-sm text-muted-foreground">Nenhum profissional cadastrado</p>
+                <p className="text-sm text-muted-foreground">{t('appointmentsPage.noProfessionals')}</p>
               </div>
             ) : (
               activeProfessionals.map((professional) => {
@@ -372,8 +374,8 @@ export default function AppointmentsPage() {
           <CardHeader className="pb-3 flex-shrink-0">
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle className="text-base">Calendário</CardTitle>
-                <CardDescription>Visualize e gerencie horários</CardDescription>
+                <CardTitle className="text-base">{t('appointmentsPage.calendar')}</CardTitle>
+                <CardDescription>{t('appointmentsPage.calendarDesc')}</CardDescription>
               </div>
               <div className="flex items-center gap-2">
                 <Button variant="outline" size="icon" onClick={handlePrevWeek}>
@@ -410,15 +412,15 @@ export default function AppointmentsPage() {
       <div className="lg:hidden">
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">Por Profissional</CardTitle>
+            <CardTitle className="text-base">{t('appointmentsPage.byProfessional')}</CardTitle>
           </CardHeader>
           <CardContent>
             <Select value={selectedProfessional} onValueChange={setSelectedProfessional}>
               <SelectTrigger>
-                <SelectValue placeholder="Todos os profissionais" />
+                <SelectValue placeholder={t('appointmentsPage.allProfessionals')} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Todos</SelectItem>
+                <SelectItem value="all">{t('common.all')}</SelectItem>
                 {activeProfessionals.map((prof) => (
                   <SelectItem key={prof.id} value={prof.id}>{prof.name}</SelectItem>
                 ))}
@@ -432,9 +434,9 @@ export default function AppointmentsPage() {
       <Dialog open={detailsDialogOpen} onOpenChange={setDetailsDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Detalhes da Consulta</DialogTitle>
+            <DialogTitle>{t('appointmentsPage.appointmentDetails')}</DialogTitle>
             <DialogDescription>
-              Visualize e gerencie esta consulta
+              {t('appointmentsPage.appointmentDetailsDesc')}
             </DialogDescription>
           </DialogHeader>
 
@@ -442,29 +444,29 @@ export default function AppointmentsPage() {
             <div className="space-y-4 py-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <p className="text-sm text-muted-foreground">Paciente</p>
+                  <p className="text-sm text-muted-foreground">{t('appointmentsPage.patient')}</p>
                   <p className="font-medium">{selectedAppointment.patientName}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Telefone</p>
+                  <p className="text-sm text-muted-foreground">{t('appointmentsPage.phone')}</p>
                   <p className="font-medium">{selectedAppointment.patientPhone || '-'}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Profissional</p>
+                  <p className="text-sm text-muted-foreground">{t('appointmentsPage.professional')}</p>
                   <p className="font-medium">{selectedAppointment.professionalName}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Serviço</p>
+                  <p className="text-sm text-muted-foreground">{t('appointmentsPage.service')}</p>
                   <p className="font-medium">{selectedAppointment.serviceName || '-'}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Data</p>
+                  <p className="text-sm text-muted-foreground">{t('appointmentsPage.date')}</p>
                   <p className="font-medium">
                     {format(parseISO(selectedAppointment.date), "d 'de' MMMM 'de' yyyy", { locale: ptBR })}
                   </p>
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Horário</p>
+                  <p className="text-sm text-muted-foreground">{t('appointmentsPage.time')}</p>
                   <p className="font-medium">{selectedAppointment.time} ({selectedAppointment.duration}min)</p>
                 </div>
               </div>
@@ -472,13 +474,13 @@ export default function AppointmentsPage() {
               <div>
                 <p className="text-sm text-muted-foreground mb-2">Status</p>
                 <Badge className={`${statusConfig[selectedAppointment.status]?.color || statusConfig.pending.color} border-0`}>
-                  {statusConfig[selectedAppointment.status]?.label || 'Pendente'}
+                  {statusConfig[selectedAppointment.status]?.label || t('appointmentsPage.status.pending')}
                 </Badge>
               </div>
 
               {selectedAppointment.notes && (
                 <div>
-                  <p className="text-sm text-muted-foreground">Observações</p>
+                  <p className="text-sm text-muted-foreground">{t('appointmentsPage.notes')}</p>
                   <p className="text-sm">{selectedAppointment.notes}</p>
                 </div>
               )}
@@ -489,22 +491,22 @@ export default function AppointmentsPage() {
             {selectedAppointment && selectedAppointment.status === 'pending' && (
               <Button onClick={() => handleStatusChange(selectedAppointment.id, 'confirmed')}>
                 <CheckCircle className="w-4 h-4 mr-2" />
-                Confirmar
+                {t('appointmentsPage.confirm')}
               </Button>
             )}
             {selectedAppointment && (selectedAppointment.status === 'confirmed' || selectedAppointment.status === 'confirmed_presence') && (
               <Button onClick={() => handleStatusChange(selectedAppointment.id, 'completed')}>
                 <CheckCircle className="w-4 h-4 mr-2" />
-                Marcar Concluído
+                {t('appointmentsPage.markCompleted')}
               </Button>
             )}
             {selectedAppointment && selectedAppointment.status !== 'cancelled' && selectedAppointment.status !== 'completed' && (
               <>
                 <Button variant="outline" onClick={() => handleStatusChange(selectedAppointment.id, 'no_show')}>
-                  Não Compareceu
+                  {t('appointmentsPage.noShow')}
                 </Button>
                 <Button variant="destructive" onClick={() => handleCancel(selectedAppointment.id)}>
-                  Cancelar
+                  {t('appointmentsPage.cancel')}
                 </Button>
               </>
             )}

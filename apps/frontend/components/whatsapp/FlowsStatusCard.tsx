@@ -26,6 +26,7 @@ import { toast } from 'sonner';
 
 interface FlowsStatusCardProps {
   wabaId?: string;
+  businessManagerId?: string;
 }
 
 // Gendei flow definitions
@@ -92,7 +93,7 @@ function FlowRow({
 }
 
 // Content-only version for use inside CollapsibleCard
-export function FlowsStatusCardContent({ wabaId }: FlowsStatusCardProps) {
+export function FlowsStatusCardContent({ wabaId, businessManagerId }: FlowsStatusCardProps) {
   const { currentClinic: clinic, refetch } = useClinic();
   const { getIdToken } = useAuth();
   const [isUpdating, setIsUpdating] = useState(false);
@@ -101,6 +102,11 @@ export function FlowsStatusCardContent({ wabaId }: FlowsStatusCardProps) {
   if (!wabaId) {
     return null;
   }
+
+  // Build WhatsApp Manager flows URL with business_id and asset_id (wabaId)
+  const whatsappManagerFlowsUrl = businessManagerId && wabaId
+    ? `https://business.facebook.com/latest/whatsapp_manager/flows?business_id=${businessManagerId}&asset_id=${wabaId}`
+    : 'https://business.facebook.com/latest/whatsapp_manager/flows';
 
   // Get flows config from clinic
   const whatsappConfig = (clinic as any)?.whatsappConfig || {};
@@ -124,7 +130,15 @@ export function FlowsStatusCardContent({ wabaId }: FlowsStatusCardProps) {
         throw new Error('Not authenticated');
       }
 
-      const response = await apiClient<{ success: boolean; updated?: string[]; error?: string }>(
+      const response = await apiClient<{
+        success: boolean;
+        synced?: boolean;
+        created?: boolean;
+        updated?: string[];
+        found?: string[];
+        flowIds?: { patientInfo?: string; booking?: string };
+        error?: string;
+      }>(
         `/meta/flows/update/${clinic.id}`,
         {
           method: 'POST',
@@ -133,9 +147,19 @@ export function FlowsStatusCardContent({ wabaId }: FlowsStatusCardProps) {
       );
 
       if (response.success) {
-        toast.success('Flows atualizados com sucesso!', {
-          description: `${response.updated?.length || 0} flow(s) atualizado(s)`,
-        });
+        if (response.synced) {
+          toast.success('Flows sincronizados com sucesso!', {
+            description: `Encontrados ${response.found?.length || 0} flow(s) existentes no WhatsApp`,
+          });
+        } else if (response.created) {
+          toast.success('Flows criados com sucesso!', {
+            description: 'Os flows de agendamento foram criados',
+          });
+        } else {
+          toast.success('Flows atualizados com sucesso!', {
+            description: `${response.updated?.length || 0} flow(s) atualizado(s)`,
+          });
+        }
         // Refresh clinic data
         await refetch();
       } else {
@@ -172,13 +196,13 @@ export function FlowsStatusCardContent({ wabaId }: FlowsStatusCardProps) {
           })}
         </div>
 
-        {/* Info about flows - with create button */}
+        {/* Info about flows - with sync button */}
         {!anyFlowInstalled && (
           <div className="space-y-3">
             <div className="bg-amber-50 rounded-lg p-3">
               <p className="text-xs text-amber-700">
                 Os Flows serão criados automaticamente durante a conexão do WhatsApp.
-                Se não aparecerem, clique no botão abaixo para criar.
+                Se você já criou os flows no WhatsApp Manager, clique em &quot;Sincronizar Flows&quot; para vinculá-los.
               </p>
             </div>
             <Button
@@ -188,7 +212,7 @@ export function FlowsStatusCardContent({ wabaId }: FlowsStatusCardProps) {
               disabled={isUpdating}
             >
               <RefreshCw className={`w-4 h-4 mr-2 ${isUpdating ? 'animate-spin' : ''}`} />
-              {isUpdating ? 'Criando Flows...' : 'Criar Flows'}
+              {isUpdating ? 'Sincronizando...' : 'Sincronizar Flows'}
             </Button>
           </div>
         )}
@@ -212,33 +236,35 @@ export function FlowsStatusCardContent({ wabaId }: FlowsStatusCardProps) {
         )}
 
         {/* Update button and Meta Business Manager link */}
-        {anyFlowInstalled && (
-          <div className="pt-3 border-t space-y-3">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleUpdateFlows}
-              disabled={isUpdating}
-            >
-              <RefreshCw className={`w-4 h-4 mr-2 ${isUpdating ? 'animate-spin' : ''}`} />
-              {isUpdating ? 'Atualizando...' : 'Atualizar Flows'}
-            </Button>
-            {flowsUpdatedAt && (
-              <p className="text-xs text-muted-foreground text-center">
-                Última atualização: {new Date(flowsUpdatedAt).toLocaleString('pt-BR')}
-              </p>
-            )}
-            <a
-              href="https://business.facebook.com/latest/whatsapp_manager/flows"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-800 hover:underline"
-            >
-              <ExternalLink className="w-3 h-3" />
-              Gerenciar no Meta Business Manager
-            </a>
-          </div>
-        )}
+        <div className="pt-3 border-t space-y-3">
+          {anyFlowInstalled && (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleUpdateFlows}
+                disabled={isUpdating}
+              >
+                <RefreshCw className={`w-4 h-4 mr-2 ${isUpdating ? 'animate-spin' : ''}`} />
+                {isUpdating ? 'Atualizando...' : 'Atualizar Flows'}
+              </Button>
+              {flowsUpdatedAt && (
+                <p className="text-xs text-muted-foreground text-center">
+                  Última atualização: {new Date(flowsUpdatedAt).toLocaleString('pt-BR')}
+                </p>
+              )}
+            </>
+          )}
+          <a
+            href={whatsappManagerFlowsUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-800 hover:underline"
+          >
+            <ExternalLink className="w-3 h-3" />
+            Gerenciar no Meta Business Manager
+          </a>
+        </div>
     </div>
   );
 }

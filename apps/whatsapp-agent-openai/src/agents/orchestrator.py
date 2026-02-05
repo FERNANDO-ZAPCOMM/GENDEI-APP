@@ -105,23 +105,23 @@ class AgentOrchestrator:
         if msg_lower in greetings or (len(msg_lower) < 10 and any(g in msg_lower for g in greetings)):
             return AgentType.GREETER
 
-        # Clinic info questions
-        info_keywords = [
-            "onde fica", "endereço", "endereco", "localização", "localizacao",
-            "horário", "horario", "que horas", "funcionamento",
-            "quem atende", "médico", "medico", "profissional",
-            "convênio", "convenio", "aceita", "pagamento",
-        ]
-        if any(kw in msg_lower for kw in info_keywords):
-            return AgentType.PRODUCT_INFO  # clinic_info
-
-        # Scheduling intent
+        # Scheduling intent (check BEFORE info)
         scheduling_keywords = [
             "agendar", "marcar", "consulta", "horários", "horarios",
             "disponibilidade", "agenda", "atendimento", "quero agendar",
         ]
         if any(kw in msg_lower for kw in scheduling_keywords):
             return AgentType.SALES_CLOSER  # scheduling
+
+        # Clinic info questions
+        info_keywords = [
+            "onde fica", "endereço", "endereco", "localização", "localizacao",
+            "horário de funcionamento", "que horas", "funcionamento",
+            "quem atende", "médico", "medico", "profissional",
+            "convênio", "convenio", "aceita", "pagamento",
+        ]
+        if any(kw in msg_lower for kw in info_keywords):
+            return AgentType.PRODUCT_INFO  # clinic_info
 
         # Appointment management
         appointment_keywords = [

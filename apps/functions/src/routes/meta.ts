@@ -1221,27 +1221,54 @@ router.post(
 
       let result;
 
-      // If no flows exist, create them instead of updating
+      // If no flows exist in clinic config, first try to sync existing flows from WhatsApp
       if (!patientInfoFlowId && !bookingFlowId) {
-        console.log(`No flows found for clinic ${clinicId}, creating new flows...`);
-        const flowsResult = await metaService.createSchedulingFlows(status.meta.wabaId);
+        console.log(`No flows found in clinic config for ${clinicId}, checking if they exist in WhatsApp...`);
 
-        // Update clinic with flow IDs
-        if (flowsResult.flowIds.patientInfo || flowsResult.flowIds.booking) {
+        // First, try to find existing flows in WhatsApp
+        const syncResult = await metaService.syncExistingFlows(status.meta.wabaId);
+
+        if (syncResult.flowIds.patientInfo || syncResult.flowIds.booking) {
+          // Found existing flows, save them to clinic config
+          console.log(`Found existing flows in WhatsApp, syncing to clinic config...`);
           await db.collection(CLINICS).doc(clinicId).update({
             'whatsappConfig.flowsCreated': true,
-            ...(flowsResult.flowIds.patientInfo && { 'whatsappConfig.patientInfoFlowId': flowsResult.flowIds.patientInfo }),
-            ...(flowsResult.flowIds.booking && { 'whatsappConfig.bookingFlowId': flowsResult.flowIds.booking }),
-            'whatsappConfig.flowsResult': flowsResult,
+            ...(syncResult.flowIds.patientInfo && { 'whatsappConfig.patientInfoFlowId': syncResult.flowIds.patientInfo }),
+            ...(syncResult.flowIds.booking && { 'whatsappConfig.bookingFlowId': syncResult.flowIds.booking }),
+            'whatsappConfig.flowsSynced': true,
+            'whatsappConfig.flowsSyncResult': syncResult,
           });
-        }
 
-        result = {
-          created: true,
-          updated: [],
-          flowIds: flowsResult.flowIds,
-          errors: flowsResult.errors,
-        };
+          result = {
+            synced: true,
+            created: false,
+            updated: [],
+            flowIds: syncResult.flowIds,
+            found: syncResult.found,
+          };
+        } else {
+          // No existing flows found, create new ones
+          console.log(`No existing flows found, creating new flows...`);
+          const flowsResult = await metaService.createSchedulingFlows(status.meta.wabaId);
+
+          // Update clinic with flow IDs
+          if (flowsResult.flowIds.patientInfo || flowsResult.flowIds.booking) {
+            await db.collection(CLINICS).doc(clinicId).update({
+              'whatsappConfig.flowsCreated': true,
+              ...(flowsResult.flowIds.patientInfo && { 'whatsappConfig.patientInfoFlowId': flowsResult.flowIds.patientInfo }),
+              ...(flowsResult.flowIds.booking && { 'whatsappConfig.bookingFlowId': flowsResult.flowIds.booking }),
+              'whatsappConfig.flowsResult': flowsResult,
+            });
+          }
+
+          result = {
+            synced: false,
+            created: true,
+            updated: [],
+            flowIds: flowsResult.flowIds,
+            errors: flowsResult.errors,
+          };
+        }
       } else {
         // Update existing flows with latest JSON
         result = await metaService.updateExistingFlows(

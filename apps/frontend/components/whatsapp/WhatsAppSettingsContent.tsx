@@ -268,7 +268,10 @@ export function WhatsAppSettingsContent({ onConnected }: WhatsAppSettingsContent
               isExpanded={expandedSections.flows}
               onToggle={() => toggleSection('flows')}
             >
-              <FlowsStatusCardContent wabaId={status.meta.wabaId} />
+              <FlowsStatusCardContent
+                wabaId={status.meta.wabaId}
+                businessManagerId={status.meta.businessManagerId}
+              />
             </CollapsibleCard>
           )}
 

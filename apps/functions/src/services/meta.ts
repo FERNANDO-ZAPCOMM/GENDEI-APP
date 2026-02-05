@@ -2370,6 +2370,39 @@ export async function listFlows(wabaId: string): Promise<any[]> {
 }
 
 /**
+ * Sync existing flows from WhatsApp to clinic config
+ * This finds flows by name and returns their IDs without creating new ones
+ */
+export async function syncExistingFlows(
+  wabaId: string
+): Promise<{ flowIds: { patientInfo?: string; booking?: string }; found: string[] }> {
+  const flows = await listFlows(wabaId);
+  const flowIds: { patientInfo?: string; booking?: string } = {};
+  const found: string[] = [];
+
+  // Expected flow names
+  const expectedFlows = {
+    patientInfo: 'CLINICA_MEDICA_FORMULARIO',
+    booking: 'CLINICA_MEDICA_AGENDAMENTO',
+  };
+
+  for (const flow of flows) {
+    if (flow.name === expectedFlows.patientInfo) {
+      flowIds.patientInfo = flow.id;
+      found.push(`${expectedFlows.patientInfo} (ID: ${flow.id}, Status: ${flow.status})`);
+      console.log(`✅ Found existing patientInfo flow: ${flow.id} (Status: ${flow.status})`);
+    } else if (flow.name === expectedFlows.booking) {
+      flowIds.booking = flow.id;
+      found.push(`${expectedFlows.booking} (ID: ${flow.id}, Status: ${flow.status})`);
+      console.log(`✅ Found existing booking flow: ${flow.id} (Status: ${flow.status})`);
+    }
+  }
+
+  console.log(`📱 Sync result: Found ${found.length} existing flows for WABA ${wabaId}`);
+  return { flowIds, found };
+}
+
+/**
  * Send a flow message to a user
  */
 export async function sendFlowMessage(

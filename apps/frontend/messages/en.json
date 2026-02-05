@@ -124,6 +124,32 @@
     "flows": {
       "title": "WhatsApp Flows",
       "description": "Interactive scheduling flows"
+    },
+    "workflowMode": {
+      "booking": {
+        "features": {
+          "management": "Cancellation and rescheduling",
+          "pix": "PIX integration for deposit/payment",
+          "reminders": "Automatic appointment reminders",
+          "scheduling": "Appointment scheduling via WhatsApp"
+        },
+        "subtitle": "Full system",
+        "title": "Booking"
+      },
+      "description": "Choose how the assistant should handle patients",
+      "info": {
+        "features": {
+          "clinic": "Clinic information",
+          "faq": "Answers to common questions",
+          "hours": "Opening hours",
+          "professionals": "List of professionals and specialties"
+        },
+        "subtitle": "Information only",
+        "title": "Informational"
+      },
+      "saveError": "Failed to update service mode",
+      "saveSuccess": "Service mode updated successfully!",
+      "title": "Service Mode"
     }
   },
   "onboarding": {
@@ -826,7 +852,8 @@
         "description": "Your WhatsApp Business account needs verification to send messages.",
         "action": "Verify Now"
       }
-    }
+    },
+    "workflow": "Service Mode"
   },
   "sales": {
     "title": "Sales",
@@ -904,7 +931,12 @@
       "fechado": "Closed",
       "checkout": "Checkout",
       "greeting": "Greeting",
-      "engaged": "Engaged"
+      "engaged": "Engaged",
+      "awaiting_greeting_response": "Awaiting response",
+      "confirming": "Confirming",
+      "new": "New",
+      "scheduling": "Scheduling",
+      "selecting_slot": "Selecting time"
     },
     "handler": {
       "ai": "AI",
@@ -951,7 +983,34 @@
         "delivered": "Delivered",
         "read": "Read",
         "failed": "Failed"
-      }
+      },
+      "hintWindowClosed": "Window closed - message will be queued"
+    },
+    "message": {
+      "error": "Failed to send message",
+      "sent": "Message sent"
+    },
+    "queue": {
+      "clear": "Clear queue",
+      "clearError": "Failed to clear queue",
+      "cleared": "Queue cleared",
+      "count": "{count} message(s) in queue",
+      "messageQueued": "Message added to queue",
+      "queueError": "Failed to queue message",
+      "sendAll": "Send queue",
+      "sendError": "Failed to send queue",
+      "sent": "{count} message(s) sent"
+    },
+    "reengagement": {
+      "error": "Failed to send template",
+      "send": "Re-engage",
+      "sent": "Re-engagement template sent",
+      "sentAt": "Sent at {time}"
+    },
+    "window": {
+      "closed": "Window closed",
+      "closedMessage": "24h window closed. The customer must reply to reopen it.",
+      "open": "Window open"
     }
   },
   "setup": {
@@ -1232,5 +1291,344 @@
     "refresh": "Refresh",
     "all": "All",
     "clearFilters": "Clear filters"
+  },
+  "clinicSettings": {
+    "title": "Clinic Settings",
+    "description": "Configure your business information",
+    "profileCard": {
+      "title": "Business Profile",
+      "description": "Complete the information to appear correctly"
+    },
+    "tabs": {
+      "info": "Information",
+      "contact": "Contact",
+      "location": "Location",
+      "hours": "Hours",
+      "payment": "Payment"
+    },
+    "businessName": "Business Name",
+    "businessNamePlaceholder": "E.g.: São Paulo Clinic",
+    "businessNameHelp": "Use the official name as it appears on the sign",
+    "categories": "Categories (select one or more)",
+    "selectCategories": "Select categories",
+    "categoriesSelected": "category(ies) selected",
+    "categoriesHelp": "This defines which specialties will be available for professionals",
+    "descriptionLabel": "Description",
+    "descriptionPlaceholder": "Describe the services offered...",
+    "greetingSummary": "Greeting Summary (AI)",
+    "greetingSummaryHelp": "Click 'Generate' to create an automatic summary of your description for the bot greeting.",
+    "generate": "Generate",
+    "phone": "Phone",
+    "phonePlaceholder": "(11) 99999-9999",
+    "email": "Email",
+    "emailPlaceholder": "contact@clinic.com",
+    "emailInvalid": "Invalid email",
+    "website": "Website",
+    "websitePlaceholder": "https://www.yourclinic.com",
+    "fullAddress": "Full Address",
+    "addressPlaceholder": "Type the address and select from the list",
+    "addressHelp": "Select from the list to get coordinates automatically",
+    "hoursPerDay": "Hours per Day",
+    "to": "to",
+    "paymentMethods": "Select the payment methods accepted by the clinic",
+    "particular": "Private",
+    "particularDesc": "Accepts direct payment from patient",
+    "convenio": "Health Insurance",
+    "convenioDesc": "Accepts health plans",
+    "acceptedInsurance": "Accepted Insurance Plans",
+    "insurancePlaceholder": "Insurance plan name",
+    "suggestions": "Suggestions:",
+    "fixErrorsBeforeSave": "Fix errors before saving",
+    "savedSuccess": "Settings saved successfully",
+    "saveError": "Error saving settings",
+    "whatsappPreview": "WhatsApp Preview",
+    "whatsappPreviewDesc": "How your bot appears to patients",
+    "days": {
+      "mon": "Mon",
+      "tue": "Tue",
+      "wed": "Wed",
+      "thu": "Thu",
+      "fri": "Fri",
+      "sat": "Sat",
+      "sun": "Sun",
+      "monday": "Monday",
+      "tuesday": "Tuesday",
+      "wednesday": "Wednesday",
+      "thursday": "Thursday",
+      "friday": "Friday",
+      "saturday": "Saturday",
+      "sunday": "Sunday"
+    }
+  },
+  "paymentSettings": {
+    "title": "Payment Settings",
+    "description": "Configure payment methods and billing options",
+    "depositCard": {
+      "title": "Deposit / Down Payment",
+      "description": "Configure deposit to confirm appointments"
+    },
+    "depositRequired": "Deposit Required",
+    "depositDesc": "Advance payment to confirm appointment",
+    "active": "Active",
+    "depositPercentage": "Deposit Percentage",
+    "selectPercentage": "Select percentage",
+    "depositHelp": "Percentage of consultation value to be charged as deposit",
+    "pixCard": {
+      "title": "PIX Key",
+      "description": "Enter your PIX key for receiving payments",
+      "keyType": "Key Type",
+      "selectType": "Select type",
+      "phone": "Phone",
+      "randomKey": "Random Key",
+      "pixKey": "PIX Key",
+      "confirmPixKey": "Confirm PIX Key",
+      "confirmPlaceholder": "Enter PIX key again",
+      "help": "This key will be used to generate payment QR codes. Enter twice to confirm."
+    },
+    "pixKeyRequired": "PIX key is required",
+    "pixKeyRequiredDesc": "PIX key is required to receive payments.",
+    "pixKeyMismatch": "PIX keys do not match",
+    "pixKeyMismatchDesc": "PIX keys do not match. Please verify.",
+    "savedSuccess": "Payment settings saved!",
+    "saveError": "Error saving settings",
+    "placeholders": {
+      "cpf": "000.000.000-00",
+      "cnpj": "00.000.000/0000-00",
+      "email": "example@email.com",
+      "phone": "+55 11 99999-9999",
+      "random": "Random key"
+    }
+  },
+  "professionalsPage": {
+    "title": "Professionals",
+    "description": "Manage your clinic's professionals",
+    "newProfessional": "New Professional",
+    "addProfessional": "Add Professional",
+    "addFirstDesc": "Register the first professional for your clinic",
+    "noProfessionals": "You don't have any professionals registered yet. Add your first professional to start receiving appointments.",
+    "total": "Total",
+    "activeCount": "Active",
+    "inactiveCount": "Inactive",
+    "specialtiesCount": "Specialties",
+    "status": "Status:",
+    "specialty": "Specialty:",
+    "all": "All",
+    "clearFilters": "Clear Filters",
+    "listTitle": "Professionals List",
+    "listDesc": "Manage your team and view each professional's schedule",
+    "noneFound": "No professionals found",
+    "adjustFilters": "Adjust filters to see more results",
+    "noSpecialty": "No specialty",
+    "active": "Active",
+    "inactive": "Inactive",
+    "countTotal": "{count} professional(s)",
+    "countFiltered": "{filtered} of {total}",
+    "viewSchedule": "View Schedule",
+    "edit": "Edit",
+    "delete": "Delete",
+    "deleteConfirm": "Are you sure you want to delete this professional?",
+    "deleteSuccess": "Professional deleted!",
+    "deleteError": "Error deleting professional"
+  },
+  "appointmentsPage": {
+    "title": "Schedule",
+    "description": "Manage scheduled appointments",
+    "today": "Today",
+    "confirmed": "Confirmed",
+    "pending": "Pending",
+    "calendar": "Calendar",
+    "calendarDesc": "View and manage schedules",
+    "byProfessional": "By Professional",
+    "selectToFilter": "Select to filter",
+    "clickToClear": "Click to clear filter",
+    "noProfessionals": "No professionals registered",
+    "allProfessionals": "All professionals",
+    "appointmentDetails": "Appointment Details",
+    "appointmentDetailsDesc": "View and manage this appointment",
+    "patient": "Patient",
+    "phone": "Phone",
+    "professional": "Professional",
+    "service": "Service",
+    "date": "Date",
+    "time": "Time",
+    "notes": "Notes",
+    "confirm": "Confirm",
+    "markCompleted": "Mark Completed",
+    "noShow": "No Show",
+    "cancel": "Cancel",
+    "statusUpdated": "Status updated!",
+    "statusUpdateError": "Error updating status",
+    "cancelConfirm": "Are you sure you want to cancel this appointment?",
+    "cancelSuccess": "Appointment cancelled!",
+    "cancelError": "Error cancelling appointment",
+    "blockSuccess": "Time blocked!",
+    "blockError": "Error blocking time",
+    "unblockSuccess": "Block removed!",
+    "unblockError": "Error removing block",
+    "status": {
+      "pending": "Pending",
+      "confirmed": "Confirmed",
+      "awaiting": "Awaiting",
+      "confirmedPresence": "Presence Confirmed",
+      "completed": "Completed",
+      "cancelled": "Cancelled",
+      "noShow": "No Show"
+    }
+  },
+  "patientsPage": {
+    "title": "Patients",
+    "description": "Manage your clinic's patients",
+    "total": "Total",
+    "newThisMonth": "New This Month",
+    "withAppointments": "With Appointments",
+    "new": "New",
+    "listTitle": "Patient List",
+    "noneFound": "No patients found",
+    "searchPlaceholder": "Search...",
+    "byProfessional": "By Professional",
+    "selectToFilter": "Select to filter",
+    "clickToClear": "Click to clear filter",
+    "noProfessionalsActive": "No active professionals",
+    "tableHeaders": {
+      "name": "Name",
+      "phone": "Phone",
+      "email": "Email",
+      "appointments": "Appointments",
+      "lastAppointment": "Last Appointment",
+      "actions": "Actions"
+    },
+    "appointmentCount": "{count} appointment(s)",
+    "patientCount": "{count} patient(s)",
+    "delete": "Delete",
+    "deleteConfirm": "Are you sure you want to delete this patient?",
+    "deleteSuccess": "Patient deleted!",
+    "deleteError": "Error deleting patient"
+  },
+  "servicesPage": {
+    "title": "Services",
+    "description": "Configure the services offered by your clinic",
+    "newService": "New Service",
+    "addServices": "Add services to your clinic",
+    "suggestedServices": "Suggested services for your clinic:",
+    "createCustom": "Create custom service",
+    "listTitle": "Services List",
+    "noneFound": "No services registered",
+    "found": "service(s) found",
+    "modality": {
+      "presencial": "In-person",
+      "online": "Online",
+      "both": "In-person and Online"
+    },
+    "tableHeaders": {
+      "name": "Name",
+      "modality": "Modality",
+      "duration": "Duration",
+      "price": "Price",
+      "status": "Status",
+      "actions": "Actions"
+    },
+    "edit": "Edit",
+    "delete": "Delete",
+    "active": "Active",
+    "inactive": "Inactive",
+    "dialog": {
+      "editTitle": "Edit Service",
+      "newTitle": "New Service",
+      "editDesc": "Update the service information",
+      "newDesc": "Add a new service to your clinic",
+      "nameLabel": "Name",
+      "namePlaceholder": "E.g.: Clinical Consultation",
+      "descriptionLabel": "Description",
+      "descriptionPlaceholder": "Describe the service...",
+      "modalityLabel": "Modality",
+      "modalityPlaceholder": "Select modality",
+      "modalityPresencial": "In-person",
+      "modalityOnline": "Online (Telemedicine)",
+      "modalityBoth": "In-person and Online",
+      "modalityHelp": "Defines how the service can be provided",
+      "durationLabel": "Duration (minutes)",
+      "priceLabel": "Price",
+      "requireDeposit": "Require deposit",
+      "requireDepositHelp": "Charge in advance to confirm",
+      "depositAmount": "Deposit amount",
+      "serviceActive": "Service active"
+    },
+    "nameRequired": "Name is required",
+    "updateSuccess": "Service updated!",
+    "createSuccess": "Service added!",
+    "saveError": "Error saving service",
+    "deleteConfirm": "Are you sure you want to delete this service?",
+    "deleteSuccess": "Service deleted!",
+    "deleteError": "Error deleting service"
+  },
+  "workflowPage": {
+    "title": "Service Flow",
+    "description": "AI handles the entire conversation, you only edit the initial settings",
+    "modeCard": {
+      "title": "Flow Mode"
+    },
+    "bookingMode": {
+      "title": "Booking Mode",
+      "description": "AI automatically schedules appointments - handles times and payments"
+    },
+    "infoMode": {
+      "title": "Information Mode",
+      "description": "AI answers questions about the clinic - no focus on booking"
+    },
+    "bookingSteps": {
+      "step1": {
+        "title": "Start",
+        "description": "Customer sends a message"
+      },
+      "step2": {
+        "title": "AI Takes Over",
+        "badge": "Automatic",
+        "description": "AI decides everything automatically: schedules, professionals, payments"
+      },
+      "step3": {
+        "title": "End",
+        "description": "Appointment scheduled and confirmed"
+      }
+    },
+    "topicCard": {
+      "title": "Topic and Description",
+      "description": "Define what the AI will answer questions about",
+      "topicLabel": "Topic",
+      "topicPlaceholder": "Clinic name",
+      "topicHelp": "What will the AI answer questions about?",
+      "descriptionLabel": "Description",
+      "descriptionPlaceholder": "Describe your clinic, services offered, specialties, differentiators...",
+      "descriptionHelp": "The more details, the better the AI responds (FAQs will be generated automatically)"
+    },
+    "welcomeCard": {
+      "title": "Welcome Message",
+      "description": "Message sent when the customer starts the conversation",
+      "placeholder": "Hello! 👋 Welcome! I'm here to answer your questions about {clinicName}. How can I help?"
+    },
+    "ctaCard": {
+      "title": "Call to Action (CTA)",
+      "description": "The AI will offer this CTA when the customer shows interest",
+      "placeholder": "E.g.: Call (11) 3456-7890 to schedule your appointment"
+    },
+    "faqCard": {
+      "title": "Frequently Asked Questions (FAQ)",
+      "description": "Add common questions and answers. The AI will use this information to respond.",
+      "generateButton": "Generate with AI",
+      "questionLabel": "Question",
+      "questionPlaceholder": "E.g.: What are the opening hours?",
+      "answerLabel": "Answer",
+      "answerPlaceholder": "E.g.: We are open Monday to Friday from 8am to 6pm",
+      "addButton": "Add"
+    },
+    "saveButton": "Save",
+    "saving": "Saving...",
+    "toasts": {
+      "faqFillRequired": "Fill in the topic and description to automatically generate FAQs",
+      "faqGenerated": "FAQs generated successfully!",
+      "bookingActivated": "Booking Mode activated! The bot will help patients schedule appointments.",
+      "infoActivated": "Information Mode activated! The bot will provide information about the clinic.",
+      "saveError": "Error saving the service mode"
+    },
+    "preview": "Conversation simulation"
   }
 }

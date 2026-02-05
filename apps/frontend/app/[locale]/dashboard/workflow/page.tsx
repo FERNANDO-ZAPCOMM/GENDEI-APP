@@ -71,7 +71,7 @@ export default function WorkflowPage() {
 
   const handleGenerateFaq = async () => {
     if (!description && !topic) {
-      toast.error('Preencha o tópico e descrição para gerar FAQs automaticamente');
+      toast.error(t('workflowPage.toasts.faqFillRequired'));
       return;
     }
     setIsGeneratingFaq(true);
@@ -84,7 +84,7 @@ export default function WorkflowPage() {
       ];
       setFaqs([...faqs, ...generatedFaqs]);
       setIsGeneratingFaq(false);
-      toast.success('FAQs geradas com sucesso!');
+      toast.success(t('workflowPage.toasts.faqGenerated'));
     }, 2000);
   };
 
@@ -108,14 +108,14 @@ export default function WorkflowPage() {
 
       toast.success(
         selectedMode === 'booking'
-          ? 'Modo Agendamento ativado! O bot irá auxiliar pacientes a agendar consultas.'
-          : 'Modo Informativo ativado! O bot irá fornecer informações sobre a clínica.'
+          ? t('workflowPage.toasts.bookingActivated')
+          : t('workflowPage.toasts.infoActivated')
       );
 
       refetch();
     } catch (error) {
       console.error('Error saving workflow mode:', error);
-      toast.error('Erro ao salvar o modo de atendimento');
+      toast.error(t('workflowPage.toasts.saveError'));
     } finally {
       setIsSaving(false);
     }
@@ -133,8 +133,8 @@ export default function WorkflowPage() {
     <div className="space-y-6 page-transition">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-semibold text-gray-900">Fluxo de Atendimento</h1>
-        <p className="text-gray-600 mt-1">IA cuida de toda a conversa, você só edita as configurações iniciais</p>
+        <h1 className="text-2xl font-semibold text-gray-900">{t('workflowPage.title')}</h1>
+        <p className="text-gray-600 mt-1">{t('workflowPage.description')}</p>
       </div>
 
       {/* Main Content - Side by side layout on desktop */}
@@ -144,7 +144,7 @@ export default function WorkflowPage() {
           {/* Mode Selection Card */}
           <Card>
             <CardHeader className="pb-4">
-              <CardTitle className="text-base">Modo do Fluxo</CardTitle>
+              <CardTitle className="text-base">{t('workflowPage.modeCard.title')}</CardTitle>
             </CardHeader>
             <CardContent className="pt-0">
               <div className="grid grid-cols-2 gap-4">
@@ -158,7 +158,7 @@ export default function WorkflowPage() {
                   }`}
                 >
                   <div className="flex items-center justify-between mb-2">
-                    <h4 className="font-medium text-gray-900">Modo Agendamento</h4>
+                    <h4 className="font-medium text-gray-900">{t('workflowPage.bookingMode.title')}</h4>
                     <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
                       selectedMode === 'booking'
                         ? 'border-green-500 bg-green-500'
@@ -168,7 +168,7 @@ export default function WorkflowPage() {
                     </div>
                   </div>
                   <p className="text-sm text-gray-500">
-                    IA agenda consultas automaticamente - lida com horários e pagamentos
+                    {t('workflowPage.bookingMode.description')}
                   </p>
                 </div>
 
@@ -182,7 +182,7 @@ export default function WorkflowPage() {
                   }`}
                 >
                   <div className="flex items-center justify-between mb-2">
-                    <h4 className="font-medium text-gray-900">Modo Informativo</h4>
+                    <h4 className="font-medium text-gray-900">{t('workflowPage.infoMode.title')}</h4>
                     <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
                       selectedMode === 'info'
                         ? 'border-green-500 bg-green-500'
@@ -192,7 +192,7 @@ export default function WorkflowPage() {
                     </div>
                   </div>
                   <p className="text-sm text-gray-500">
-                    IA responde perguntas sobre a clínica - sem foco em agendamento
+                    {t('workflowPage.infoMode.description')}
                   </p>
                 </div>
               </div>
@@ -212,8 +212,8 @@ export default function WorkflowPage() {
                     <Play className="h-5 w-5 text-gray-600" />
                   </div>
                   <div>
-                    <h4 className="font-medium text-gray-900">Inicio</h4>
-                    <p className="text-sm text-gray-500">Cliente envia uma mensagem</p>
+                    <h4 className="font-medium text-gray-900">{t('workflowPage.bookingSteps.step1.title')}</h4>
+                    <p className="text-sm text-gray-500">{t('workflowPage.bookingSteps.step1.description')}</p>
                   </div>
                 </div>
 
@@ -227,12 +227,12 @@ export default function WorkflowPage() {
                   </div>
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
-                      <h4 className="font-medium text-gray-900">IA Assume</h4>
+                      <h4 className="font-medium text-gray-900">{t('workflowPage.bookingSteps.step2.title')}</h4>
                       <Badge variant="secondary" className="bg-blue-100 text-blue-700 text-xs">
-                        Automático
+                        {t('workflowPage.bookingSteps.step2.badge')}
                       </Badge>
                     </div>
-                    <p className="text-sm text-gray-500">IA decide tudo automaticamente: horários, profissionais, pagamentos</p>
+                    <p className="text-sm text-gray-500">{t('workflowPage.bookingSteps.step2.description')}</p>
                   </div>
                 </div>
 
@@ -245,8 +245,8 @@ export default function WorkflowPage() {
                     <Flag className="h-5 w-5 text-gray-600" />
                   </div>
                   <div>
-                    <h4 className="font-medium text-gray-900">Fim</h4>
-                    <p className="text-sm text-gray-500">Consulta agendada e confirmada</p>
+                    <h4 className="font-medium text-gray-900">{t('workflowPage.bookingSteps.step3.title')}</h4>
+                    <p className="text-sm text-gray-500">{t('workflowPage.bookingSteps.step3.description')}</p>
                   </div>
                 </div>
               </CardContent>
@@ -264,37 +264,37 @@ export default function WorkflowPage() {
                       <FileText className="h-5 w-5 text-gray-600" />
                     </div>
                     <div>
-                      <CardTitle className="text-base">Tópico e Descrição</CardTitle>
-                      <CardDescription>Defina sobre o que a IA vai responder perguntas</CardDescription>
+                      <CardTitle className="text-base">{t('workflowPage.topicCard.title')}</CardTitle>
+                      <CardDescription>{t('workflowPage.topicCard.description')}</CardDescription>
                     </div>
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="topic">
-                      Tópico <span className="text-red-500">*</span>
+                      {t('workflowPage.topicCard.topicLabel')} <span className="text-red-500">*</span>
                     </Label>
                     <Input
                       id="topic"
                       value={topic}
                       onChange={(e) => setTopic(e.target.value)}
-                      placeholder={currentClinic?.name || 'Nome da clínica'}
+                      placeholder={currentClinic?.name || t('workflowPage.topicCard.topicPlaceholder')}
                     />
                     <p className="text-xs text-muted-foreground">
-                      Sobre o que a IA vai responder perguntas?
+                      {t('workflowPage.topicCard.topicHelp')}
                     </p>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="description">Descrição</Label>
+                    <Label htmlFor="description">{t('workflowPage.topicCard.descriptionLabel')}</Label>
                     <Textarea
                       id="description"
                       value={description}
                       onChange={(e) => setDescription(e.target.value)}
-                      placeholder="Descreva sua clínica, serviços oferecidos, especialidades, diferenciais..."
+                      placeholder={t('workflowPage.topicCard.descriptionPlaceholder')}
                       rows={5}
                     />
                     <p className="text-xs text-muted-foreground">
-                      Quanto mais detalhes a IA responde (FAQs serão geradas automaticamente)
+                      {t('workflowPage.topicCard.descriptionHelp')}
                     </p>
                   </div>
                 </CardContent>
@@ -308,8 +308,8 @@ export default function WorkflowPage() {
                       <MessageSquare className="h-5 w-5 text-gray-600" />
                     </div>
                     <div>
-                      <CardTitle className="text-base">Mensagem de Boas-vindas</CardTitle>
-                      <CardDescription>Mensagem enviada quando o cliente inicia a conversa</CardDescription>
+                      <CardTitle className="text-base">{t('workflowPage.welcomeCard.title')}</CardTitle>
+                      <CardDescription>{t('workflowPage.welcomeCard.description')}</CardDescription>
                     </div>
                   </div>
                 </CardHeader>
@@ -317,7 +317,7 @@ export default function WorkflowPage() {
                   <Input
                     value={welcomeMessage}
                     onChange={(e) => setWelcomeMessage(e.target.value)}
-                    placeholder={`Olá! 👋 Bem-vindo! Estou aqui para tirar suas dúvidas sobre ${currentClinic?.name || 'nossa clínica'}. Como posso ajudar?`}
+                    placeholder={t('workflowPage.welcomeCard.placeholder', { clinicName: currentClinic?.name || 'clinic' })}
                   />
                 </CardContent>
               </Card>
@@ -330,8 +330,8 @@ export default function WorkflowPage() {
                       <MousePointer className="h-5 w-5 text-gray-600" />
                     </div>
                     <div>
-                      <CardTitle className="text-base">Chamada para Ação (CTA)</CardTitle>
-                      <CardDescription>A IA oferecerá esse CTA quando o cliente demonstrar interesse</CardDescription>
+                      <CardTitle className="text-base">{t('workflowPage.ctaCard.title')}</CardTitle>
+                      <CardDescription>{t('workflowPage.ctaCard.description')}</CardDescription>
                     </div>
                   </div>
                 </CardHeader>
@@ -339,7 +339,7 @@ export default function WorkflowPage() {
                   <Input
                     value={ctaText}
                     onChange={(e) => setCtaText(e.target.value)}
-                    placeholder="Ex: Ligue para (11) 3456-7890 para agendar sua consulta"
+                    placeholder={t('workflowPage.ctaCard.placeholder')}
                   />
                 </CardContent>
               </Card>
@@ -353,8 +353,8 @@ export default function WorkflowPage() {
                         <HelpCircle className="h-5 w-5 text-gray-600" />
                       </div>
                       <div>
-                        <CardTitle className="text-base">Perguntas Frequentes (FAQ)</CardTitle>
-                        <CardDescription>Adicione perguntas e respostas comuns. A IA usará essas informações para responder.</CardDescription>
+                        <CardTitle className="text-base">{t('workflowPage.faqCard.title')}</CardTitle>
+                        <CardDescription>{t('workflowPage.faqCard.description')}</CardDescription>
                       </div>
                     </div>
                     <Button
@@ -368,7 +368,7 @@ export default function WorkflowPage() {
                       ) : (
                         <Wand2 className="h-4 w-4 mr-2" />
                       )}
-                      Gerar com IA
+                      {t('workflowPage.faqCard.generateButton')}
                     </Button>
                   </div>
                 </CardHeader>
@@ -398,21 +398,21 @@ export default function WorkflowPage() {
                   {/* Add new FAQ */}
                   <div className="space-y-3 pt-2 border-t">
                     <div className="space-y-2">
-                      <Label htmlFor="newQuestion">Pergunta</Label>
+                      <Label htmlFor="newQuestion">{t('workflowPage.faqCard.questionLabel')}</Label>
                       <Input
                         id="newQuestion"
                         value={newQuestion}
                         onChange={(e) => setNewQuestion(e.target.value)}
-                        placeholder="Ex: Quais são os horários de funcionamento?"
+                        placeholder={t('workflowPage.faqCard.questionPlaceholder')}
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="newAnswer">Resposta</Label>
+                      <Label htmlFor="newAnswer">{t('workflowPage.faqCard.answerLabel')}</Label>
                       <Textarea
                         id="newAnswer"
                         value={newAnswer}
                         onChange={(e) => setNewAnswer(e.target.value)}
-                        placeholder="Ex: Funcionamos de segunda a sexta das 8h às 18h"
+                        placeholder={t('workflowPage.faqCard.answerPlaceholder')}
                         rows={2}
                       />
                     </div>
@@ -423,7 +423,7 @@ export default function WorkflowPage() {
                       disabled={!newQuestion.trim() || !newAnswer.trim()}
                     >
                       <Plus className="h-4 w-4 mr-2" />
-                      Adicionar
+                      {t('workflowPage.faqCard.addButton')}
                     </Button>
                   </div>
                 </CardContent>
@@ -437,12 +437,12 @@ export default function WorkflowPage() {
               {isSaving ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Salvando...
+                  {t('workflowPage.saving')}
                 </>
               ) : (
                 <>
                   <Save className="h-4 w-4 mr-2" />
-                  Salvar
+                  {t('workflowPage.saveButton')}
                 </>
               )}
             </Button>
@@ -463,7 +463,7 @@ export default function WorkflowPage() {
                 />
                 <p className="text-sm text-gray-500 mt-4 flex items-center gap-2">
                   <MessageSquare className="h-4 w-4" />
-                  Simulação da conversa
+                  {t('workflowPage.preview')}
                 </p>
               </CardContent>
             </Card>

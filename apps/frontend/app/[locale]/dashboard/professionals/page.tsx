@@ -46,13 +46,13 @@ export default function ProfessionalsPage() {
   const { data: professionals, isLoading, remove } = useProfessionals(clinic?.id || '');
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Tem certeza que deseja excluir este profissional?')) return;
+    if (!confirm(t('professionalsPage.deleteConfirm'))) return;
 
     try {
       await remove.mutateAsync(id);
-      toast.success('Profissional excluído!');
+      toast.success(t('professionalsPage.deleteSuccess'));
     } catch (error: any) {
-      toast.error(error.message || 'Erro ao excluir profissional');
+      toast.error(error.message || t('professionalsPage.deleteError'));
     }
   };
 
@@ -103,13 +103,13 @@ export default function ProfessionalsPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl sm:text-2xl font-semibold text-gray-900">Profissionais</h1>
-          <p className="text-sm sm:text-base text-gray-600 mt-1">Gerencie os profissionais da sua clínica</p>
+          <h1 className="text-2xl sm:text-2xl font-semibold text-gray-900">{t('professionalsPage.title')}</h1>
+          <p className="text-sm sm:text-base text-gray-600 mt-1">{t('professionalsPage.description')}</p>
         </div>
         {hasProfessionals && (
           <Button onClick={() => router.push(`/${locale}/dashboard/professionals/new`)} className="w-full sm:w-auto">
             <Plus className="w-4 h-4 mr-2" />
-            Novo Profissional
+            {t('professionalsPage.newProfessional')}
           </Button>
         )}
       </div>
@@ -121,7 +121,7 @@ export default function ProfessionalsPage() {
             <CardContent className="pt-4 pb-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs text-blue-600 font-medium">Total</p>
+                  <p className="text-xs text-blue-600 font-medium">{t('professionalsPage.total')}</p>
                   <p className="text-2xl font-bold text-blue-700">{professionals.length}</p>
                 </div>
                 <User className="w-5 h-5 text-blue-600" />
@@ -132,7 +132,7 @@ export default function ProfessionalsPage() {
             <CardContent className="pt-4 pb-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs text-emerald-600 font-medium">Ativos</p>
+                  <p className="text-xs text-emerald-600 font-medium">{t('professionalsPage.activeCount')}</p>
                   <p className="text-2xl font-bold text-emerald-700">{activeProfessionals.length}</p>
                 </div>
                 <UserPlus className="w-5 h-5 text-emerald-600" />
@@ -143,7 +143,7 @@ export default function ProfessionalsPage() {
             <CardContent className="pt-4 pb-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs text-slate-500 font-medium">Inativos</p>
+                  <p className="text-xs text-slate-500 font-medium">{t('professionalsPage.inactiveCount')}</p>
                   <p className="text-2xl font-bold text-slate-600">{inactiveProfessionals.length}</p>
                 </div>
                 <User className="w-5 h-5 text-slate-500" />
@@ -154,7 +154,7 @@ export default function ProfessionalsPage() {
             <CardContent className="pt-4 pb-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs text-purple-600 font-medium">Especialidades</p>
+                  <p className="text-xs text-purple-600 font-medium">{t('professionalsPage.specialtiesCount')}</p>
                   <p className="text-2xl font-bold text-purple-700">{usedSpecialties.length}</p>
                 </div>
                 <Clock className="w-5 h-5 text-purple-600" />
@@ -170,19 +170,19 @@ export default function ProfessionalsPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <UserPlus className="w-4 h-4" />
-              Adicionar Profissional
+              {t('professionalsPage.addProfessional')}
             </CardTitle>
             <CardDescription>
-              Cadastre o primeiro profissional da sua clínica
+              {t('professionalsPage.addFirstDesc')}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-muted-foreground">
-              Você ainda não tem profissionais cadastrados. Adicione seu primeiro profissional para começar a receber agendamentos.
+              {t('professionalsPage.noProfessionals')}
             </p>
             <Button onClick={() => router.push(`/${locale}/dashboard/professionals/new`)}>
               <Plus className="h-4 w-4 mr-2" />
-              Adicionar Profissional
+              {t('professionalsPage.addProfessional')}
             </Button>
           </CardContent>
         </Card>
@@ -196,27 +196,27 @@ export default function ProfessionalsPage() {
             <CardContent className="py-4">
               <div className="flex flex-wrap items-center gap-4">
                 <div className="flex items-center gap-2">
-                  <Label className="text-sm text-muted-foreground whitespace-nowrap">Status:</Label>
+                  <Label className="text-sm text-muted-foreground whitespace-nowrap">{t('professionalsPage.status')}</Label>
                   <Select value={statusFilter} onValueChange={(v: any) => setStatusFilter(v)}>
                     <SelectTrigger className="w-[150px]">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">Todos ({professionals.length})</SelectItem>
-                      <SelectItem value="active">Ativos ({activeProfessionals.length})</SelectItem>
-                      <SelectItem value="inactive">Inativos ({inactiveProfessionals.length})</SelectItem>
+                      <SelectItem value="all">{t('professionalsPage.all')} ({professionals.length})</SelectItem>
+                      <SelectItem value="active">{t('professionalsPage.activeCount')} ({activeProfessionals.length})</SelectItem>
+                      <SelectItem value="inactive">{t('professionalsPage.inactiveCount')} ({inactiveProfessionals.length})</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 {usedSpecialties.length > 0 && (
                   <div className="flex items-center gap-2">
-                    <Label className="text-sm text-muted-foreground whitespace-nowrap">Especialidade:</Label>
+                    <Label className="text-sm text-muted-foreground whitespace-nowrap">{t('professionalsPage.specialty')}</Label>
                     <Select value={selectedSpecialty} onValueChange={setSelectedSpecialty}>
                       <SelectTrigger className="w-[180px]">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="all">Todas</SelectItem>
+                        <SelectItem value="all">{t('professionalsPage.all')}</SelectItem>
                         {usedSpecialties.map((specialty) => (
                           <SelectItem key={specialty} value={specialty}>
                             {getSpecialtyName(specialty)}
@@ -235,13 +235,13 @@ export default function ProfessionalsPage() {
                       setSelectedSpecialty('all');
                     }}
                   >
-                    Limpar Filtros
+                    {t('professionalsPage.clearFilters')}
                   </Button>
                 )}
                 <div className="ml-auto text-sm text-muted-foreground">
                   {filteredProfessionals.length === professionals.length
-                    ? `${professionals.length} profissional(is)`
-                    : `${filteredProfessionals.length} de ${professionals.length}`}
+                    ? t('professionalsPage.countTotal', { count: professionals.length })
+                    : t('professionalsPage.countFiltered', { filtered: filteredProfessionals.length, total: professionals.length })}
                 </div>
               </div>
             </CardContent>
@@ -250,9 +250,9 @@ export default function ProfessionalsPage() {
           {/* Full-width Professionals List */}
           <Card className="h-[calc(100vh-320px)] flex flex-col">
             <CardHeader className="pb-3 flex-shrink-0">
-              <CardTitle className="text-base">Lista de Profissionais</CardTitle>
+              <CardTitle className="text-base">{t('professionalsPage.listTitle')}</CardTitle>
               <CardDescription>
-                Gerencie sua equipe e visualize a agenda de cada profissional
+                {t('professionalsPage.listDesc')}
               </CardDescription>
             </CardHeader>
             <CardContent className="flex-1 overflow-y-auto">
@@ -265,8 +265,8 @@ export default function ProfessionalsPage() {
               ) : filteredProfessionals.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-8 text-center">
                   <User className="w-10 h-10 text-muted-foreground mb-3" />
-                  <p className="text-muted-foreground">Nenhum profissional encontrado</p>
-                  <p className="text-xs text-muted-foreground mt-1">Ajuste os filtros para ver mais resultados</p>
+                  <p className="text-muted-foreground">{t('professionalsPage.noneFound')}</p>
+                  <p className="text-xs text-muted-foreground mt-1">{t('professionalsPage.adjustFilters')}</p>
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -285,14 +285,14 @@ export default function ProfessionalsPage() {
                       <div className="flex-1 min-w-0">
                         <h3 className="font-medium">{professional.name}</h3>
                         <p className="text-sm text-muted-foreground">
-                          {getSpecialtyNames(getProfessionalSpecialties(professional)) || 'Sem especialidade'}
+                          {getSpecialtyNames(getProfessionalSpecialties(professional)) || t('professionalsPage.noSpecialty')}
                         </p>
                         <div className="flex items-center gap-3 mt-1.5 flex-wrap">
                           <Badge className={professional.active
                             ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border-0 text-xs'
                             : 'bg-slate-100 text-slate-500 hover:bg-slate-100 border-0 text-xs'
                           }>
-                            {professional.active ? 'Ativo' : 'Inativo'}
+                            {professional.active ? t('professionalsPage.active') : t('professionalsPage.inactive')}
                           </Badge>
                           <span className="text-xs text-muted-foreground flex items-center gap-1">
                             <Clock className="w-3 h-3" />
@@ -315,7 +315,7 @@ export default function ProfessionalsPage() {
                         }}
                       >
                         <Calendar className="w-4 h-4 mr-2" />
-                        Ver Agenda
+                        {t('professionalsPage.viewSchedule')}
                       </Button>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
@@ -326,18 +326,18 @@ export default function ProfessionalsPage() {
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem onClick={() => router.push(`/${locale}/dashboard/appointments?professional=${professional.id}`)}>
                             <Calendar className="w-4 h-4 mr-2" />
-                            Ver Agenda
+                            {t('professionalsPage.viewSchedule')}
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => router.push(`/${locale}/dashboard/professionals/${professional.id}`)}>
                             <Pencil className="w-4 h-4 mr-2" />
-                            Editar
+                            {t('professionalsPage.edit')}
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             onClick={() => handleDelete(professional.id)}
                             className="text-destructive"
                           >
                             <Trash2 className="w-4 h-4 mr-2" />
-                            Excluir
+                            {t('professionalsPage.delete')}
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>

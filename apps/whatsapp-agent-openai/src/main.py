@@ -118,6 +118,9 @@ async def run_agent_response(
 
     # If agent didn't call tools to send a message, send response directly
     if result and result.success and result.response and not result.tool_calls:
+        # Avoid sending SDK debug dumps to users
+        if result.response.strip().startswith("RunResult"):
+            return
         await send_whatsapp_message(
             phone_number_id, phone,
             result.response,
@@ -3128,16 +3131,6 @@ async def handle_scheduling_intent(
 
     logger.info(f"🔍 Flow ID for clinic {clinic_id}: {flow_id_to_use or 'NOT CONFIGURED'}")
     logger.info(f"🔍 Clinic whatsapp_config: {whatsapp_config}")
-
-    flow_errors = (whatsapp_config.get('flowsUpdateResult') or {}).get('errors', [])
-    if flow_errors:
-        logger.warning(f"⚠️ Flow config has errors; skipping flow: {flow_errors}")
-        await run_agent_response(
-            clinic_id, phone, message,
-            phone_number_id, access_token,
-            contact_name=contact_name
-        )
-        return
 
     if flow_id_to_use and professionals:
         logger.info(f"📱 Using WhatsApp Flow for scheduling (flow_id: {flow_id_to_use})")

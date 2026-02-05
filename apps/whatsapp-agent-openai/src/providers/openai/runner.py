@@ -123,8 +123,29 @@ class OpenAIRunner(BaseRunner):
     def _parse_result(self, sdk_result: Any, agent: BaseAgent) -> ExecutionResult:
         """Parse SDK result into ExecutionResult."""
         try:
-            # Extract response text from SDK result
-            response_text = str(sdk_result) if sdk_result else ""
+            # Extract response text from SDK result (avoid raw RunResult dumps)
+            response_text = ""
+            if sdk_result is None:
+                response_text = ""
+            elif hasattr(sdk_result, "output_text") and sdk_result.output_text:
+                response_text = sdk_result.output_text
+            elif hasattr(sdk_result, "final_output") and sdk_result.final_output:
+                response_text = sdk_result.final_output
+            elif hasattr(sdk_result, "output") and sdk_result.output:
+                # SDK output can be a list of items with text/content
+                parts = []
+                for item in sdk_result.output:
+                    text = getattr(item, "text", None) or getattr(item, "content", None)
+                    if text:
+                        parts.append(str(text))
+                response_text = "\n".join(parts).strip()
+            else:
+                # Fallback to string, but strip noisy RunResult summary if present
+                raw = str(sdk_result)
+                if raw.startswith("RunResult"):
+                    response_text = ""
+                else:
+                    response_text = raw
 
             # Check for handoff in the result
             handoff_to = None
@@ -145,6 +166,13 @@ class OpenAIRunner(BaseRunner):
             if hasattr(sdk_result, "new_items"):
                 for item in sdk_result.new_items:
                     if hasattr(item, "type") and item.type == "function_call":
+                        tool_calls.append({
+                            "name": getattr(item, "name", "unknown"),
+                            "arguments": getattr(item, "arguments", {}),
+                        })
+            elif hasattr(sdk_result, "output"):
+                for item in sdk_result.output:
+                    if getattr(item, "type", None) == "function_call":
                         tool_calls.append({
                             "name": getattr(item, "name", "unknown"),
                             "arguments": getattr(item, "arguments", {}),
