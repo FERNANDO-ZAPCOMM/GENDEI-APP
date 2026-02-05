@@ -3128,6 +3128,98 @@ async def handle_flow_completion(
         logger.warning(f"⚠️ Unknown flow response format: {flow_response}")
 
 
+async def handle_payment_type_selection(
+    clinic_id: str,
+    phone: str,
+    button_payload: str,
+    state: Dict[str, Any],
+    phone_number_id: str,
+    access_token: str
+) -> None:
+    """Handle payment type selection and send the appropriate WhatsApp Flow."""
+
+    # Check if we're in the right state
+    if state.get("state") != "awaiting_payment_type":
+        logger.warning(f"⚠️ Unexpected payment type selection, state: {state.get('state')}")
+        await send_whatsapp_message(
+            phone_number_id, phone,
+            "Por favor, inicie o agendamento novamente.",
+            access_token
+        )
+        return
+
+    # Get flow IDs and especialidades from state
+    convenio_flow_id = state.get("convenio_flow_id", "")
+    particular_flow_id = state.get("particular_flow_id", "")
+    especialidades = state.get("especialidades", [])
+
+    # Determine which flow to use based on selection
+    if button_payload == "payment_convenio":
+        flow_id_to_use = convenio_flow_id
+        payment_type = "convenio"
+    else:  # payment_particular
+        flow_id_to_use = particular_flow_id
+        payment_type = "particular"
+
+    if not flow_id_to_use:
+        logger.error(f"❌ No flow ID configured for {payment_type}")
+        await send_whatsapp_message(
+            phone_number_id, phone,
+            "Desculpe, o sistema de agendamento não está configurado corretamente. Por favor, entre em contato conosco.",
+            access_token
+        )
+        return
+
+    logger.info(f"📱 Sending {payment_type} flow (ID: {flow_id_to_use}) to {phone}")
+
+    # Generate flow token
+    flow_token = generate_flow_token(clinic_id, phone)
+
+    # Initial data for the ESPECIALIDADE screen
+    initial_data = {
+        "especialidades": especialidades,
+        "error_message": "",
+    }
+
+    # Get clinic name for the message
+    clinic = db.get_clinic(clinic_id) if db else None
+    clinic_name = clinic.name if clinic else "a clínica"
+
+    # Send the appropriate flow
+    success = await send_whatsapp_flow(
+        phone_number_id=phone_number_id,
+        to=phone,
+        flow_id=flow_id_to_use,
+        flow_token=flow_token,
+        flow_cta="Agendar Consulta",
+        header_text="Seus Dados",
+        body_text=f"Preencha seus dados para agendar sua consulta na *{clinic_name}*",
+        access_token=access_token,
+        flow_action="navigate",
+        initial_screen="ESPECIALIDADE",
+        initial_data=initial_data,
+    )
+
+    if success:
+        # Update state to track flow
+        new_state = {
+            "state": "in_patient_info_flow",
+            "flow_token": flow_token,
+            "clinic_id": clinic_id,
+            "payment_type": payment_type,
+        }
+        if db:
+            db.save_conversation_state(clinic_id, phone, new_state)
+        logger.info(f"✅ {payment_type.capitalize()} flow sent to {phone}")
+    else:
+        logger.error(f"❌ Failed to send {payment_type} flow to {phone}")
+        await send_whatsapp_message(
+            phone_number_id, phone,
+            "Desculpe, ocorreu um erro ao iniciar o agendamento. Por favor, tente novamente.",
+            access_token
+        )
+
+
 async def handle_scheduling_intent(
     clinic_id: str,
     phone: str,
@@ -3186,21 +3278,25 @@ async def handle_scheduling_intent(
 
     # =============================================
     # USE WHATSAPP FLOWS IF CONFIGURED
-    # Flow 1: Patient Info (ESPECIALIDADE → TIPO_ATENDIMENTO → INFO_CONVENIO → DADOS_PACIENTE → CONFIRMACAO)
-    # Flow 2: Booking (BOOKING - date picker + time dropdown)
+    # Flow Convenio: Patient Info for insurance patients (ESPECIALIDADE → INFO_CONVENIO → DADOS_PACIENTE)
+    # Flow Particular: Patient Info for cash patients (ESPECIALIDADE → DADOS_PACIENTE)
+    # Flow Booking: Date/time selection (BOOKING)
     # =============================================
-    # Get clinic-specific flow ID from Firestore (created during Embedded Signup)
-    # Falls back to environment variable for backward compatibility
+    # Get clinic-specific flow IDs from Firestore (created during Embedded Signup)
     whatsapp_config = clinic.whatsapp_config or {}
-    flow_id_to_use = whatsapp_config.get('patientInfoFlowId', '')
+    convenio_flow_id = whatsapp_config.get('patientInfoConvenioFlowId', '')
+    particular_flow_id = whatsapp_config.get('patientInfoParticularFlowId', '')
 
-    logger.info(f"🔍 Flow ID for clinic {clinic_id}: {flow_id_to_use or 'NOT CONFIGURED'}")
+    # Check if both new flows are configured
+    has_new_flows = bool(convenio_flow_id and particular_flow_id)
+
+    logger.info(f"🔍 Flow IDs for clinic {clinic_id}: convenio={convenio_flow_id or 'N/A'}, particular={particular_flow_id or 'N/A'}")
     logger.info(f"🔍 Clinic whatsapp_config: {whatsapp_config}")
 
-    if flow_id_to_use and professionals:
-        logger.info(f"📱 Using WhatsApp Flow for scheduling (flow_id: {flow_id_to_use})")
+    if has_new_flows and professionals:
+        logger.info(f"📱 Using WhatsApp Flows for scheduling - asking payment type first")
 
-        # Build especialidades list (each professional = one specialty option)
+        # Build especialidades list for later use (each professional = one specialty option)
         especialidades = []
         for prof in professionals:
             # Use primary (first) specialty for display, or fallback to old format
@@ -3214,50 +3310,31 @@ async def handle_scheduling_intent(
                 "description": prof_name
             })
 
-        # Generate flow token (clinic_id:phone:timestamp)
-        flow_token = generate_flow_token(clinic_id, phone)
-
-        # Initial data for the ESPECIALIDADE screen
-        initial_data = {
+        # Save state with especialidades for when user selects payment type
+        new_state = {
+            "state": "awaiting_payment_type",
+            "clinic_id": clinic_id,
             "especialidades": especialidades[:10],  # Max 10 for RadioButtonsGroup
-            "error_message": "",
+            "convenio_flow_id": convenio_flow_id,
+            "particular_flow_id": particular_flow_id,
         }
+        if db:
+            db.save_conversation_state(clinic_id, phone, new_state)
 
-        # Send Flow 1 (Patient Info)
-        # Use "navigate" for client-side flows (no server endpoint)
-        success = await send_whatsapp_flow(
-            phone_number_id=phone_number_id,
-            to=phone,
-            flow_id=flow_id_to_use,
-            flow_token=flow_token,
-            flow_cta="Agendar Consulta",
-            header_text="Seus Dados",
-            body_text=f"Preencha seus dados para agendar sua consulta na *{clinic.name}*",
-            access_token=access_token,
-            flow_action="navigate",  # "navigate" for client-side flows
-            initial_screen="ESPECIALIDADE",
-            initial_data=initial_data,
+        # Ask user for payment type via buttons
+        buttons = [
+            {"id": "payment_convenio", "title": "Convênio"},
+            {"id": "payment_particular", "title": "Particular"},
+        ]
+
+        await send_whatsapp_buttons(
+            phone_number_id, phone,
+            f"Como você prefere pagar sua consulta na *{clinic.name}*?",
+            buttons,
+            access_token
         )
-
-        if success:
-            # Save state for flow tracking
-            new_state = {
-                "state": "in_patient_info_flow",
-                "flow_token": flow_token,
-                "clinic_id": clinic_id,
-            }
-            if db:
-                db.save_conversation_state(clinic_id, phone, new_state)
-            logger.info(f"✅ Patient Info Flow sent to {phone}")
-            return
-        else:
-            logger.warning(f"⚠️ Failed to send flow, falling back to Agents SDK")
-            await run_agent_response(
-                clinic_id, phone, message,
-                phone_number_id, access_token,
-                contact_name=contact_name
-            )
-            return
+        logger.info(f"✅ Payment type buttons sent to {phone}")
+        return
 
     if not professionals:
         await send_whatsapp_message(
@@ -3586,6 +3663,15 @@ async def process_message(
                 phone_number_id, access_token,
                 reason="user_requested_contact_info_mode",
                 auto_takeover=True
+            )
+            return
+
+        # Handle payment type selection for WhatsApp Flows
+        if button_payload in ("payment_convenio", "payment_particular"):
+            logger.info(f"💳 User {phone} selected payment type: {button_payload}")
+            await handle_payment_type_selection(
+                clinic_id, phone, button_payload, state,
+                phone_number_id, access_token
             )
             return
 
