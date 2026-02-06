@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useParams, useRouter } from 'next/navigation';
-import { useAuth } from '@/hooks/use-auth';
 import { useClinic } from '@/hooks/use-clinic';
 import { useMetaStatus } from '@/hooks/use-meta-status';
 import { Loader2, ChevronDown, ChevronUp, Wifi, User, QrCode, MessageSquare, Workflow, LogOut } from 'lucide-react';
@@ -94,7 +93,6 @@ export function WhatsAppSettingsContent({ onConnected }: WhatsAppSettingsContent
   const router = useRouter();
   const params = useParams();
   const locale = params.locale as string || 'pt-BR';
-  const { currentUser } = useAuth();
   const { currentClinic } = useClinic();
   const hasCalledOnConnected = useRef(false);
 

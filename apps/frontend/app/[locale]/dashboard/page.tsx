@@ -20,7 +20,6 @@ import {
 import { useClinic, useClinicStats } from '@/hooks/use-clinic';
 import { useTodayAppointments } from '@/hooks/use-appointments';
 import { useMetaStatus } from '@/hooks/use-meta-status';
-import { useAuth } from '@/hooks/use-auth';
 import { useOnboardingStatus } from '@/hooks/use-onboarding-status';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -46,12 +45,11 @@ export default function DashboardPage() {
   const router = useRouter();
   const params = useParams();
   const locale = params.locale as string;
-  const { currentUser } = useAuth();
   const { currentClinic: clinic, isLoading: clinicLoading } = useClinic();
   const { data: stats, isLoading: statsLoading } = useClinicStats(clinic?.id || '');
   const clinicTimezone = clinic?.timezone || 'America/Sao_Paulo';
   const { data: todayAppointments, isLoading: appointmentsLoading } = useTodayAppointments(clinic?.id || '', clinicTimezone);
-  const { status: metaStatus, error: metaError } = useMetaStatus(currentUser?.uid || '');
+  const { status: metaStatus, error: metaError } = useMetaStatus(clinic?.id || '');
 
   // Onboarding status
   const onboardingStatus = useOnboardingStatus();

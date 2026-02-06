@@ -485,50 +485,6 @@ export default function ClinicSettingsPage() {
                     </div>
                   </div>
 
-                  {/* AI Summary Generation */}
-                  {formData.description.length >= 50 && (
-                    <div className="space-y-2 p-3 bg-gray-50 rounded-lg border">
-                      <div className="flex items-center justify-between">
-                        <Label className="text-sm font-medium">
-                          {t('clinicPage.basicInfo.summaryLabel')}
-                        </Label>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={async () => {
-                            try {
-                              const result = await generateSummary.mutateAsync({
-                                description: formData.description,
-                                clinicName: formData.name,
-                              });
-                              setFormData({ ...formData, greetingSummary: result.summary });
-                              toast.success(t('clinicPage.toasts.summaryGenerated'));
-                            } catch (error) {
-                              toast.error(t('clinicPage.toasts.summaryError'));
-                            }
-                          }}
-                          disabled={generateSummary.isPending}
-                        >
-                          {generateSummary.isPending ? (
-                            <Loader2 className="h-3 w-3 animate-spin mr-1" />
-                          ) : (
-                            <Sparkles className="h-3 w-3 mr-1" />
-                          )}
-                          {t('clinicPage.basicInfo.generateButton')}
-                        </Button>
-                      </div>
-                      {formData.greetingSummary ? (
-                        <div className="p-2 bg-white rounded border text-sm text-gray-700">
-                          {formData.greetingSummary}
-                        </div>
-                      ) : (
-                        <p className="text-xs text-muted-foreground">
-                          {t('clinicPage.basicInfo.summaryHelp')}
-                        </p>
-                      )}
-                    </div>
-                  )}
                 </div>
               )}
 

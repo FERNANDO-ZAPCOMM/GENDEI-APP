@@ -9,14 +9,14 @@ const API_URL = '/api';
  * Hook for fetching and managing WhatsApp connection status
  * Polls every 30 seconds to keep status fresh
  */
-export function useMetaStatus(creatorId: string) {
+export function useMetaStatus(clinicId: string) {
   const { getIdToken } = useAuth();
   const queryClient = useQueryClient();
 
   const query = useQuery({
-    queryKey: ['meta-status', creatorId],
+    queryKey: ['meta-status', clinicId],
     queryFn: async (): Promise<WhatsAppStatus> => {
-      if (!creatorId) throw new Error('Creator ID is required');
+      if (!clinicId) throw new Error('Creator ID is required');
 
       const token = await getIdToken();
       if (!token) throw new Error('Not authenticated');
@@ -26,7 +26,7 @@ export function useMetaStatus(creatorId: string) {
       const timeoutId = setTimeout(() => controller.abort(), 10000);
 
       try {
-        const response = await fetch(`${API_URL}/meta/status/${creatorId}`, {
+        const response = await fetch(`${API_URL}/meta/status/${clinicId}`, {
           headers: {
             Authorization: `Bearer ${token}`,
           },
@@ -57,7 +57,7 @@ export function useMetaStatus(creatorId: string) {
         throw error;
       }
     },
-    enabled: !!creatorId,
+    enabled: !!clinicId,
     retry: 1, // Only retry once
     retryDelay: 1000, // Wait 1 second before retrying
     refetchInterval: 30000, // Poll every 30 seconds
@@ -72,7 +72,7 @@ export function useMetaStatus(creatorId: string) {
       const token = await getIdToken();
       if (!token) throw new Error('Not authenticated');
 
-      const response = await fetch(`${API_URL}/meta/sync/${creatorId}`, {
+      const response = await fetch(`${API_URL}/meta/sync/${clinicId}`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -88,7 +88,7 @@ export function useMetaStatus(creatorId: string) {
     },
     onSuccess: () => {
       // Refetch status after successful sync
-      queryClient.invalidateQueries({ queryKey: ['meta-status', creatorId] });
+      queryClient.invalidateQueries({ queryKey: ['meta-status', clinicId] });
     },
   });
 
@@ -97,7 +97,7 @@ export function useMetaStatus(creatorId: string) {
       const token = await getIdToken();
       if (!token) throw new Error('Not authenticated');
 
-      const response = await fetch(`${API_URL}/meta/disconnect/${creatorId}`, {
+      const response = await fetch(`${API_URL}/meta/disconnect/${clinicId}`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -113,7 +113,7 @@ export function useMetaStatus(creatorId: string) {
     },
     onSuccess: () => {
       // Refetch status after disconnect
-      queryClient.invalidateQueries({ queryKey: ['meta-status', creatorId] });
+      queryClient.invalidateQueries({ queryKey: ['meta-status', clinicId] });
     },
   });
 
