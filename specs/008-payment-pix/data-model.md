@@ -33,6 +33,8 @@ interface PixKeyConfig {
 type PixKeyType = 'cpf' | 'cnpj' | 'email' | 'phone' | 'random';
 ```
 
+> **Vertical Feature Flags**: The `has_deposit` feature flag from `vertical_config.py` controls deposit visibility. Verticals like `psi` and `nutri` set `has_deposit: false`, meaning deposit fields are hidden in the UI.
+
 ---
 
 ## Appointment Payment Fields
@@ -52,6 +54,12 @@ interface AppointmentPaymentFields {
   pixCode?: string;
   pixCodeGeneratedAt?: Timestamp;
   pixTransactionId?: string;
+
+  /** Payment gateway identifier */
+  paymentGateway: string;     // 'pagseguro'
+
+  /** PagSeguro API token */
+  pagseguroToken?: string;
 }
 ```
 

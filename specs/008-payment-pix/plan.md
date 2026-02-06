@@ -1,7 +1,7 @@
 # Plan: Payment PIX
 
 **Feature**: 008-payment-pix
-**Status**: Planning
+**Status**: Implemented
 **Date**: 2026-02-04
 
 ---
@@ -31,6 +31,7 @@ Implement PIX payment integration for appointment deposits, including PIX key co
 4. Health insurance (convênio) support
 5. Payment tracking on appointments
 6. PIX copy-paste code generation
+7. PagSeguro payment gateway integration
 
 ---
 
@@ -40,6 +41,7 @@ Implement PIX payment integration for appointment deposits, including PIX key co
 1. Service configured with signalPercentage
 2. Appointment created with depositAmount calculated
 3. PIX code generated and sent via WhatsApp
+   Alternative: PagSeguro gateway used for payment processing (`paymentGateway: 'pagseguro'`)
 4. Patient pays deposit
 5. depositPaid flag updated
 6. Appointment confirmed
@@ -63,6 +65,9 @@ interface PaymentSettings {
     key: string;
     verifiedAt?: Timestamp;
   };
+  paymentGateway: string;      // 'pagseguro'
+  pagseguroToken?: string;     // PagSeguro API token
+  signalPercentage: number;    // Default deposit % (overridable per service)
 }
 ```
 
@@ -109,3 +114,5 @@ function generatePixCode(pixKey: string, amount: number, description: string): s
 - PIX configuration < 1 minute
 - Payment confirmation < 5 seconds
 - Zero payment discrepancies
+
+> **Vertical Feature Flags**: The `has_deposit` feature flag from `vertical_config.py` controls whether deposits are required. Verticals like `psi` and `nutri` have `has_deposit: false`.

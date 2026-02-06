@@ -1,7 +1,7 @@
 # Plan: Conversation Inbox
 
 **Feature**: 009-conversation-inbox
-**Status**: Planning
+**Status**: Implemented
 **Date**: 2026-02-04
 
 ---

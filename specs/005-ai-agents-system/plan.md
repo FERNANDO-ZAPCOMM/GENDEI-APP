@@ -1,14 +1,14 @@
 # Plan: AI Agents System
 
 **Feature**: 005-ai-agents-system
-**Status**: Planning
+**Status**: Implemented
 **Date**: 2026-02-04
 
 ---
 
 ## Overview
 
-Implement a multi-agent AI system using OpenAI Agents SDK that handles WhatsApp conversations for appointment scheduling. The system uses specialized agents (greeting, scheduling, reminder, triage) with a triage router that directs conversations to the appropriate agent.
+Implement a multi-agent AI system using OpenAI Agents SDK that handles WhatsApp conversations for appointment scheduling. The system uses specialized agents (GREETER, SALES_CLOSER, PAYMENT, PRODUCT_INFO, SUPPORT, TRIAGE) with a deterministic keyword-based orchestrator that routes conversations to the appropriate agent, falling back to TRIAGE for complex/ambiguous messages.
 
 ---
 
@@ -18,7 +18,7 @@ Implement a multi-agent AI system using OpenAI Agents SDK that handles WhatsApp 
 |-------|------------|
 | Runtime | Python 3.11+, FastAPI, Uvicorn |
 | AI Framework | OpenAI Agents SDK |
-| AI Providers | OpenAI GPT-4o-mini (default), Anthropic Claude (optional) |
+| AI Providers | OpenAI gpt-4.1 (complex tasks), gpt-4.1-mini (fast/simple tasks) |
 | Database | Firestore (firebase-admin) |
 | Deployment | Google Cloud Run (Docker) |
 | Messaging | Meta WhatsApp Business API |
@@ -50,104 +50,167 @@ Implement a multi-agent AI system using OpenAI Agents SDK that handles WhatsApp 
 
 ---
 
-### Phase 2: Triage Agent
+### Phase 2: Orchestrator & Routing Logic
 **Duration**: Core feature
 
+**Description**: Routing is now deterministic keyword-based, with the TRIAGE agent as a fallback for complex/ambiguous messages. The orchestrator checks message content against keyword patterns before invoking any LLM call.
+
 **Tasks**:
-- [ ] Define triage agent prompt
-- [ ] Implement intent classification
-- [ ] Create agent routing logic
-- [ ] Handle conversation context
-- [ ] Build handoff mechanism
+- [x] Implement keyword-based routing in orchestrator
+- [x] Define keyword patterns per agent
+- [x] Configure TRIAGE agent as fallback for unmatched messages
+- [x] Handle conversation context and agent handoff
 
 **Files**:
-- `apps/agent/src/agents/triage_agent.py`
-- `apps/agent/src/agents/prompts.py`
+- `apps/whatsapp-agent-openai/src/orchestrator.py`
+- `apps/whatsapp-agent-openai/src/agents/triage_agent.py`
+- `apps/whatsapp-agent-openai/src/agents/prompts.py`
 
-**Intent Categories**:
-- `greeting` → Greeting Agent
-- `scheduling` → Scheduling Agent
-- `confirmation` → Reminder Agent
-- `other` → Human takeover
+**Keyword Routing Rules**:
+- Greetings ("oi", "ola", "bom dia") → GREETER
+- Scheduling keywords ("agendar", "marcar", "consulta", "horarios") → SALES_CLOSER
+- Info keywords ("onde fica", "endereco", "convenio") → PRODUCT_INFO
+- Appointment management ("minha consulta", "cancelar", "remarcar") → PAYMENT
+- Support ("ajuda", "problema", "humano") → SUPPORT
+- Complex/ambiguous messages → TRIAGE (LLM-based classification)
 
 **Acceptance Criteria**:
-- Triage correctly classifies intents
+- Keyword routing resolves >70% of messages without LLM call
+- TRIAGE fallback correctly classifies remaining intents
 - Routes to appropriate agent
-- Handles ambiguous messages
+- Handles ambiguous messages gracefully
 
 ---
 
-### Phase 3: Greeting Agent
+### Phase 3: GREETER Agent
 **Duration**: Core feature
 
 **Tasks**:
-- [ ] Define greeting agent prompt
-- [ ] Handle common greetings
-- [ ] Provide clinic information
-- [ ] Transfer to scheduling when needed
-- [ ] Keep responses brief
+- [x] Define GREETER agent prompt
+- [x] Handle common greetings
+- [x] Provide clinic information
+- [x] Transfer to scheduling when needed
+- [x] Keep responses brief
 
 **Files**:
-- `apps/agent/src/agents/greeting_agent.py`
+- `apps/whatsapp-agent-openai/src/agents/greeter_agent.py`
 
 **Acceptance Criteria**:
-- Responds naturally to greetings
+- GREETER responds naturally to greetings
 - Provides helpful clinic info
 - Quick response time (< 1s)
 
 ---
 
-### Phase 4: Scheduling Agent
+### Phase 4: SALES_CLOSER Agent
 **Duration**: Core feature
 
+**Description**: The SALES_CLOSER agent handles the full booking flow -- from service selection through professional preference, date/time picking, to appointment confirmation.
+
 **Tasks**:
-- [ ] Define scheduling agent prompt
-- [ ] Implement availability checking tool
-- [ ] Create appointment creation tool
-- [ ] Build service/professional selection flow
-- [ ] Handle date/time parsing
-- [ ] Generate confirmation messages
+- [x] Define SALES_CLOSER agent prompt
+- [x] Implement availability checking tool
+- [x] Create appointment creation tool
+- [x] Build service/professional selection flow
+- [x] Handle date/time parsing
+- [x] Generate confirmation messages
 
 **Files**:
-- `apps/agent/src/agents/scheduling_agent.py`
-- `apps/agent/src/agents/tools/availability.py`
-- `apps/agent/src/agents/tools/appointments.py`
+- `apps/whatsapp-agent-openai/src/agents/sales_closer_agent.py`
+- `apps/whatsapp-agent-openai/src/agents/tools/availability.py`
+- `apps/whatsapp-agent-openai/src/agents/tools/appointments.py`
 
 **Agent Tools**:
-- `check_availability` - Check open slots
+- `get_services` - List available services
+- `get_professionals` - List professionals
+- `get_available_slots` - Check open slots
 - `create_appointment` - Book appointment
 - `send_appointment_confirmation` - Send WhatsApp confirmation
 
 **Acceptance Criteria**:
-- Natural conversation flow
+- Natural conversation flow for full booking
 - Accurate availability checking
 - Appointments created correctly
 
 ---
 
-### Phase 5: Reminder Agent
+### Phase 5: PAYMENT Agent (Appointment Manager)
 **Duration**: Core feature
 
+**Description**: The PAYMENT agent handles viewing, cancelling, and rescheduling existing appointments (not just reminders). It manages all post-booking appointment interactions.
+
 **Tasks**:
-- [ ] Define reminder agent prompt
-- [ ] Implement confirmation handling
-- [ ] Create cancellation tool
-- [ ] Handle reschedule requests
-- [ ] Update appointment status
+- [x] Define PAYMENT agent prompt
+- [x] Implement appointment lookup tool
+- [x] Create cancellation tool
+- [x] Create reschedule tool
+- [x] Handle reschedule requests
+- [x] Update appointment status
 
 **Files**:
-- `apps/agent/src/agents/reminder_agent.py`
-- `apps/agent/src/agents/tools/confirmation.py`
+- `apps/whatsapp-agent-openai/src/agents/payment_agent.py`
+- `apps/whatsapp-agent-openai/src/agents/tools/appointments.py`
 
 **Agent Tools**:
-- `confirm_appointment` - Confirm attendance
+- `get_patient_appointments` - View patient's existing appointments
 - `cancel_appointment` - Cancel booking
-- `reschedule_appointment` - Request reschedule
+- `reschedule_appointment` - Reschedule appointment
+- `send_text_message` - Send WhatsApp text message
 
 **Acceptance Criteria**:
-- Processes confirmation responses
-- Updates appointment status
-- Handles edge cases
+- Retrieves and displays patient appointments
+- Processes cancellation requests
+- Handles reschedule flows
+- Updates appointment status correctly
+
+---
+
+### Phase 5B: PRODUCT_INFO Agent
+**Duration**: Core feature
+
+**Description**: Handles clinic information questions: address, hours, services offered, pricing, and insurance/convenio acceptance.
+
+**Tasks**:
+- [x] Define PRODUCT_INFO agent prompt
+- [x] Implement clinic info retrieval tools
+- [x] Handle common questions about location, hours, services
+
+**Files**:
+- `apps/whatsapp-agent-openai/src/agents/product_info_agent.py`
+
+**Agent Tools**:
+- `get_clinic_info` - Fetch clinic details (name, address, hours, services)
+- `get_services` - List services for a clinic
+- `get_professionals` - List professionals for a clinic
+
+**Acceptance Criteria**:
+- Answers clinic info questions accurately
+- Provides address, hours, and service details
+- Handles convenio/insurance queries
+
+---
+
+### Phase 5C: SUPPORT Agent
+**Duration**: Core feature
+
+**Description**: Handles escalation to human staff, complaints, and complex issues that other agents cannot resolve.
+
+**Tasks**:
+- [x] Define SUPPORT agent prompt
+- [x] Implement human takeover tool
+- [x] Handle complaint and escalation flows
+
+**Files**:
+- `apps/whatsapp-agent-openai/src/agents/support_agent.py`
+
+**Agent Tools**:
+- `enable_human_takeover` - Escalate conversation to human staff
+- `send_text_message` - Send WhatsApp text message
+
+**Acceptance Criteria**:
+- Escalates to human staff when needed
+- Handles complaints professionally
+- Provides clear handoff messaging
 
 ---
 
@@ -214,25 +277,23 @@ Implement a multi-agent AI system using OpenAI Agents SDK that handles WhatsApp 
 
 ---
 
-### Phase 9: Provider Abstraction
+### Phase 9: Provider Configuration
 **Duration**: Enhancement
 
 **Tasks**:
-- [ ] Create provider interface
-- [ ] Implement OpenAI provider
-- [ ] Implement Anthropic provider
-- [ ] Add provider switching logic
+- [ ] Create provider configuration per clinic
+- [ ] Implement OpenAI model selection (gpt-4.1 vs gpt-4.1-mini)
+- [ ] Add per-agent model configuration
 - [ ] Per-clinic provider config
 
 **Files**:
-- `apps/agent/src/providers/base.py`
-- `apps/agent/src/providers/openai/`
-- `apps/agent/src/providers/anthropic/`
+- `apps/whatsapp-agent-openai/src/config.py`
+- `apps/whatsapp-agent-openai/src/agents/`
 
 **Acceptance Criteria**:
-- Providers are swappable
-- Same tools work with both
+- Model selection works per agent
 - Config per clinic
+- Easy to switch between gpt-4.1 and gpt-4.1-mini per agent
 
 ---
 
@@ -272,21 +333,24 @@ Implement a multi-agent AI system using OpenAI Agents SDK that handles WhatsApp 
                     └────────┬────────┘
                              │
                     ┌────────▼────────┐
-                    │  Triage         │
-                    │  Agent          │
+                    │  Orchestrator   │
+                    │  (keyword       │
+                    │   routing)      │
                     └────────┬────────┘
                              │
-          ┌──────────────────┼──────────────────┐
-          │                  │                  │
-  ┌───────▼───────┐  ┌───────▼───────┐  ┌───────▼───────┐
-  │   Greeting    │  │  Scheduling   │  │   Reminder    │
-  │   Agent       │  │  Agent        │  │   Agent       │
-  └───────────────┘  └───────────────┘  └───────────────┘
+     ┌───────────┬───────────┼───────────┬───────────┬───────────┐
+     │           │           │           │           │           │
+┌────▼────┐ ┌───▼─────┐ ┌───▼─────┐ ┌───▼─────┐ ┌───▼─────┐ ┌─▼───────┐
+│ GREETER │ │PRODUCT_ │ │ SALES_  │ │ PAYMENT │ │ SUPPORT │ │ TRIAGE  │
+│         │ │INFO     │ │ CLOSER  │ │         │ │         │ │(fallback│
+└─────────┘ └─────────┘ └─────────┘ └─────────┘ └─────────┘ └─────────┘
 ```
 
 ---
 
 ## Agent Prompts
+
+> **Note**: All agent prompts use `{placeholder}` variables for vertical-aware terminology (e.g., `{appointment_term}`, `{client_term}`, `{professional_term}`) from `vertical_config.py`.
 
 ### Triage Agent
 ```
@@ -337,6 +401,22 @@ class ConversationContext:
     state: Dict[str, Any]
     created_at: datetime
     updated_at: datetime
+```
+
+---
+
+## Runtime Context
+
+The `Runtime` dataclass is injected into every agent via `RunContextWrapper[Runtime]`. It provides shared dependencies and metadata for all tool calls and agent logic.
+
+```python
+@dataclass
+class Runtime:
+    clinic_id: str
+    db: GendeiDatabase
+    phone_number_id: Optional[str] = None
+    access_token: Optional[str] = None
+    vertical_slug: Optional[str] = None
 ```
 
 ---

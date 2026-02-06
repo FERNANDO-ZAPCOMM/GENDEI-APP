@@ -1,7 +1,7 @@
 # Plan: Clinic Onboarding
 
 **Feature**: 001-clinic-onboarding
-**Status**: Planning
+**Status**: Implemented
 **Date**: 2026-02-04
 
 ---
@@ -64,19 +64,19 @@ Implement a comprehensive clinic onboarding system that allows healthcare provid
 - [ ] Implement clinic name and description fields
 - [ ] Add CNPJ validation and formatting
 - [ ] Integrate phone number input with mask
-- [ ] Create healthcare category selector (18+ categories)
+- [ ] Create vertical selector (med, dental, psi, nutri, fisio)
 
 **Files**:
 - `apps/web/src/schemas/clinic.schema.ts`
 - `apps/web/src/app/[locale]/onboarding/page.tsx`
 - `apps/web/src/components/onboarding/ClinicProfileForm.tsx`
-- `apps/web/src/components/onboarding/CategorySelector.tsx`
+- `apps/web/src/components/onboarding/VerticalSelector.tsx`
 
 **Acceptance Criteria**:
 - All fields validate according to business rules
 - CNPJ follows XX.XXX.XXX/XXXX-XX format
 - Phone accepts Brazilian format with DDD
-- Categories cover all healthcare specialties
+- Verticals cover core healthcare segments (med, dental, psi, nutri, fisio)
 
 ---
 
@@ -103,28 +103,24 @@ Implement a comprehensive clinic onboarding system that allows healthcare provid
 
 ---
 
-### Phase 4: Operating Hours Configuration
+### Phase 4: Greeting & Workflow Configuration
 **Duration**: Core feature
 
+> **Note**: Operating hours are configured per-professional (see spec 002), not per-clinic.
+
 **Tasks**:
-- [ ] Design operating hours data structure
-- [ ] Build day-of-week selector grid
-- [ ] Create time range picker component
-- [ ] Implement break time support
-- [ ] Add copy hours to multiple days feature
-- [ ] Validate operating hours logic
+- [ ] Create greeting summary field (AI greeting context)
+- [ ] Build workflow mode selector ("booking" for scheduling, "info" for informational)
+- [ ] Implement description field (mandatory, used by AI agents)
 
 **Files**:
-- `apps/web/src/components/onboarding/OperatingHoursForm.tsx`
-- `apps/web/src/components/ui/TimeRangePicker.tsx`
-- `apps/web/src/schemas/operating-hours.schema.ts`
+- `apps/frontend/app/[locale]/dashboard/clinic/page.tsx`
+- `apps/frontend/components/clinic/ClinicSettingsForm.tsx`
 
 **Acceptance Criteria**:
-- Each day can have different hours
-- Support for multiple time ranges per day
-- Break times between ranges
-- Closed days can be marked
-- Hours validate (start < end)
+- Greeting summary saved and used by AI agents
+- Workflow mode toggles agent behavior
+- Description is mandatory and informs AI context
 
 ---
 
@@ -243,58 +239,49 @@ interface Clinic {
 
   // Profile
   name: string;
-  description?: string;
+  description: string;           // Mandatory — used by AI agents
   cnpj?: string;
   phone: string;
-  email: string;
+  email?: string;
 
   // Address
-  address: {
-    street: string;
-    number: string;
-    complement?: string;
-    neighborhood: string;
-    city: string;
-    state: string;
-    zipCode: string;
-    country: string;
-    lat?: number;
-    lng?: number;
-  };
+  address: string;               // Flat string (or structured ClinicAddress)
+  city: string;
+  state: string;
+  zipCode: string;
+
+  // Vertical SaaS
+  vertical: string;              // 'med' | 'dental' | 'psi' | 'nutri' | 'fisio' | 'geral'
+
+  // AI & Workflow
+  greetingSummary: string;       // Context for AI greeting agent
+  workflowMode: string;          // 'booking' | 'info'
 
   // Settings
-  category: ClinicCategory;
-  timezone: string;
+  timezone: string;              // Default: 'America/Sao_Paulo'
   locale: 'pt-BR' | 'en';
 
-  // Operating Hours
-  operatingHours: {
-    [day: number]: {
-      isOpen: boolean;
-      ranges: Array<{ from: string; to: string }>;
-    };
-  };
-
   // Payment
-  paymentSettings?: {
-    acceptsConvenio: boolean;
-    convenioList: string[];
-    acceptsParticular: boolean;
-    requiresDeposit: boolean;
-    depositPercentage: number;
-    pixKey?: string;
-  };
+  paymentSettings: Record<string, any>;
+  paymentGateway: string;        // 'pagseguro'
+  pagseguroToken?: string;
+  pixKey?: string;
+  signalPercentage: number;      // Default deposit % (e.g., 15)
 
-  // WhatsApp (populated later)
+  // WhatsApp (populated by 004)
   whatsappConnected: boolean;
   whatsappPhoneNumberId?: string;
+  whatsappWabaId?: string;
+  whatsappAccessToken?: string;
+  whatsappConfig: Record<string, any>;
 
-  // Meta
-  onboardingCompleted: boolean;
+  // Metadata
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
 ```
+
+> **Note**: Operating hours are NOT on the Clinic model. They are configured per-professional (see spec 002). The `category` field exists for backward compatibility but is replaced by `vertical`.
 
 ---
 

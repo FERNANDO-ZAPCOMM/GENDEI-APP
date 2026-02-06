@@ -1,7 +1,7 @@
 # Plan: Appointment Management
 
 **Feature**: 006-appointment-management
-**Status**: Planning
+**Status**: Implemented
 **Date**: 2026-02-04
 
 ---
@@ -123,6 +123,7 @@ interface Appointment {
   // Deposit
   depositAmount: number;  // cents
   depositPaid: boolean;
+  paymentType: 'particular' | 'convenio';  // Payment method type
 
   // Reminders
   reminder24hSent: boolean;

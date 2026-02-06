@@ -13,6 +13,8 @@
 
 **Description**: Medical services offered by the clinic.
 
+> **Vertical Integration**: The vertical's `has_convenio` feature flag (from `vertical_config.py`) controls whether convênio-related fields are visible in the UI. Verticals like `nutri` have `has_convenio: false`.
+
 ---
 
 ## TypeScript Interfaces
@@ -66,6 +68,12 @@ interface Service {
 
   /** IDs of professionals who offer this service */
   professionalIds: string[];
+
+  /** Whether this service accepts private/cash payment */
+  acceptsParticular: boolean;
+
+  /** Whether this service accepts health insurance (convênio) */
+  acceptsConvenio: boolean;
 
   // ─────────────────────────────────────────────
   // Status
@@ -201,6 +209,9 @@ export const createServiceSchema = z.object({
 
   professionalIds: z.array(z.string())
     .min(1, 'Selecione pelo menos um profissional'),
+
+  acceptsParticular: z.boolean().default(true),
+  acceptsConvenio: z.boolean().default(true),
 });
 
 // ─────────────────────────────────────────────

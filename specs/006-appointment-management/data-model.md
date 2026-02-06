@@ -27,6 +27,11 @@ type AppointmentStatus =
   | 'cancelled'
   | 'no_show';
 
+/**
+ * Payment type for the appointment.
+ */
+type PaymentType = 'particular' | 'convenio';
+
 type AppointmentSource = 'whatsapp' | 'dashboard' | 'api';
 
 interface StatusChange {
@@ -71,6 +76,9 @@ interface Appointment {
   depositAmount: number;  // cents
   depositPaid: boolean;
   depositPaidAt?: Timestamp;
+
+  /** Payment type for this appointment */
+  paymentType: PaymentType;
 
   // Reminders
   reminder24hSent: boolean;
@@ -154,6 +162,7 @@ export const createAppointmentSchema = z.object({
   patientPhone: z.string().min(10),
   notes: z.string().optional(),
   source: appointmentSourceSchema.default('dashboard'),
+  paymentType: z.enum(['particular', 'convenio']).default('particular'),
 });
 
 export const updateAppointmentSchema = createAppointmentSchema.partial();

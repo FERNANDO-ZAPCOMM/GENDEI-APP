@@ -40,14 +40,20 @@ interface Professional {
   /** Professional's full name */
   name: string;
 
+  /** Professional title (e.g., "Dr.", "Dra.") */
+  title?: string;
+
+  /** Council registration number (CRM, CRO, CRP, etc.) */
+  crm?: string;
+
   /** Email address */
   email: string;
 
   /** Phone number */
   phone: string;
 
-  /** Medical specialty */
-  specialty: ProfessionalSpecialty;
+  /** Medical specialties (vertical-based IDs from verticals.ts) */
+  specialties: string[];
 
   /** Optional bio/description */
   bio?: string;
@@ -69,8 +75,14 @@ interface Professional {
   /** Default appointment duration in minutes */
   appointmentDuration: number;
 
+  /** Buffer time between appointments in minutes */
+  bufferTime: number;
+
   /** Consultation price in BRL cents */
   consultationPrice: number;
+
+  /** IDs of services this professional can perform */
+  serviceIds: string[];
 
   // ─────────────────────────────────────────────
   // Working Schedule
@@ -155,6 +167,8 @@ const workingHours: ProfessionalWorkingHours = {
 ---
 
 ### Enums and Constants
+
+> **Note**: Specialties are now defined per-vertical in `apps/frontend/lib/verticals.ts`. Each vertical (med, dental, psi, nutri, fisio) has its own specialty list. The static list below is kept for backward compatibility.
 
 ```typescript
 /**
@@ -275,9 +289,7 @@ export const createProfessionalSchema = z.object({
     .min(10, 'Telefone deve ter pelo menos 10 dígitos')
     .max(15, 'Telefone muito longo'),
 
-  specialty: z.enum(PROFESSIONAL_SPECIALTIES, {
-    errorMap: () => ({ message: 'Selecione uma especialidade' }),
-  }),
+  specialties: z.array(z.string()).min(1, 'Selecione pelo menos uma especialidade'),
 
   bio: z.string()
     .max(500, 'Biografia muito longa')
@@ -425,12 +437,16 @@ service firebase.storage {
   "name": "Dra. Maria Silva",
   "email": "maria.silva@clinica.com",
   "phone": "11999887766",
-  "specialty": "dentist",
+  "specialties": ["dentist", "orthodontist"],
+  "title": "Dra.",
+  "crm": "CRO-SP 12345",
   "bio": "Especialista em ortodontia com 10 anos de experiência.",
   "photoUrl": "https://storage.googleapis.com/gendei.../photo.jpg",
   "photoPath": "clinics/clinic_xyz789/professionals/prof_abc123/photo.jpg",
   "appointmentDuration": 30,
+  "bufferTime": 0,
   "consultationPrice": 20000,
+  "serviceIds": ["svc_001", "svc_002"],
   "workingDays": [1, 2, 3, 4, 5],
   "workingHours": {
     "1": { "ranges": [{ "from": "08:00", "to": "12:00" }, { "from": "14:00", "to": "18:00" }] },
@@ -464,11 +480,12 @@ const snapshot = await db
 ### Filter by Specialty
 
 ```typescript
+// Uses array-contains to match professionals with a given specialty
 const snapshot = await db
   .collection('gendei_clinics')
   .doc(clinicId)
   .collection('professionals')
-  .where('specialty', '==', 'dentist')
+  .where('specialties', 'array-contains', 'dentist')
   .where('active', '==', true)
   .get();
 ```

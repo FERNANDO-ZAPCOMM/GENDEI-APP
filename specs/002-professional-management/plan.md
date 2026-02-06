@@ -1,7 +1,7 @@
 # Plan: Professional Management
 
 **Feature**: 002-professional-management
-**Status**: Planning
+**Status**: Implemented
 **Date**: 2026-02-04
 
 ---
@@ -112,11 +112,15 @@ Implement a comprehensive healthcare professional management system that allows 
 
 **Tasks**:
 - [ ] Create professional form component
-- [ ] Build specialty selector (18+ options)
+- [ ] Build specialties multi-select (vertical-based, from verticals.ts)
 - [ ] Implement contact fields (email, phone)
 - [ ] Add appointment duration selector
 - [ ] Create price input with BRL formatting
 - [ ] Build active/inactive toggle
+- [ ] Add title field ("Dr.", "Dra.")
+- [ ] Add CRM/council registration number field
+- [ ] Add buffer time between appointments setting
+- [ ] Add service linking (serviceIds[])
 
 **Files**:
 - `apps/web/src/components/professionals/ProfessionalForm.tsx`
@@ -236,9 +240,11 @@ interface Professional {
 
   // Profile
   name: string;
+  title?: string;  // "Dr.", "Dra."
+  crm?: string;  // Council registration number (CRM, CRO, CRP, etc.)
   email: string;
   phone: string;
-  specialty: ProfessionalSpecialty;
+  specialties: string[];  // Vertical-based specialty IDs from verticals.ts
   bio?: string;
 
   // Photo
@@ -247,7 +253,9 @@ interface Professional {
 
   // Appointment Settings
   appointmentDuration: number;  // minutes (15, 30, 45, 60, etc.)
+  bufferTime: number;  // Minutes between appointments (default: 0)
   consultationPrice: number;    // cents (BRL)
+  serviceIds: string[];  // Linked service IDs
 
   // Working Schedule
   workingDays: number[];  // [1, 2, 3, 4, 5] = Mon-Fri
@@ -269,6 +277,8 @@ interface Professional {
 ---
 
 ## Specialty Categories
+
+> **Note**: Specialties are now vertical-based. Each vertical (med, dental, psi, nutri, fisio) defines its own specialty list in `apps/frontend/lib/verticals.ts`. The static list below is kept for reference but the actual specialties come from the vertical configuration.
 
 ```typescript
 const PROFESSIONAL_SPECIALTIES = [

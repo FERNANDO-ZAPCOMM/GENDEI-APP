@@ -55,9 +55,6 @@ interface Clinic {
   /** Contact email address */
   email: string;
 
-  /** Logo URL in Firebase Storage */
-  logoUrl?: string;
-
   // ─────────────────────────────────────────────
   // Address
   // ─────────────────────────────────────────────
@@ -69,8 +66,8 @@ interface Clinic {
   // Business Settings
   // ─────────────────────────────────────────────
 
-  /** Healthcare category/specialty */
-  category: ClinicCategory;
+  /** Healthcare vertical */
+  vertical: ClinicVertical;
 
   /** IANA timezone identifier */
   timezone: string;
@@ -78,16 +75,30 @@ interface Clinic {
   /** UI locale preference */
   locale: SupportedLocale;
 
+  /** AI greeting context summary */
+  greetingSummary: string;
+
+  /** Agent routing mode: 'booking' schedules appointments, 'info' provides information only */
+  workflowMode: 'booking' | 'info';
+
   // ─────────────────────────────────────────────
   // Operating Hours
   // ─────────────────────────────────────────────
-
-  /** Weekly operating schedule */
-  operatingHours: OperatingHours;
+  // NOTE: Operating hours are configured per-professional, NOT per-clinic.
+  // See spec 002-professional-management/data-model.md
 
   // ─────────────────────────────────────────────
   // Payment Configuration
   // ─────────────────────────────────────────────
+
+  /** Payment gateway identifier */
+  paymentGateway: string; // default: 'pagseguro'
+
+  /** PagSeguro API token (optional, set via admin) */
+  pagseguroToken?: string;
+
+  /** Default deposit percentage for appointments */
+  signalPercentage: number;
 
   /** Payment and billing settings */
   paymentSettings?: PaymentSettings;
@@ -111,12 +122,6 @@ interface Clinic {
   // ─────────────────────────────────────────────
   // Metadata
   // ─────────────────────────────────────────────
-
-  /** Onboarding wizard completion status */
-  onboardingCompleted: boolean;
-
-  /** Steps completed in onboarding */
-  onboardingStepsCompleted: OnboardingStep[];
 
   /** Document creation timestamp */
   createdAt: Timestamp;
@@ -175,72 +180,9 @@ interface ClinicAddress {
 
 ---
 
-### OperatingHours
+### Operating Hours
 
-```typescript
-/**
- * Weekly operating hours configuration.
- * Keys are day-of-week (0=Sunday, 6=Saturday).
- */
-type OperatingHours = {
-  [day in DayOfWeek]: DaySchedule;
-};
-
-/** Day of week number (0-6, Sunday-Saturday) */
-type DayOfWeek = 0 | 1 | 2 | 3 | 4 | 5 | 6;
-
-/**
- * Schedule for a single day.
- */
-interface DaySchedule {
-  /** Whether the clinic is open this day */
-  isOpen: boolean;
-
-  /** Time ranges when open (supports breaks) */
-  ranges: TimeRange[];
-}
-
-/**
- * A time range during which the clinic is open.
- */
-interface TimeRange {
-  /** Start time in HH:MM format (24h) */
-  from: string;
-
-  /** End time in HH:MM format (24h) */
-  to: string;
-}
-```
-
-**Example**:
-```typescript
-const operatingHours: OperatingHours = {
-  0: { isOpen: false, ranges: [] }, // Sunday - closed
-  1: { isOpen: true, ranges: [
-    { from: '08:00', to: '12:00' },
-    { from: '14:00', to: '18:00' }
-  ]}, // Monday
-  2: { isOpen: true, ranges: [
-    { from: '08:00', to: '12:00' },
-    { from: '14:00', to: '18:00' }
-  ]}, // Tuesday
-  3: { isOpen: true, ranges: [
-    { from: '08:00', to: '12:00' },
-    { from: '14:00', to: '18:00' }
-  ]}, // Wednesday
-  4: { isOpen: true, ranges: [
-    { from: '08:00', to: '12:00' },
-    { from: '14:00', to: '18:00' }
-  ]}, // Thursday
-  5: { isOpen: true, ranges: [
-    { from: '08:00', to: '12:00' },
-    { from: '14:00', to: '17:00' }
-  ]}, // Friday (closes early)
-  6: { isOpen: true, ranges: [
-    { from: '08:00', to: '12:00' }
-  ]}, // Saturday (morning only)
-};
-```
+> **Note:** Operating hours are configured per-professional. See [spec 002-professional-management/data-model.md](../002-professional-management/data-model.md).
 
 ---
 
@@ -294,46 +236,15 @@ type PixKeyType = 'cpf' | 'cnpj' | 'email' | 'phone' | 'random';
 
 ```typescript
 /**
- * Supported healthcare categories.
+ * Supported healthcare verticals.
  */
-const CLINIC_CATEGORIES = [
-  'general_clinic',
-  'dentistry',
-  'dermatology',
-  'cardiology',
-  'orthopedics',
-  'gynecology',
-  'pediatrics',
-  'ophthalmology',
-  'psychiatry',
-  'psychology',
-  'physiotherapy',
-  'nutrition',
-  'endocrinology',
-  'urology',
-  'neurology',
-  'otolaryngology',
-  'veterinary',
-  'aesthetics',
-  'other',
-] as const;
-
-type ClinicCategory = typeof CLINIC_CATEGORIES[number];
+const CLINIC_VERTICALS = ['med', 'dental', 'psi', 'nutri', 'fisio', 'geral'] as const;
+type ClinicVertical = typeof CLINIC_VERTICALS[number];
 
 /**
  * Supported UI locales.
  */
 type SupportedLocale = 'pt-BR' | 'en';
-
-/**
- * Onboarding wizard steps.
- */
-type OnboardingStep =
-  | 'profile'
-  | 'address'
-  | 'hours'
-  | 'payment'
-  | 'whatsapp';
 
 /**
  * Default timezone for Brazilian clinics.
@@ -383,27 +294,6 @@ export const addressSchema = z.object({
 });
 
 // ─────────────────────────────────────────────
-// Operating Hours Schema
-// ─────────────────────────────────────────────
-
-const timeRangeSchema = z.object({
-  from: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Formato HH:MM'),
-  to: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Formato HH:MM'),
-}).refine(data => data.from < data.to, {
-  message: 'Horário de início deve ser antes do fim',
-});
-
-const dayScheduleSchema = z.object({
-  isOpen: z.boolean(),
-  ranges: z.array(timeRangeSchema),
-});
-
-export const operatingHoursSchema = z.record(
-  z.enum(['0', '1', '2', '3', '4', '5', '6']),
-  dayScheduleSchema
-);
-
-// ─────────────────────────────────────────────
 // Payment Settings Schema
 // ─────────────────────────────────────────────
 
@@ -436,7 +326,7 @@ export const clinicProfileSchema = z.object({
     .min(10, 'Telefone deve ter pelo menos 10 dígitos')
     .max(15, 'Telefone muito longo'),
   email: z.string().email('Email inválido'),
-  category: z.enum(CLINIC_CATEGORIES),
+  vertical: z.enum(CLINIC_VERTICALS),
   timezone: z.string().default('America/Sao_Paulo'),
   locale: z.enum(['pt-BR', 'en']).default('pt-BR'),
 });
@@ -451,11 +341,12 @@ export const clinicUpdateSchema = z.object({
   cnpj: z.string().optional(),
   phone: z.string().optional(),
   email: z.string().email().optional(),
-  category: z.enum(CLINIC_CATEGORIES).optional(),
+  vertical: z.enum(CLINIC_VERTICALS).optional(),
   timezone: z.string().optional(),
   locale: z.enum(['pt-BR', 'en']).optional(),
   address: addressSchema.optional(),
-  operatingHours: operatingHoursSchema.optional(),
+  greetingSummary: z.string().max(500).optional(),
+  workflowMode: z.enum(['booking', 'info']).optional(),
   paymentSettings: paymentSettingsSchema.optional(),
 });
 
@@ -532,7 +423,7 @@ service cloud.firestore {
       "collectionGroup": "gendei_clinics",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "category", "order": "ASCENDING" },
+        { "fieldPath": "vertical", "order": "ASCENDING" },
         { "fieldPath": "createdAt", "order": "DESCENDING" }
       ]
     }
@@ -554,7 +445,6 @@ service cloud.firestore {
   "cnpj": "12.345.678/0001-90",
   "phone": "11999998888",
   "email": "contato@clinicasaude.com.br",
-  "logoUrl": "https://storage.googleapis.com/gendei.../logo.png",
   "address": {
     "formatted": "Av. Paulista, 1000 - Bela Vista, São Paulo - SP, 01310-100",
     "street": "Av. Paulista",
@@ -569,18 +459,11 @@ service cloud.firestore {
     "lng": -46.6562,
     "placeId": "ChIJN1t_tDeuEmsRUsoyG83frY4"
   },
-  "category": "general_clinic",
+  "vertical": "med",
   "timezone": "America/Sao_Paulo",
   "locale": "pt-BR",
-  "operatingHours": {
-    "0": { "isOpen": false, "ranges": [] },
-    "1": { "isOpen": true, "ranges": [{ "from": "08:00", "to": "18:00" }] },
-    "2": { "isOpen": true, "ranges": [{ "from": "08:00", "to": "18:00" }] },
-    "3": { "isOpen": true, "ranges": [{ "from": "08:00", "to": "18:00" }] },
-    "4": { "isOpen": true, "ranges": [{ "from": "08:00", "to": "18:00" }] },
-    "5": { "isOpen": true, "ranges": [{ "from": "08:00", "to": "17:00" }] },
-    "6": { "isOpen": true, "ranges": [{ "from": "08:00", "to": "12:00" }] }
-  },
+  "greetingSummary": "Clínica de medicina geral com foco em atendimento humanizado e preventivo.",
+  "workflowMode": "booking",
   "paymentSettings": {
     "acceptsConvenio": true,
     "convenioList": ["Unimed", "Bradesco Saúde", "SulAmérica"],
@@ -593,8 +476,6 @@ service cloud.firestore {
     }
   },
   "whatsappConnected": false,
-  "onboardingCompleted": true,
-  "onboardingStepsCompleted": ["profile", "address", "hours", "payment"],
   "createdAt": "2026-02-04T10:00:00Z",
   "updatedAt": "2026-02-04T10:30:00Z"
 }

@@ -1,7 +1,7 @@
 # Plan: WhatsApp Integration
 
 **Feature**: 004-whatsapp-integration
-**Status**: Planning
+**Status**: Implemented
 **Date**: 2026-02-04
 
 ---
@@ -18,7 +18,7 @@ Integrate WhatsApp Business Platform using Meta's Embedded Signup flow, allowing
 |-------|------------|
 | Frontend | Next.js 16, TypeScript, Meta Embedded Signup SDK |
 | Backend | Firebase Functions (Node.js 20, Express.js) |
-| Agent | Python 3.11+, FastAPI, Uvicorn |
+| Agent | Python 3.11+, FastAPI, Uvicorn, OpenAI Agents SDK |
 | API | Meta Graph API v22.0 |
 | Webhooks | Google Cloud Run |
 | Database | Firestore |
@@ -203,20 +203,21 @@ Integrate WhatsApp Business Platform using Meta's Embedded Signup flow, allowing
 
 ---
 
-### Phase 8: Agent Webhook Receiver
+### Phase 8: Agent Webhook Receiver (OpenAI Agents SDK)
 **Duration**: Backend
 
 **Tasks**:
-- [ ] Create FastAPI webhook endpoints
-- [ ] Implement webhook signature verification
-- [ ] Parse incoming WhatsApp messages
-- [ ] Route to AI agents
-- [ ] Handle media messages
+- [x] Create FastAPI webhook endpoints
+- [x] Implement webhook signature verification
+- [x] Parse incoming WhatsApp messages
+- [x] Route to OpenAI Agents SDK (gpt-4.1) for processing
+- [x] Handle media messages
+- [x] Implement message buffering for multi-message bursts
 
 **Files**:
-- `apps/agent/src/main.py`
-- `apps/agent/src/adapters/whatsapp_parser.py`
-- `apps/agent/src/adapters/whatsapp_sender.py`
+- `apps/whatsapp-agent-openai/src/main.py`
+- `apps/whatsapp-agent-openai/src/adapters/whatsapp_parser.py`
+- `apps/whatsapp-agent-openai/src/adapters/whatsapp_sender.py`
 
 **Agent Endpoints**:
 | Method | Endpoint | Description |
@@ -228,6 +229,21 @@ Integrate WhatsApp Business Platform using Meta's Embedded Signup flow, allowing
 - Webhooks verified and received
 - Messages parsed correctly
 - Responses sent via Graph API
+- OpenAI Agents SDK (gpt-4.1) processes and responds to messages
+
+---
+
+### Message Buffering Strategy
+
+The WhatsApp agent implements intelligent message buffering to combine rapid multi-message bursts before processing:
+
+| Message Type | Buffer Window | Example |
+|-------------|--------------|---------|
+| Greetings ("oi", "olá") | 5 seconds | Wait for follow-up messages |
+| Short messages (< 20 chars) | 3.5 seconds | Combine fragmented text |
+| Regular messages | 2 seconds | Standard processing delay |
+
+This prevents the AI from responding to incomplete thoughts when users send multiple messages in quick succession.
 
 ---
 

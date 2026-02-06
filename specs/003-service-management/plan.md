@@ -1,7 +1,7 @@
 # Plan: Service Management
 
 **Feature**: 003-service-management
-**Status**: Planning
+**Status**: Implemented
 **Date**: 2026-02-04
 
 ---
@@ -89,6 +89,7 @@ Implement a service management system that allows clinics to define the medical 
 - [ ] Add duration selector (15-minute increments)
 - [ ] Create deposit percentage slider (10-100%)
 - [ ] Build professional multi-select
+- [ ] Add convenio/particular acceptance toggles
 
 **Files**:
 - `apps/web/src/components/services/ServiceForm.tsx`
@@ -192,6 +193,8 @@ interface Service {
 
   // Professionals
   professionalIds: string[];   // IDs of professionals who offer this service
+  acceptsParticular: boolean;  // Whether this service accepts private payment
+  acceptsConvenio: boolean;    // Whether this service accepts health insurance
 
   // Status
   active: boolean;
@@ -212,6 +215,7 @@ interface Service {
 3. **Duration**: 15-240 minutes, in 15-minute increments
 4. **Professionals**: At least one professional required
 5. **Deletion**: Soft delete only; hard delete blocked if appointments exist
+6. **Vertical Feature Flag**: Vertical feature flag `has_convenio` controls whether convênio fields are visible in the UI
 
 ---
 
