@@ -26,11 +26,10 @@ import { AddressAutocomplete, AddressDetails } from '@/components/AddressAutocom
 import { ClinicWhatsAppPreview } from '@/components/chat/ClinicWhatsAppPreview';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import type { ClinicAddress, PaymentSettings } from '@/lib/clinic-types';
-import { clinicCategories, getCategoryName } from '@/lib/clinic-categories';
-import { X, ChevronDown, Check, CreditCard, Plus } from 'lucide-react';
+import { useVertical } from '@/lib/vertical-provider';
+import { X, CreditCard, Plus } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 
 // Days of the week - label/full are for parsing saved data, UI uses translations
@@ -89,11 +88,11 @@ export default function ClinicSettingsPage() {
   const params = useParams();
   const locale = (params?.locale as string) || 'pt-BR';
   const { currentClinic, isLoading, updateClinic, generateSummary } = useClinic();
+  const vertical = useVertical();
 
   const [activeTab, setActiveTab] = useState<TabKey>('basic');
   const [formData, setFormData] = useState({
     name: '',
-    categories: [] as string[],
     description: '',
     address: '',
     phone: '',
@@ -123,18 +122,10 @@ export default function ClinicSettingsPage() {
 
   useEffect(() => {
     if (currentClinic) {
-      // Handle both old category (string) and new categories (array) formats
       const clinicData = currentClinic as any;
-      let categories: string[] = [];
-      if (clinicData.categories && Array.isArray(clinicData.categories)) {
-        categories = clinicData.categories;
-      } else if (clinicData.category) {
-        categories = [clinicData.category];
-      }
 
       setFormData({
         name: currentClinic.name || '',
-        categories,
         description: clinicData.description || '',
         address: currentClinic.address || currentClinic.addressData?.formatted || '',
         phone: currentClinic.phone || '',
@@ -297,13 +288,14 @@ export default function ClinicSettingsPage() {
 
       await updateClinic.mutateAsync({
         ...formData,
+        vertical: vertical.slug,
         addressData,
         paymentSettings: mergedPaymentSettings,
       });
       toast.success(t('clinicPage.toasts.saveSuccess'));
 
       // Check if all tabs will be complete after this save
-      const willHaveBasicInfo = !!(formData.name && formData.categories.length > 0);
+      const willHaveBasicInfo = !!(formData.name && formData.description);
       const willHaveContact = !!formData.phone;
       const willHaveLocation = !!(formData.address || addressData?.formatted);
       const willHaveHours = hoursConfigured && Object.values(dayHours).some(d => d.enabled);
@@ -319,7 +311,7 @@ export default function ClinicSettingsPage() {
   };
 
   // Check completion status for each tab
-  const hasBasicInfo = !!(formData.name && formData.categories.length > 0);
+  const hasBasicInfo = !!(formData.name && formData.description);
   const hasContact = !!(formData.phone);
   const hasLocation = !!(formData.address || addressData?.formatted || currentClinic?.addressData?.formatted);
   const hasHours = hoursConfigured && Object.values(dayHours).some(d => d.enabled);
@@ -419,97 +411,8 @@ export default function ClinicSettingsPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label>
-                      {t('clinicPage.basicInfo.categoriesLabel')} * <span className="text-xs text-muted-foreground font-normal">({t('clinicPage.basicInfo.categoriesHint')})</span>
-                    </Label>
-                    {/* Multi-select dropdown */}
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="outline"
-                          role="combobox"
-                          type="button"
-                          className="w-full justify-between font-normal rounded-none"
-                        >
-                          {formData.categories.length === 0
-                            ? t('clinicPage.basicInfo.selectCategories')
-                            : t('clinicPage.basicInfo.categoriesSelected', { count: formData.categories.length })}
-                          <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-[--radix-popover-trigger-width] p-0 rounded-none" align="start" sideOffset={4}>
-                        <div className="max-h-[250px] overflow-y-auto p-1">
-                          {clinicCategories.map((cat) => {
-                            const isSelected = formData.categories.includes(cat.id);
-                            return (
-                              <div
-                                key={cat.id}
-                                onClick={() => {
-                                  if (isSelected) {
-                                    setFormData({
-                                      ...formData,
-                                      categories: formData.categories.filter((c) => c !== cat.id),
-                                    });
-                                  } else {
-                                    setFormData({
-                                      ...formData,
-                                      categories: [...formData.categories, cat.id],
-                                    });
-                                  }
-                                }}
-                                className={cn(
-                                  'flex items-center gap-2 px-2 py-2 cursor-pointer transition-colors text-sm',
-                                  isSelected
-                                    ? 'bg-green-50 text-green-800'
-                                    : 'hover:bg-gray-100'
-                                )}
-                              >
-                                <div className={cn(
-                                  'flex h-4 w-4 items-center justify-center border',
-                                  isSelected
-                                    ? 'bg-green-600 border-green-600'
-                                    : 'border-gray-300'
-                                )}>
-                                  {isSelected && <Check className="h-3 w-3 text-white" />}
-                                </div>
-                                <span>{cat.name}</span>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </PopoverContent>
-                    </Popover>
-                    {/* Selected categories tags */}
-                    {formData.categories.length > 0 && (
-                      <div className="flex flex-wrap gap-2">
-                        {formData.categories.map((catId) => (
-                          <span
-                            key={catId}
-                            className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-800 text-sm"
-                          >
-                            {getCategoryName(catId)}
-                            <button
-                              type="button"
-                              onClick={() => setFormData({
-                                ...formData,
-                                categories: formData.categories.filter((c) => c !== catId)
-                              })}
-                              className="hover:bg-green-200 p-0.5"
-                            >
-                              <X className="h-3 w-3" />
-                            </button>
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                    <p className="text-xs text-muted-foreground">
-                      {t('clinicPage.basicInfo.categoriesHelp')}
-                    </p>
-                  </div>
-
-                  <div className="space-y-2">
                     <Label htmlFor="description">
-                      {t('clinicPage.basicInfo.descriptionLabel')}
+                      {t('clinicPage.basicInfo.descriptionLabel')} *
                     </Label>
                     <Textarea
                       id="description"
@@ -720,8 +623,8 @@ export default function ClinicSettingsPage() {
                     />
                   </div>
 
-                  {/* Convênio */}
-                  <div
+                  {/* Convênio - hidden for verticals that don't use it */}
+                  {vertical.features.showConvenio && <div
                     className={cn(
                       'p-4 border rounded-lg transition-all',
                       paymentSettings.acceptsConvenio ? 'border-blue-200 bg-blue-50/30' : ''
@@ -807,7 +710,7 @@ export default function ClinicSettingsPage() {
                         </div>
                       </div>
                     )}
-                  </div>
+                  </div>}
                 </div>
               )}
             </div>

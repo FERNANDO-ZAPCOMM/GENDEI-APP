@@ -98,7 +98,8 @@ class BaseRunner(ABC):
         agent: BaseAgent,
         message: str,
         session_id: str,
-        context: Dict[str, Any]
+        context: Dict[str, Any],
+        runtime: Optional[Any] = None
     ) -> ExecutionResult:
         """
         Execute an agent with a message.
@@ -108,6 +109,7 @@ class BaseRunner(ABC):
             message: User message
             session_id: Unique session identifier
             context: Additional context (user info, products, etc.)
+            runtime: Optional runtime context for SDK RunContextWrapper injection
 
         Returns:
             ExecutionResult with response and metadata

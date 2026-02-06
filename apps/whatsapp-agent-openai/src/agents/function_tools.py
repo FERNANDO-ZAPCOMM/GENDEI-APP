@@ -8,9 +8,10 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
-from agents import function_tool  # type: ignore
+from agents import function_tool, RunContextWrapper  # type: ignore
 
-from src.runtime.context import get_runtime
+from src.runtime.context import Runtime, get_runtime
+from src.vertical_config import get_vertical_config
 from src.utils.helpers import ensure_phone_has_plus
 
 logger = logging.getLogger(__name__)
@@ -20,20 +21,22 @@ _message_tracker: Dict[str, datetime] = {}
 GREETING_COOLDOWN_SECONDS = 1800  # 30 minutes
 
 
-def _mark_message_sent(phone: str) -> None:
+def _mark_message_sent(phone: str, runtime: Optional['Runtime'] = None) -> None:
     """Track that a message was sent to prevent spam."""
-    runtime = get_runtime()
+    if runtime is None:
+        runtime = get_runtime()
     key = f"{runtime.clinic_id}:{phone}"
     _message_tracker[key] = datetime.now()
 
 
 # ===== MESSAGING TOOLS =====
 
-async def _send_text_message_impl(phone: str, text: str) -> str:
+async def _send_text_message_impl(phone: str, text: str, runtime: Optional['Runtime'] = None) -> str:
     """Send a text message to the patient via WhatsApp."""
     try:
+        if runtime is None:
+            runtime = get_runtime()
         phone = ensure_phone_has_plus(phone)
-        runtime = get_runtime()
 
         # GUARD: Never send HANDOFF instructions to user
         if "[HANDOFF:" in text.upper():
@@ -43,7 +46,7 @@ async def _send_text_message_impl(phone: str, text: str) -> str:
         # Send message using runtime's messaging function
         from src.utils.messaging import send_whatsapp_text
         result = await send_whatsapp_text(phone, text)
-        _mark_message_sent(phone)
+        _mark_message_sent(phone, runtime=runtime)
 
         # Log interaction
         runtime.db.log_conversation_message(
@@ -58,7 +61,7 @@ async def _send_text_message_impl(phone: str, text: str) -> str:
 
 
 @function_tool
-async def send_text_message(phone: str, text: str) -> str:
+async def send_text_message(ctx: RunContextWrapper[Runtime], phone: str, text: str) -> str:
     """
     Send a text message to the patient via WhatsApp.
 
@@ -72,7 +75,7 @@ async def send_text_message(phone: str, text: str) -> str:
     Returns:
         Success or error message.
     """
-    return await _send_text_message_impl(phone, text)
+    return await _send_text_message_impl(phone, text, runtime=ctx.context)
 
 
 async def _send_whatsapp_buttons_impl(
@@ -80,12 +83,14 @@ async def _send_whatsapp_buttons_impl(
     body_text: str,
     buttons: List[Dict[str, str]],
     header_text: Optional[str] = None,
-    footer_text: Optional[str] = None
+    footer_text: Optional[str] = None,
+    runtime: Optional['Runtime'] = None
 ) -> str:
     """Send an interactive button message via WhatsApp."""
     try:
         phone = ensure_phone_has_plus(phone)
-        runtime = get_runtime()
+        if runtime is None:
+            runtime = get_runtime()
 
         # Validate buttons
         if not buttons or len(buttons) == 0:
@@ -103,7 +108,7 @@ async def _send_whatsapp_buttons_impl(
             header_text=header_text,
             footer_text=footer_text
         )
-        _mark_message_sent(phone)
+        _mark_message_sent(phone, runtime=runtime)
 
         # Log interaction
         runtime.db.log_conversation_message(
@@ -135,10 +140,11 @@ async def send_whatsapp_buttons(
 
 # ===== CLINIC INFO TOOLS =====
 
-def _get_clinic_info_impl() -> str:
+def _get_clinic_info_impl(runtime: Optional['Runtime'] = None) -> str:
     """Get clinic information."""
     try:
-        runtime = get_runtime()
+        if runtime is None:
+            runtime = get_runtime()
         clinic = runtime.db.get_clinic(runtime.clinic_id)
 
         if not clinic:
@@ -176,7 +182,7 @@ def _get_clinic_info_impl() -> str:
 
 
 @function_tool
-def get_clinic_info() -> str:
+async def get_clinic_info(ctx: RunContextWrapper[Runtime]) -> str:
     """
     Get information about the clinic.
 
@@ -185,13 +191,14 @@ def get_clinic_info() -> str:
     Returns:
         Formatted clinic information.
     """
-    return _get_clinic_info_impl()
+    return _get_clinic_info_impl(runtime=ctx.context)
 
 
-def _get_professionals_impl(service_id: Optional[str] = None) -> str:
+def _get_professionals_impl(service_id: Optional[str] = None, runtime: Optional['Runtime'] = None) -> str:
     """Get list of professionals at the clinic."""
     try:
-        runtime = get_runtime()
+        if runtime is None:
+            runtime = get_runtime()
         professionals = runtime.db.get_clinic_professionals(runtime.clinic_id)
 
         if not professionals:
@@ -207,7 +214,8 @@ def _get_professionals_impl(service_id: Optional[str] = None) -> str:
             if not professionals:
                 return "Não há profissionais disponíveis para este serviço."
 
-        lines = ["👨‍⚕️ *Nossos Profissionais:*\n"]
+        vc = get_vertical_config(getattr(runtime, 'vertical_slug', None))
+        lines = [f"{vc.terminology.professional_emoji} *Nossos Profissionais:*\n"]
 
         for prof in professionals:
             name = prof.full_name if hasattr(prof, 'full_name') else prof.name
@@ -226,7 +234,7 @@ def _get_professionals_impl(service_id: Optional[str] = None) -> str:
 
 
 @function_tool
-def get_professionals(service_id: Optional[str] = None) -> str:
+async def get_professionals(ctx: RunContextWrapper[Runtime], service_id: Optional[str] = None) -> str:
     """
     Get list of professionals at the clinic.
 
@@ -238,19 +246,21 @@ def get_professionals(service_id: Optional[str] = None) -> str:
     Returns:
         Formatted list of professionals with their specialties.
     """
-    return _get_professionals_impl(service_id)
+    return _get_professionals_impl(service_id, runtime=ctx.context)
 
 
-def _get_services_impl() -> str:
+def _get_services_impl(runtime: Optional['Runtime'] = None) -> str:
     """Get list of services offered by the clinic."""
     try:
-        runtime = get_runtime()
+        if runtime is None:
+            runtime = get_runtime()
         services = runtime.db.get_clinic_services(runtime.clinic_id)
 
         if not services:
             return "Não há serviços cadastrados no momento."
 
-        lines = ["🩺 *Serviços Disponíveis:*\n"]
+        vc = get_vertical_config(getattr(runtime, 'vertical_slug', None))
+        lines = [f"{vc.terminology.service_emoji} *Serviços Disponíveis:*\n"]
 
         for service in services:
             name = getattr(service, "name", "Serviço")
@@ -274,7 +284,7 @@ def _get_services_impl() -> str:
 
 
 @function_tool
-def get_services() -> str:
+async def get_services(ctx: RunContextWrapper[Runtime]) -> str:
     """
     Get list of services offered by the clinic.
 
@@ -283,7 +293,7 @@ def get_services() -> str:
     Returns:
         Formatted list of services.
     """
-    return _get_services_impl()
+    return _get_services_impl(runtime=ctx.context)
 
 
 # ===== SCHEDULING TOOLS =====
@@ -291,11 +301,13 @@ def get_services() -> str:
 def _get_available_slots_impl(
     professional_id: str,
     date: Optional[str] = None,
-    days_ahead: int = 7
+    days_ahead: int = 7,
+    runtime: Optional['Runtime'] = None
 ) -> str:
     """Get available appointment slots for a professional."""
     try:
-        runtime = get_runtime()
+        if runtime is None:
+            runtime = get_runtime()
         from src.scheduler.availability import get_available_slots, format_slots_for_display
 
         # Get professional name
@@ -332,7 +344,8 @@ def _get_available_slots_impl(
 
 
 @function_tool
-def get_available_slots(
+async def get_available_slots(
+    ctx: RunContextWrapper[Runtime],
     professional_id: str,
     date: Optional[str] = None,
     days_ahead: int = 7
@@ -348,7 +361,7 @@ def get_available_slots(
     Returns:
         Formatted list of available time slots.
     """
-    return _get_available_slots_impl(professional_id, date, days_ahead)
+    return _get_available_slots_impl(professional_id, date, days_ahead, runtime=ctx.context)
 
 
 async def _create_appointment_impl(
@@ -361,11 +374,13 @@ async def _create_appointment_impl(
     service_id: Optional[str] = None,
     payment_type: str = "particular",
     convenio_name: Optional[str] = None,
-    convenio_number: Optional[str] = None
+    convenio_number: Optional[str] = None,
+    runtime: Optional['Runtime'] = None
 ) -> str:
     """Create a new appointment."""
     try:
-        runtime = get_runtime()
+        if runtime is None:
+            runtime = get_runtime()
         from src.scheduler.appointments import create_appointment
         from src.scheduler.availability import get_professional_availability
 
@@ -424,18 +439,23 @@ async def _create_appointment_impl(
         )
 
         if appointment:
+            # Get vertical config for terminology
+            vc = get_vertical_config(getattr(runtime, 'vertical_slug', None))
+            term = vc.terminology
+
             # Format date for display
             dt = datetime.strptime(date, "%Y-%m-%d")
             day_names = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"]
             day_name = day_names[dt.weekday()]
             formatted_date = dt.strftime("%d/%m/%Y")
 
+            apt_term_cap = term.appointment_term.capitalize()
             confirmation = (
-                f"✅ *Consulta agendada com sucesso!*\n\n"
+                f"✅ *{apt_term_cap} agendada com sucesso!*\n\n"
                 f"📅 *{day_name}, {formatted_date}*\n"
                 f"🕐 *{time}*\n"
-                f"👨‍⚕️ *{prof_name}*\n"
-                f"👤 *Paciente:* {patient_name}\n"
+                f"{term.professional_emoji} *{prof_name}*\n"
+                f"👤 *{term.client_term.capitalize()}:* {patient_name}\n"
             )
 
             # Send payment link if required
@@ -456,7 +476,7 @@ async def _create_appointment_impl(
                             amount=signal_cents,
                             customer_name=patient_name,
                             customer_phone=phone,
-                            product_name=f"Sinal - Consulta {prof_name}"
+                            product_name=f"Sinal - {apt_term_cap} {prof_name}"
                         )
                         if payment_info:
                             runtime.db.update_appointment(appointment.id, {
@@ -466,12 +486,12 @@ async def _create_appointment_impl(
                                 phone=phone,
                                 payment_info=payment_info,
                                 amount=signal_cents,
-                                product_name="a confirmação da sua consulta",
+                                product_name=f"a confirmação da sua {term.appointment_term}",
                                 order_id=appointment.id
                             )
                             confirmation += (
                                 f"\n💳 *Sinal necessário:* {format_payment_amount(signal_cents)}\n"
-                                "Enviei o PIX para confirmar sua consulta. 👇"
+                                f"Enviei o PIX para confirmar sua {term.appointment_term}. 👇"
                             )
                         else:
                             confirmation += (
@@ -488,7 +508,10 @@ async def _create_appointment_impl(
                                 "Envie o comprovante após o pagamento."
                             )
 
-            confirmation += "\n\nVocê receberá um lembrete antes da consulta."
+            if vc.features.show_arrive_early_tip:
+                confirmation += f"\n\nVocê receberá um lembrete antes da {term.appointment_term}."
+            else:
+                confirmation += f"\n\nVocê receberá um lembrete antes da sua {term.appointment_term}."
             return confirmation
         else:
             return "❌ Erro ao criar agendamento. Por favor, tente novamente."
@@ -500,6 +523,7 @@ async def _create_appointment_impl(
 
 @function_tool
 async def create_appointment(
+    ctx: RunContextWrapper[Runtime],
     phone: str,
     professional_id: str,
     date: str,
@@ -531,14 +555,16 @@ async def create_appointment(
     """
     return await _create_appointment_impl(
         phone, professional_id, date, time, patient_name, patient_email,
-        service_id, payment_type, convenio_name, convenio_number
+        service_id, payment_type, convenio_name, convenio_number,
+        runtime=ctx.context
     )
 
 
-async def _send_appointment_confirmation_impl(appointment_id: str) -> str:
+async def _send_appointment_confirmation_impl(appointment_id: str, runtime: Optional['Runtime'] = None) -> str:
     """Send appointment confirmation message to patient."""
     try:
-        runtime = get_runtime()
+        if runtime is None:
+            runtime = get_runtime()
 
         # Get appointment details
         appointment = runtime.db.get_appointment(runtime.clinic_id, appointment_id)
@@ -547,6 +573,9 @@ async def _send_appointment_confirmation_impl(appointment_id: str) -> str:
 
         # Get clinic info
         clinic = runtime.db.get_clinic(runtime.clinic_id)
+        vc = get_vertical_config(getattr(runtime, 'vertical_slug', None))
+        term = vc.terminology
+        apt_term_cap = term.appointment_term.capitalize()
 
         # Format confirmation message
         dt = datetime.strptime(appointment.date, "%Y-%m-%d")
@@ -555,16 +584,19 @@ async def _send_appointment_confirmation_impl(appointment_id: str) -> str:
         formatted_date = dt.strftime("%d/%m/%Y")
 
         message = (
-            f"📋 *Confirmação de Consulta*\n\n"
+            f"📋 *Confirmação de {apt_term_cap}*\n\n"
             f"📅 *{day_name}, {formatted_date}*\n"
             f"🕐 *{appointment.time}*\n"
-            f"👨‍⚕️ *{appointment.professional_name}*\n"
+            f"{term.professional_emoji} *{appointment.professional_name}*\n"
         )
 
         if clinic and clinic.address:
             message += f"📍 *{clinic.address}*\n"
 
-        message += "\n✅ Chegue 15 minutos antes do horário marcado."
+        if vc.features.show_arrive_early_tip:
+            message += "\n✅ Chegue 15 minutos antes do horário marcado."
+        else:
+            message += f"\n✅ Sua {term.appointment_term} está confirmada."
 
         # Send the message
         from src.utils.messaging import send_whatsapp_text
@@ -578,7 +610,7 @@ async def _send_appointment_confirmation_impl(appointment_id: str) -> str:
 
 
 @function_tool
-async def send_appointment_confirmation(appointment_id: str) -> str:
+async def send_appointment_confirmation(ctx: RunContextWrapper[Runtime], appointment_id: str) -> str:
     """
     Send appointment confirmation message to the patient.
 
@@ -588,15 +620,16 @@ async def send_appointment_confirmation(appointment_id: str) -> str:
     Returns:
         Success or error message.
     """
-    return await _send_appointment_confirmation_impl(appointment_id)
+    return await _send_appointment_confirmation_impl(appointment_id, runtime=ctx.context)
 
 
 # ===== APPOINTMENT MANAGEMENT TOOLS =====
 
-def _get_patient_appointments_impl(phone: str) -> str:
+def _get_patient_appointments_impl(phone: str, runtime: Optional['Runtime'] = None) -> str:
     """Get patient's upcoming appointments."""
     try:
-        runtime = get_runtime()
+        if runtime is None:
+            runtime = get_runtime()
         from src.scheduler.appointments import get_appointments_by_phone
 
         phone = ensure_phone_has_plus(phone)
@@ -605,10 +638,13 @@ def _get_patient_appointments_impl(phone: str) -> str:
             runtime.db, phone, runtime.clinic_id, include_past=False
         )
 
-        if not appointments:
-            return "Você não tem consultas agendadas.\n\nDigite 'agendar' para marcar uma consulta!"
+        vc = get_vertical_config(getattr(runtime, 'vertical_slug', None))
+        term = vc.terminology
 
-        lines = ["📋 *Suas Consultas:*\n"]
+        if not appointments:
+            return f"Você não tem {term.appointment_term_plural} agendadas.\n\nDigite 'agendar' para marcar uma {term.appointment_term}!"
+
+        lines = [f"📋 *Suas {term.appointment_term_plural.capitalize()}:*\n"]
 
         for apt in appointments[:5]:
             dt = datetime.strptime(apt.date, "%Y-%m-%d")
@@ -624,7 +660,7 @@ def _get_patient_appointments_impl(phone: str) -> str:
 
 
 @function_tool
-def get_patient_appointments(phone: str) -> str:
+async def get_patient_appointments(ctx: RunContextWrapper[Runtime], phone: str) -> str:
     """
     Get patient's upcoming appointments.
 
@@ -634,21 +670,26 @@ def get_patient_appointments(phone: str) -> str:
     Returns:
         Formatted list of patient's upcoming appointments.
     """
-    return _get_patient_appointments_impl(phone)
+    return _get_patient_appointments_impl(phone, runtime=ctx.context)
 
 
-async def _cancel_appointment_impl(appointment_id: str, reason: str = "") -> str:
+async def _cancel_appointment_impl(appointment_id: str, reason: str = "", runtime: Optional['Runtime'] = None) -> str:
     """Cancel an appointment."""
     try:
-        runtime = get_runtime()
+        if runtime is None:
+            runtime = get_runtime()
         from src.scheduler.appointments import cancel_appointment
+
+        vc = get_vertical_config(getattr(runtime, 'vertical_slug', None))
+        term = vc.terminology
 
         cancel_appointment(
             runtime.db, appointment_id,
-            reason or "Cancelado pelo paciente via WhatsApp"
+            reason or f"Cancelado pelo {term.client_term} via WhatsApp"
         )
 
-        return "❌ Consulta cancelada com sucesso.\n\nSe desejar agendar novamente, é só enviar uma mensagem!"
+        apt_term_cap = term.appointment_term.capitalize()
+        return f"❌ {apt_term_cap} cancelada com sucesso.\n\nSe desejar agendar novamente, é só enviar uma mensagem!"
 
     except Exception as e:
         logger.error(f"Error in cancel_appointment: {e}")
@@ -656,7 +697,7 @@ async def _cancel_appointment_impl(appointment_id: str, reason: str = "") -> str
 
 
 @function_tool
-async def cancel_appointment(appointment_id: str, reason: str = "") -> str:
+async def cancel_appointment(ctx: RunContextWrapper[Runtime], appointment_id: str, reason: str = "") -> str:
     """
     Cancel an appointment.
 
@@ -667,17 +708,19 @@ async def cancel_appointment(appointment_id: str, reason: str = "") -> str:
     Returns:
         Success or error message.
     """
-    return await _cancel_appointment_impl(appointment_id, reason)
+    return await _cancel_appointment_impl(appointment_id, reason, runtime=ctx.context)
 
 
 async def _reschedule_appointment_impl(
     appointment_id: str,
     new_date: str,
-    new_time: str
+    new_time: str,
+    runtime: Optional['Runtime'] = None
 ) -> str:
     """Reschedule an appointment to a new date/time."""
     try:
-        runtime = get_runtime()
+        if runtime is None:
+            runtime = get_runtime()
         from src.scheduler.appointments import reschedule_appointment
         from src.scheduler.availability import get_professional_availability
 
@@ -696,6 +739,10 @@ async def _reschedule_appointment_impl(
         # Reschedule
         reschedule_appointment(runtime.db, appointment_id, new_date, new_time)
 
+        vc = get_vertical_config(getattr(runtime, 'vertical_slug', None))
+        term = vc.terminology
+        apt_term_cap = term.appointment_term.capitalize()
+
         # Format date for display
         dt = datetime.strptime(new_date, "%Y-%m-%d")
         day_names = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"]
@@ -703,10 +750,10 @@ async def _reschedule_appointment_impl(
         formatted_date = dt.strftime("%d/%m/%Y")
 
         return (
-            f"🔄 *Consulta reagendada com sucesso!*\n\n"
+            f"🔄 *{apt_term_cap} reagendada com sucesso!*\n\n"
             f"📅 *{day_name}, {formatted_date}*\n"
             f"🕐 *{new_time}*\n"
-            f"👨‍⚕️ *{appointment.professional_name}*\n\n"
+            f"{term.professional_emoji} *{appointment.professional_name}*\n\n"
             f"Te esperamos!"
         )
 
@@ -717,6 +764,7 @@ async def _reschedule_appointment_impl(
 
 @function_tool
 async def reschedule_appointment(
+    ctx: RunContextWrapper[Runtime],
     appointment_id: str,
     new_date: str,
     new_time: str
@@ -732,15 +780,16 @@ async def reschedule_appointment(
     Returns:
         Success message with new appointment details or error.
     """
-    return await _reschedule_appointment_impl(appointment_id, new_date, new_time)
+    return await _reschedule_appointment_impl(appointment_id, new_date, new_time, runtime=ctx.context)
 
 
 # ===== SUPPORT TOOLS =====
 
-async def _enable_human_takeover_impl(phone: str, reason: str) -> str:
+async def _enable_human_takeover_impl(phone: str, reason: str, runtime: Optional['Runtime'] = None) -> str:
     """Enable human takeover for a conversation."""
     try:
-        runtime = get_runtime()
+        if runtime is None:
+            runtime = get_runtime()
         phone = ensure_phone_has_plus(phone)
 
         # Enable human takeover in Firestore
@@ -761,7 +810,7 @@ async def _enable_human_takeover_impl(phone: str, reason: str) -> str:
         )
         from src.utils.messaging import send_whatsapp_text
         await send_whatsapp_text(phone, notification_message)
-        _mark_message_sent(phone)
+        _mark_message_sent(phone, runtime=runtime)
 
         logger.info(f"👋 Human takeover enabled for {phone}: {reason}")
         return f"Human takeover enabled for {phone}. Reason: {reason}"
@@ -772,7 +821,7 @@ async def _enable_human_takeover_impl(phone: str, reason: str) -> str:
 
 
 @function_tool
-async def enable_human_takeover(phone: str, reason: str) -> str:
+async def enable_human_takeover(ctx: RunContextWrapper[Runtime], phone: str, reason: str) -> str:
     """
     Enable human takeover for a conversation when the AI cannot handle the request.
 
@@ -790,7 +839,7 @@ async def enable_human_takeover(phone: str, reason: str) -> str:
     Returns:
         Success message confirming human takeover is enabled.
     """
-    return await _enable_human_takeover_impl(phone, reason)
+    return await _enable_human_takeover_impl(phone, reason, runtime=ctx.context)
 
 
 # ===== TOOL REGISTRY =====

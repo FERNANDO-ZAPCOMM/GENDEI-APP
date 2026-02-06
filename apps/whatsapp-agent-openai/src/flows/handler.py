@@ -11,33 +11,11 @@ import logging
 from typing import Any, Dict, List, Optional
 from datetime import datetime, timedelta
 
+from src.vertical_config import get_vertical_config, get_specialty_name, ALL_SPECIALTIES
+
 logger = logging.getLogger(__name__)
 
-# Specialties mapping for clinica_medica category
-CLINICA_MEDICA_SPECIALTIES = {
-    "clinico_geral": "Clínico Geral",
-    "cardiologia": "Cardiologia",
-    "dermatologia": "Dermatologia",
-    "dermatologia_clinica": "Dermatologia Clínica",
-    "dermatologia_cirurgica": "Dermatologia Cirúrgica",
-    "cosmiatria": "Cosmiatria",
-    "dermatologia_oncologica": "Dermatologia Oncológica",
-    "endocrinologia": "Endocrinologia",
-    "gastroenterologia": "Gastroenterologia",
-    "geriatria": "Geriatria",
-    "ginecologia": "Ginecologia",
-    "neurologia": "Neurologia",
-    "oftalmologia": "Oftalmologia",
-    "ortopedia": "Ortopedia",
-    "otorrinolaringologia": "Otorrinolaringologia",
-    "pediatria": "Pediatria",
-    "pneumologia": "Pneumologia",
-    "psiquiatria": "Psiquiatria",
-    "reumatologia": "Reumatologia",
-    "urologia": "Urologia",
-}
-
-# Default convenios list
+# Default convenios list (used when clinic has no custom list)
 DEFAULT_CONVENIOS = [
     {"id": "unimed", "title": "Unimed"},
     {"id": "bradesco_saude", "title": "Bradesco Saúde"},
@@ -133,17 +111,20 @@ class FlowsHandler:
                 }
             }
 
+        # Get vertical config for specialty name mapping
+        clinic = self.db.get_clinic(clinic_id) if self.db else None
+        vertical_slug = getattr(clinic, 'vertical', '') if clinic else ''
+
         # Build specialty options (each professional = one specialty option)
-        # Group by specialty or show individual professionals
         especialidades = []
         for prof in professionals:
             # Professional is a dataclass, use attribute access
             specialty_id = getattr(prof, 'specialty', 'clinico_geral') or 'clinico_geral'
-            specialty_name = CLINICA_MEDICA_SPECIALTIES.get(specialty_id, specialty_id)
+            specialty_display = get_specialty_name(vertical_slug, specialty_id)
             prof_name = getattr(prof, 'name', '') or getattr(prof, 'full_name', '') or ''
             especialidades.append({
                 "id": getattr(prof, 'id', ''),  # Use professional ID as the specialty selection ID
-                "title": specialty_name,
+                "title": specialty_display,
                 "description": prof_name
             })
 
@@ -361,16 +342,24 @@ class FlowsHandler:
                 }
             }
 
+        # Get vertical config for specialty name + feature flags
+        clinic = self.db.get_clinic(clinic_id) if self.db else None
+        vertical_slug = getattr(clinic, 'vertical', '') if clinic else ''
+        vc = get_vertical_config(vertical_slug)
+
         # Professional is a dataclass, use attribute access
         specialty_id = getattr(professional, 'specialty', '') or ''
-        specialty_name = CLINICA_MEDICA_SPECIALTIES.get(specialty_id, specialty_id)
+        specialty_display = get_specialty_name(vertical_slug, specialty_id)
         professional_name = getattr(professional, 'name', '') or getattr(professional, 'full_name', '') or ''
 
-        # Payment type options
+        # Payment type options - only show convênio if vertical supports it
         tipos_pagamento = [
-            {"id": "convenio", "title": "Convênio", "description": "Tenho plano de saúde"},
             {"id": "particular", "title": "Particular", "description": "Pagamento direto (PIX/Cartão)"},
         ]
+        if vc.features.has_convenio:
+            tipos_pagamento.insert(0,
+                {"id": "convenio", "title": "Convênio", "description": "Tenho plano de saúde"},
+            )
 
         return {
             "screen": "TIPO_ATENDIMENTO",
@@ -378,7 +367,7 @@ class FlowsHandler:
                 "especialidade": professional_id,
                 "professional_id": professional_id,
                 "professional_name": professional_name,
-                "specialty_name": specialty_name,
+                "specialty_name": specialty_display,
                 "tipos_pagamento": tipos_pagamento,
                 "error_message": ""
             }

@@ -1,5 +1,7 @@
 // Gendei Clinic Types
 
+import type { VerticalSlug } from './verticals';
+
 // Workflow mode determines how the WhatsApp bot behaves
 export type WorkflowMode = 'booking' | 'info';
 
@@ -22,6 +24,7 @@ export interface Clinic {
   name: string;
   ownerId: string;
   adminIds?: string[];
+  vertical?: VerticalSlug;           // Vertical this clinic belongs to (med, dental, psi, etc)
   category?: string;                // Clinic category (clinica_medica, odontologia, etc)
   address?: string;                 // Legacy: simple address string
   addressData?: ClinicAddress;      // New: structured address with coordinates

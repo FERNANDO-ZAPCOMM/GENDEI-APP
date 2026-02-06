@@ -10,6 +10,8 @@ from src.providers.base import AgentType, ExecutionResult
 from src.providers.openai.factory import OpenAIAgentFactory, OpenAIAgent
 from src.agents.definitions import get_all_agent_definitions
 from src.agents.function_tools import get_tools_for_agent
+from src.runtime.context import Runtime
+from src.vertical_config import get_vertical_config
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +54,33 @@ class AgentOrchestrator:
                     "phone": getattr(clinic, 'phone', ''),
                     "opening_hours": getattr(clinic, 'opening_hours', ''),
                     "payment_settings": getattr(clinic, 'payment_settings', {}),
+                    "greeting_summary": getattr(clinic, 'greeting_summary', ''),
+                    "description": getattr(clinic, 'description', ''),
                 }
+
+                # Load vertical config
+                vertical_slug = getattr(clinic, 'vertical', None) or 'geral'
+                vc = get_vertical_config(vertical_slug)
+                term = vc.terminology
+                context["vertical"] = {
+                    "slug": vc.slug,
+                    "appointment_term": term.appointment_term,
+                    "appointment_plural": term.appointment_term_plural,
+                    "client_term": term.client_term,
+                    "professional_term": term.professional_term,
+                    "professional_emoji": term.professional_emoji,
+                    "service_emoji": term.service_emoji,
+                }
+                # Build convenio instruction based on vertical features
+                if vc.features.has_convenio:
+                    convenio_text = "- Convênio do {client_term} (se aplicável)".format(
+                        client_term=term.client_term
+                    )
+                    if vc.features.ask_convenio_number:
+                        convenio_text += "\n- Número da carteirinha do convênio"
+                    context["vertical"]["convenio_instruction"] = convenio_text
+                else:
+                    context["vertical"]["convenio_instruction"] = ""
 
             # Load professionals
             professionals = self.db.get_clinic_professionals(self.clinic_id)
@@ -109,6 +137,7 @@ class AgentOrchestrator:
         scheduling_keywords = [
             "agendar", "marcar", "consulta", "horários", "horarios",
             "disponibilidade", "agenda", "atendimento", "quero agendar",
+            "sessão", "sessao", "procedimento",
         ]
         if any(kw in msg_lower for kw in scheduling_keywords):
             return AgentType.SALES_CLOSER  # scheduling
@@ -126,6 +155,7 @@ class AgentOrchestrator:
         # Appointment management
         appointment_keywords = [
             "minha consulta", "minhas consultas", "meu agendamento",
+            "minha sessão", "minha sessao", "minhas sessões", "minhas sessoes",
             "cancelar", "desmarcar", "remarcar", "reagendar",
         ]
         if any(kw in msg_lower for kw in appointment_keywords):
@@ -145,7 +175,8 @@ class AgentOrchestrator:
         self,
         phone: str,
         message: str,
-        contact_name: Optional[str] = None
+        contact_name: Optional[str] = None,
+        runtime: Optional[Runtime] = None
     ) -> ExecutionResult:
         """
         Process an incoming message and get an AI response.
@@ -154,6 +185,7 @@ class AgentOrchestrator:
             phone: Patient phone number
             message: The message text
             contact_name: Optional patient name
+            runtime: Optional Runtime context for SDK RunContextWrapper injection
 
         Returns:
             ExecutionResult with the agent's response
@@ -172,7 +204,7 @@ class AgentOrchestrator:
                     error=f"Agent {agent_type} not available"
                 )
 
-            logger.info(f"🤖 Routing to {agent.name} for message: {message[:50]}...")
+            logger.info(f"Routing to {agent.name} for message: {message[:50]}...")
 
             # Build context
             context = {
@@ -184,10 +216,13 @@ class AgentOrchestrator:
             # Create session ID
             session_id = f"{self.clinic_id}:{phone}"
 
-            # Run the agent
-            result = await self.runner.run(agent, message, session_id, context)
+            # Run the agent with Runtime context for SDK RunContextWrapper
+            result = await self.runner.run(
+                agent, message, session_id, context,
+                runtime=runtime
+            )
 
-            logger.info(f"✅ Agent {agent.name} responded: {result.success}")
+            logger.info(f"Agent {agent.name} responded: {result.success}")
 
             return result
 

@@ -1,12 +1,15 @@
 """
 Guardrails for WhatsApp Agent
-following OpenAI Agents SDK best practices for input/output validation
+Uses OpenAI Agents SDK native guardrail API for input/output validation
 """
 
 import logging
 import re
 from typing import Optional
 from dataclasses import dataclass
+
+from agents import input_guardrail, output_guardrail, GuardrailFunctionOutput, RunContextWrapper
+from src.runtime.context import Runtime
 
 logger = logging.getLogger(__name__)
 
@@ -21,66 +24,20 @@ class GuardrailResult:
     block_reason: Optional[str] = None
 
 
-# ===== INPUT GUARDRAILS =====
-def validate_input(message: str) -> GuardrailResult:
-    """
-    input guardrail - validates user message before processing
-    checks for:
-    - Harmful content patterns
-    - Injection attempts
-    - Spam patterns
-    returns:
-        GuardrailResult with allowed=True if safe, False if blocked
-    """
-    if not message or not message.strip():
-        return GuardrailResult(allowed=True)
+# ===== INJECTION / SPAM PATTERNS =====
+injection_patterns = [
+    r"ignore.*previous.*instructions",
+    r"ignore.*above",
+    r"disregard.*instructions",
+    r"you are now",
+    r"act as",
+    r"pretend.*to.*be",
+    r"system:?\s*prompt",
+    r"<\|.*\|>",  # Token markers
+    r"\[INST\]",  # Instruction markers
+]
 
-    normalized = message.lower().strip()
-
-    # block prompt injection attempts
-    injection_patterns = [
-        r"ignore.*previous.*instructions",
-        r"ignore.*above",
-        r"disregard.*instructions",
-        r"you are now",
-        r"act as",
-        r"pretend.*to.*be",
-        r"system:?\s*prompt",
-        r"<\|.*\|>",  # Token markers
-        r"\[INST\]",  # Instruction markers
-    ]
-
-    for pattern in injection_patterns:
-        if re.search(pattern, normalized, re.IGNORECASE):
-            logger.warning(f"Input guardrail: Blocked injection attempt: {message[:50]}...")
-            return GuardrailResult(
-                allowed=False,
-                block_reason="Mensagem não permitida"
-            )
-
-    # block excessive repetition (spam)
-    words = normalized.split()
-    if len(words) > 5:
-        unique_words = set(words)
-        if len(unique_words) < len(words) * 0.3:  # Less than 30% unique
-            logger.warning(f"Input guardrail: Blocked spam pattern")
-            return GuardrailResult(
-                allowed=False,
-                block_reason="Por favor, envie uma mensagem clara"
-            )
-
-    # block excessively long messages
-    if len(message) > 2000:
-        logger.warning(f"Input guardrail: Message too long ({len(message)} chars)")
-        return GuardrailResult(
-            allowed=True,
-            modified_content=message[:2000] + "..."
-        )
-
-    return GuardrailResult(allowed=True)
-
-
-# ===== OUTPUT GUARDRAILS =====
+# ===== OUTPUT GUARDRAIL PATTERNS =====
 # patterns that should NEVER appear in output
 BLOCKED_OUTPUT_PATTERNS = [
     # AI/Technology disclosure
@@ -120,13 +77,60 @@ OUTPUT_REPLACEMENTS = [
 ]
 
 
-def validate_output(response: str) -> GuardrailResult:
+# ===== INTERNAL VALIDATION LOGIC =====
+def _check_input(message: str) -> GuardrailResult:
     """
-    output guardrail - validates agent response before sending to user
-    checks for:
-    - AI/technology disclosure
-    - Internal system information leaks
-    - Inappropriate content
+    Internal input validation logic.
+    Checks for injection attempts, spam, and message length.
+
+    args:
+        message: the raw user message
+    returns:
+        GuardrailResult with allowed=True if safe, False if blocked
+    """
+    if not message or not message.strip():
+        return GuardrailResult(allowed=True)
+
+    normalized = message.lower().strip()
+
+    # block prompt injection attempts
+    for pattern in injection_patterns:
+        if re.search(pattern, normalized, re.IGNORECASE):
+            logger.warning(f"Input guardrail: Blocked injection attempt: {message[:50]}...")
+            return GuardrailResult(
+                allowed=False,
+                block_reason="Mensagem não permitida"
+            )
+
+    # block excessive repetition (spam)
+    words = normalized.split()
+    if len(words) > 5:
+        unique_words = set(words)
+        if len(unique_words) < len(words) * 0.3:  # Less than 30% unique
+            logger.warning(f"Input guardrail: Blocked spam pattern")
+            return GuardrailResult(
+                allowed=False,
+                block_reason="Por favor, envie uma mensagem clara"
+            )
+
+    # block excessively long messages
+    if len(message) > 2000:
+        logger.warning(f"Input guardrail: Message too long ({len(message)} chars)")
+        return GuardrailResult(
+            allowed=True,
+            modified_content=message[:2000] + "..."
+        )
+
+    return GuardrailResult(allowed=True)
+
+
+def _check_output(response: str) -> GuardrailResult:
+    """
+    Internal output validation logic.
+    Checks for AI disclosure, system leaks, and applies replacements.
+
+    args:
+        response: the agent's response text
     returns:
         GuardrailResult with allowed=True and possibly modified_content
     """
@@ -179,6 +183,52 @@ def validate_output(response: str) -> GuardrailResult:
     return GuardrailResult(allowed=True)
 
 
+# ===== SDK INPUT GUARDRAIL =====
+@input_guardrail
+async def injection_guard(ctx: RunContextWrapper[Runtime], agent, input_data) -> GuardrailFunctionOutput:
+    """
+    OpenAI Agents SDK input guardrail.
+    Validates user messages for injection attempts and spam before processing.
+    Attach to an agent via: Agent(..., input_guardrails=[injection_guard])
+    """
+    # Extract text from input_data (it can be a string or list of input items)
+    message = input_data if isinstance(input_data, str) else str(input_data)
+
+    result = _check_input(message)
+    was_blocked = not result.allowed
+
+    if was_blocked:
+        logger.warning(f"injection_guard triggered: {result.block_reason}")
+
+    return GuardrailFunctionOutput(
+        output_info={"check": "injection", "blocked": was_blocked, "reason": result.block_reason},
+        tripwire_triggered=was_blocked,
+    )
+
+
+# ===== SDK OUTPUT GUARDRAIL =====
+@output_guardrail
+async def output_sanitizer(ctx: RunContextWrapper[Runtime], agent, output) -> GuardrailFunctionOutput:
+    """
+    OpenAI Agents SDK output guardrail.
+    Validates agent responses for AI disclosure and system leaks before sending.
+    Attach to an agent via: Agent(..., output_guardrails=[output_sanitizer])
+    """
+    response = output if isinstance(output, str) else str(output)
+
+    result = _check_output(response)
+    was_modified = result.modified_content is not None
+
+    if was_modified:
+        logger.info("output_sanitizer: response was modified by guardrail")
+
+    return GuardrailFunctionOutput(
+        output_info={"check": "output_sanitizer", "modified": was_modified},
+        tripwire_triggered=False,  # output guardrails modify but don't block
+    )
+
+
+# ===== WHATSAPP COMPLIANCE (helper, not an SDK guardrail) =====
 def validate_whatsapp_compliance(response: str) -> GuardrailResult:
     """
     WhatsApp-specific guardrail for message compliance
@@ -209,17 +259,19 @@ def validate_whatsapp_compliance(response: str) -> GuardrailResult:
     return GuardrailResult(allowed=True)
 
 
-# ===== COMBINED GUARDRAIL =====
+# ===== BACKWARD-COMPATIBLE HELPER FUNCTIONS =====
 def run_output_guardrails(response: str) -> str:
     """
-    run all output guardrails in sequence
+    Run all output guardrails in sequence (backward-compatible helper).
+    Calls internal validation logic directly, not the SDK decorators.
+
     args:
         response: the agent's response text
     returns:
         the validated/modified response safe to send
     """
     # first, check for blocked content
-    result = validate_output(response)
+    result = _check_output(response)
     current = result.modified_content or response
 
     # then check WhatsApp compliance
@@ -231,13 +283,15 @@ def run_output_guardrails(response: str) -> str:
 
 def run_input_guardrails(message: str) -> tuple[bool, str, Optional[str]]:
     """
-    run all input guardrails
+    Run all input guardrails (backward-compatible helper).
+    Calls internal validation logic directly, not the SDK decorators.
+
     args:
         message: user's input message
     returns:
         Tuple of (allowed, processed_message, block_reason)
     """
-    result = validate_input(message)
+    result = _check_input(message)
 
     if not result.allowed:
         return False, message, result.block_reason

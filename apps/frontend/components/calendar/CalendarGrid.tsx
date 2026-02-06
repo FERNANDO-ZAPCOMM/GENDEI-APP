@@ -1,7 +1,8 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { format, addDays, isSameDay, addMinutes, startOfWeek, getDay, parseISO, isBefore, isAfter } from 'date-fns';
+import { format, addDays, addMinutes, startOfWeek, getDay, parseISO, isAfter } from 'date-fns';
+import { isTodayInTimezone, nowInTimezone } from '@/lib/timezone';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { Clock, User, X, Plus, Phone, FileText, MoreHorizontal, Repeat } from 'lucide-react';
@@ -54,6 +55,7 @@ interface CalendarGridProps {
   timeBlocks: TimeBlock[];
   professionals: { id: string; name: string }[];
   selectedProfessional: string;
+  clinicTimezone?: string;
   startHour?: number;
   endHour?: number;
   onAppointmentClick?: (appointment: Appointment) => void;
@@ -130,6 +132,7 @@ export function CalendarGrid({
   timeBlocks,
   professionals,
   selectedProfessional,
+  clinicTimezone,
   startHour = 7,
   endHour = 20,
   onAppointmentClick,
@@ -304,14 +307,12 @@ export function CalendarGrid({
     return options;
   }, [selectedSlot, endHour]);
 
-  const isToday = (date: Date) => isSameDay(date, new Date());
+  const isToday = (date: Date) => isTodayInTimezone(date, clinicTimezone);
   const currentTimePosition = useMemo(() => {
-    const now = new Date();
-    const hours = now.getHours();
-    const minutes = now.getMinutes();
+    const { hours, minutes } = nowInTimezone(clinicTimezone);
     if (hours < startHour || hours >= endHour) return null;
     return (hours - startHour) * HOUR_HEIGHT + (minutes / 60) * HOUR_HEIGHT;
-  }, [startHour, endHour]);
+  }, [startHour, endHour, clinicTimezone]);
 
   const columnWidth = viewMode === 'day' ? 'min-w-full' : 'min-w-[70px]';
 

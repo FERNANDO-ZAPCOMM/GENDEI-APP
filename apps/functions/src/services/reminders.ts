@@ -3,6 +3,7 @@
 
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import axios from 'axios';
+import { getVerticalTerms } from './verticals';
 
 const db = getFirestore();
 
@@ -156,14 +157,18 @@ async function sendReminder(appointment: any, type: '24h' | '2h'): Promise<void>
     return;
   }
 
-  // Format reminder message
+  // Format reminder message with vertical-aware terminology
+  const terms = getVerticalTerms(clinic.vertical);
   const message = formatReminderMessage(
     type,
     patientName,
     professionalName,
     date,
     time,
-    clinic.address || ''
+    clinic.address || '',
+    terms.appointmentTerm,
+    terms.professionalEmoji,
+    terms.showArriveEarlyTip
   );
 
   // Send via WhatsApp Agent
@@ -197,7 +202,7 @@ async function sendReminder(appointment: any, type: '24h' | '2h'): Promise<void>
 }
 
 /**
- * Format reminder message
+ * Format reminder message with vertical-aware terminology
  */
 function formatReminderMessage(
   type: '24h' | '2h',
@@ -205,7 +210,10 @@ function formatReminderMessage(
   professionalName: string,
   date: string,
   time: string,
-  address: string
+  address: string,
+  appointmentTerm: string,
+  professionalEmoji: string,
+  showArriveEarlyTip: boolean
 ): string {
   const firstName = patientName.split(' ')[0];
 
@@ -220,20 +228,23 @@ function formatReminderMessage(
   if (type === '24h') {
     return (
       `Oi, *${firstName}*! 👋\n\n` +
-      `Passando pra lembrar que sua consulta é *amanhã*:\n\n` +
+      `Passando pra lembrar que sua ${appointmentTerm} é *amanhã*:\n\n` +
       `📅 *${dayName}, ${formattedDate}* às *${time}*\n` +
-      `👨‍⚕️ *${professionalName}*\n` +
+      `${professionalEmoji} *${professionalName}*\n` +
       (address ? `📍 *${address}*\n\n` : '\n') +
       `Você confirma presença?`
     );
   } else {
+    const arrivalTip = showArriveEarlyTip
+      ? ' Lembre-se de chegar 15 minutos antes.'
+      : '';
     return (
       `Oi, *${firstName}*! 👋\n\n` +
-      `Sua consulta é daqui a *2 horas*!\n\n` +
+      `Sua ${appointmentTerm} é daqui a *2 horas*!\n\n` +
       `🕐 *Hoje às ${time}*\n` +
-      `👨‍⚕️ *${professionalName}*\n` +
+      `${professionalEmoji} *${professionalName}*\n` +
       (address ? `📍 *${address}*\n\n` : '\n') +
-      `Te esperamos! Lembre-se de chegar 15 minutos antes.`
+      `Te esperamos!${arrivalTip}`
     );
   }
 }

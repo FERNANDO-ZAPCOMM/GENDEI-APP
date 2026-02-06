@@ -4,15 +4,19 @@
 import { Router, Request, Response } from 'express';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { verifyAuth } from '../middleware/auth';
-import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
 
 const router = Router();
 const db = getFirestore();
 
-// Initialize Anthropic client
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY || '',
-});
+// Lazy-init OpenAI client
+let openaiClient: OpenAI | null = null;
+function getOpenAI(): OpenAI {
+  if (!openaiClient) {
+    openaiClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY || '' });
+  }
+  return openaiClient;
+}
 
 // Collection names
 const CLINICS = 'gendei_clinics';
@@ -134,7 +138,7 @@ router.patch('/me', verifyAuth, async (req: Request, res: Response) => {
       'zipCode', 'cnpj', 'categories', 'signalPercentage', 'timezone',
       'paymentSettings', 'pixKey', 'depositPercentage', 'requiresDeposit',
       'description', 'website', 'openingHours', 'addressData', 'greetingSummary',
-      'workflowMode'
+      'workflowMode', 'vertical'
     ];
 
     const updateData: any = {
@@ -271,7 +275,7 @@ router.put('/:clinicId', verifyAuth, async (req: Request, res: Response) => {
       'zipCode', 'cnpj', 'signalPercentage', 'timezone',
       'paymentSettings', 'pixKey', 'depositPercentage', 'requiresDeposit',
       'description', 'website', 'openingHours', 'addressData', 'greetingSummary', 'categories',
-      'workflowMode'
+      'workflowMode', 'vertical'
     ];
 
     const updateData: any = {
@@ -453,19 +457,24 @@ router.post('/me/generate-summary', verifyAuth, async (req: Request, res: Respon
       return res.status(400).json({ message: 'Description must be at least 20 characters' });
     }
 
-    // Check if Anthropic API key is configured
-    if (!process.env.ANTHROPIC_API_KEY) {
+    // Check if OpenAI API key is configured
+    if (!process.env.OPENAI_API_KEY) {
       return res.status(500).json({ message: 'AI service not configured' });
     }
 
-    // Generate summary using Claude
-    const message = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+    // Generate summary using OpenAI
+    const completion = await getOpenAI().chat.completions.create({
+      model: 'gpt-4o-mini',
       max_tokens: 200,
+      temperature: 0.7,
       messages: [
         {
+          role: 'system',
+          content: 'Você é um assistente de uma clínica de saúde. Responda apenas com a mensagem de saudação, sem explicações adicionais.'
+        },
+        {
           role: 'user',
-          content: `Você é um assistente de uma clínica de saúde. Crie uma mensagem de saudação curta e profissional (máximo 2 frases) para o bot do WhatsApp da clínica.
+          content: `Crie uma mensagem de saudação curta e profissional (máximo 2 frases) para o bot do WhatsApp da clínica.
 
 Nome da clínica: ${clinicName || 'a clínica'}
 
@@ -481,14 +490,12 @@ Regras:
 - Máximo 150 caracteres
 
 Exemplo de formato:
-"Olá, somos a [Nome]. [Breve descrição dos serviços em 1 frase]."
-
-Responda APENAS com a mensagem de saudação, sem explicações adicionais.`
+"Olá, somos a [Nome]. [Breve descrição dos serviços em 1 frase]."`
         }
       ]
     });
 
-    const summary = (message.content[0] as any).text?.trim() || '';
+    const summary = completion.choices[0]?.message?.content?.trim() || '';
 
     // Save the summary to the clinic document
     await db.collection(CLINICS).doc(clinicId).update({

@@ -308,7 +308,7 @@ def get_runtime_for_creator(creator_id: str, phone_number_id: Optional[str] = No
     # Ensure tool implementations are registered
     _ensure_tools_registered()
 
-    # Build agents using OpenAI
+    # Build agents using OpenAI (single agent creation path)
     agent_factory = None
     abstracted_agents = {}
 
@@ -316,17 +316,8 @@ def get_runtime_for_creator(creator_id: str, phone_number_id: Optional[str] = No
     provider_context = _build_provider_context(data_service, creator_profile, products_data)
 
     # Use OpenAI factory
-    logger.info(f"🤖 Building OpenAI agents for creator '{creator_id}'")
+    logger.info(f"Building OpenAI agents for creator '{creator_id}'")
     agents = build_agents_for_creator(data_service, creator_context, product_context)
-
-    # Also build abstracted agents for future use
-    try:
-        from src.providers.types import ProviderType
-        agent_factory = ProviderFactory.create_factory(ProviderType.OPENAI)
-        definitions = get_all_agent_definitions()
-        abstracted_agents = agent_factory.create_all_agents(definitions, provider_context)
-    except Exception as e:
-        logger.warning(f"Could not build abstracted OpenAI agents: {e}")
 
     # create workflow executor if workflow is active
     workflow_executor = None

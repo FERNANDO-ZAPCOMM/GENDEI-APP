@@ -1646,9 +1646,9 @@
       "description": "Complete the information to appear correctly"
     },
     "basicInfo": {
-      "nameLabel": "Business Name",
-      "namePlaceholder": "E.g.: São Paulo Clinic",
-      "nameHelp": "Use the official name as it appears on the facade",
+      "nameLabel": "Professional or Clinic Name",
+      "namePlaceholder": "E.g.: Dr. Ana Silva / São Paulo Clinic",
+      "nameHelp": "The name your patients will see when reaching out",
       "categoriesLabel": "Categories",
       "categoriesHint": "select one or more",
       "selectCategories": "Select categories",

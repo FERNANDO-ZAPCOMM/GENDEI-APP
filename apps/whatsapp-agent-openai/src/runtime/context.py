@@ -21,6 +21,7 @@ class Runtime:
     db: Any  # GendeiDatabase instance
     phone_number_id: Optional[str] = None
     access_token: Optional[str] = None
+    vertical_slug: Optional[str] = None  # Vertical (med, dental, psi, nutri, etc.)
 
 
 # For backward compatibility - alias

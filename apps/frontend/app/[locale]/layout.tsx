@@ -4,6 +4,7 @@ import { getMessages } from 'next-intl/server';
 import { AuthProvider } from '@/lib/auth-provider';
 import { QueryProvider } from '@/lib/query-provider';
 import { AuthGuard } from '@/components/AuthGuard';
+import { VerticalProvider } from '@/lib/vertical-provider';
 import { FacebookSDK } from '@/components/FacebookSDK';
 import { Toaster } from 'sonner';
 import { Urbanist, Roboto_Slab, Manrope, Borel } from 'next/font/google';
@@ -55,10 +56,12 @@ export default async function LocaleLayout({ children, params }: LocaleLayoutPro
         <NextIntlClientProvider messages={messages}>
           <AuthProvider>
             <QueryProvider>
-              <FacebookSDK appId={process.env.NEXT_PUBLIC_META_APP_ID || '1183114720193365'} version="v24.0" />
-              <AuthGuard>
-                {children}
-              </AuthGuard>
+              <VerticalProvider>
+                <FacebookSDK appId={process.env.NEXT_PUBLIC_META_APP_ID || '1183114720193365'} version="v24.0" />
+                <AuthGuard>
+                  {children}
+                  </AuthGuard>
+              </VerticalProvider>
               <Toaster
                 position="top-right"
                 richColors

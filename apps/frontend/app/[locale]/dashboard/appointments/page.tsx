@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import { useSearchParams } from 'next/navigation';
-import { format, addDays, isToday, parseISO, startOfWeek } from 'date-fns';
+import { format, addDays, parseISO, startOfWeek } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
   ChevronLeft,
@@ -41,6 +41,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { CalendarGrid } from '@/components/calendar/CalendarGrid';
+import { nowInTimezone } from '@/lib/timezone';
 import { getSpecialtyNames, getProfessionalSpecialties } from '@/lib/specialties';
 import type { Appointment, AppointmentStatus } from '@/lib/clinic-types';
 
@@ -112,14 +113,17 @@ export default function AppointmentsPage() {
     { startDate: weekStart, endDate: weekEnd }
   );
 
+  const clinicTimezone = clinic?.timezone || 'America/Sao_Paulo';
+
   const stats = useMemo(() => {
-    const todayAppts = appointments.filter(a => a.date === format(new Date(), 'yyyy-MM-dd'));
+    const todayStr = nowInTimezone(clinicTimezone).dateString;
+    const todayAppts = appointments.filter(a => a.date === todayStr);
     return {
       today: todayAppts.length,
       confirmed: todayAppts.filter(a => a.status === 'confirmed' || a.status === 'confirmed_presence').length,
       pending: todayAppts.filter(a => a.status === 'pending' || a.status === 'awaiting_confirmation').length,
     };
-  }, [appointments]);
+  }, [appointments, clinicTimezone]);
 
   const handlePrevWeek = () => {
     setSelectedDate(prev => addDays(prev, -7));
@@ -302,6 +306,7 @@ export default function AppointmentsPage() {
               timeBlocks={timeBlocks}
               professionals={professionals}
               selectedProfessional={selectedProfessional}
+              clinicTimezone={clinicTimezone}
               onAppointmentClick={handleAppointmentClick}
               onBlockTime={handleBlockTime}
               onRemoveBlock={handleRemoveBlock}
@@ -400,6 +405,7 @@ export default function AppointmentsPage() {
               timeBlocks={timeBlocks}
               professionals={professionals}
               selectedProfessional={selectedProfessional}
+              clinicTimezone={clinicTimezone}
               onAppointmentClick={handleAppointmentClick}
               onBlockTime={handleBlockTime}
               onRemoveBlock={handleRemoveBlock}

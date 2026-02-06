@@ -12,23 +12,23 @@ from .prompts import AGENT_PROMPTS
 # Model configurations
 FAST_MODEL = ModelConfig(
     tier="fast",
-    openai_model="gpt-4o-mini",
+    openai_model="gpt-4.1-mini",
     max_tokens=200,
     temperature=0.7,
-    tool_choice="required",
+    tool_choice="auto",
 )
 
 COMPLEX_MODEL = ModelConfig(
     tier="complex",
-    openai_model="gpt-4o",
+    openai_model="gpt-4.1",
     max_tokens=300,
     temperature=0.7,
-    tool_choice="required",
+    tool_choice="auto",
 )
 
 ROUTER_MODEL = ModelConfig(
     tier="fast",
-    openai_model="gpt-4o-mini",
+    openai_model="gpt-4.1-mini",
     max_tokens=50,
     temperature=0.1,
     tool_choice="auto",

@@ -5,10 +5,11 @@ OpenAI runner implementation using OpenAI Agents SDK.
 import logging
 from typing import Dict, Any, Optional, TYPE_CHECKING
 
-from agents import Runner  # type: ignore
+from agents import Runner, RunConfig  # type: ignore
 
 from ..base import BaseRunner, BaseAgent, ExecutionResult, AgentType
 from .session import OpenAISessionManager
+from src.runtime.context import Runtime
 
 if TYPE_CHECKING:
     from .factory import OpenAIAgent
@@ -33,7 +34,8 @@ class OpenAIRunner(BaseRunner):
         agent: BaseAgent,
         message: str,
         session_id: str,
-        context: Dict[str, Any]
+        context: Dict[str, Any],
+        runtime: Optional[Runtime] = None
     ) -> ExecutionResult:
         """
         Execute an OpenAI agent.
@@ -43,6 +45,7 @@ class OpenAIRunner(BaseRunner):
             message: User message
             session_id: Unique session identifier
             context: Additional context
+            runtime: Optional Runtime context for RunContextWrapper injection in tools
 
         Returns:
             ExecutionResult with response and metadata
@@ -67,7 +70,10 @@ class OpenAIRunner(BaseRunner):
             result = await Runner.run(
                 sdk_agent,
                 prompt,
-                session=session
+                session=session,
+                context=runtime,
+                max_turns=10,
+                run_config=RunConfig(workflow_name="whatsapp-clinic")
             )
 
             # Parse result
@@ -107,75 +113,39 @@ class OpenAIRunner(BaseRunner):
         """Build enriched prompt with user context."""
         parts = [message]
 
-        # Add user context if available
-        if "user_context" in context:
-            uc = context["user_context"]
-            user_info = []
-            if uc.get("name"):
-                user_info.append(f"Name: {uc['name']}")
-            if uc.get("stage"):
-                user_info.append(f"Stage: {uc['stage']}")
-            if user_info:
-                parts.append(f"\n[User: {', '.join(user_info)}]")
+        if context.get("patient_name"):
+            parts.append(f"\n[Paciente: {context['patient_name']}]")
+        if context.get("phone"):
+            parts.append(f"\n[Telefone: {context['phone']}]")
 
         return "\n".join(parts)
 
     def _parse_result(self, sdk_result: Any, agent: BaseAgent) -> ExecutionResult:
         """Parse SDK result into ExecutionResult."""
         try:
-            # Extract response text from SDK result (avoid raw RunResult dumps)
+            # Use SDK's final_output directly
             response_text = ""
-            if sdk_result is None:
-                response_text = ""
-            elif hasattr(sdk_result, "output_text") and sdk_result.output_text:
-                response_text = sdk_result.output_text
-            elif hasattr(sdk_result, "final_output") and sdk_result.final_output:
-                response_text = sdk_result.final_output
-            elif hasattr(sdk_result, "output") and sdk_result.output:
-                # SDK output can be a list of items with text/content
-                parts = []
-                for item in sdk_result.output:
-                    text = getattr(item, "text", None) or getattr(item, "content", None)
-                    if text:
-                        parts.append(str(text))
-                response_text = "\n".join(parts).strip()
-            else:
-                # Fallback to string, but strip noisy RunResult summary if present
-                raw = str(sdk_result)
-                if raw.startswith("RunResult"):
-                    response_text = ""
-                else:
-                    response_text = raw
+            if hasattr(sdk_result, "final_output") and sdk_result.final_output:
+                response_text = str(sdk_result.final_output)
 
-            # Check for handoff in the result
+            # Check for handoff
             handoff_to = None
-            if hasattr(sdk_result, "last_agent"):
-                last_agent = sdk_result.last_agent
-                if last_agent and hasattr(last_agent, "name"):
-                    # Check if we handed off to a different agent
-                    last_agent_name = last_agent.name
-                    if last_agent_name != agent.name:
-                        # Try to map agent name to AgentType
-                        for agent_type in AgentType:
-                            if agent_type.value in last_agent_name or last_agent_name in agent_type.value:
-                                handoff_to = agent_type
-                                break
+            if hasattr(sdk_result, "last_agent") and sdk_result.last_agent:
+                last_agent_name = sdk_result.last_agent.name
+                if last_agent_name != agent.name:
+                    for agent_type in AgentType:
+                        if agent_type.value in last_agent_name or last_agent_name in agent_type.value:
+                            handoff_to = agent_type
+                            break
 
-            # Extract tool calls if available
+            # Extract tool calls from new_items
             tool_calls = []
             if hasattr(sdk_result, "new_items"):
                 for item in sdk_result.new_items:
-                    if hasattr(item, "type") and item.type == "function_call":
+                    item_type = getattr(item, "type", "")
+                    if item_type == "function_call_output" or (hasattr(item, "raw_item") and getattr(getattr(item, "raw_item", None), "type", "") == "function_call"):
                         tool_calls.append({
-                            "name": getattr(item, "name", "unknown"),
-                            "arguments": getattr(item, "arguments", {}),
-                        })
-            elif hasattr(sdk_result, "output"):
-                for item in sdk_result.output:
-                    if getattr(item, "type", None) == "function_call":
-                        tool_calls.append({
-                            "name": getattr(item, "name", "unknown"),
-                            "arguments": getattr(item, "arguments", {}),
+                            "name": getattr(item, "name", getattr(getattr(item, "raw_item", None), "name", "unknown")),
                         })
 
             return ExecutionResult(
@@ -191,8 +161,4 @@ class OpenAIRunner(BaseRunner):
 
         except Exception as e:
             logger.warning(f"Error parsing SDK result: {e}")
-            return ExecutionResult(
-                success=True,
-                response=str(sdk_result) if sdk_result else "",
-                metadata={"parse_error": str(e)}
-            )
+            return ExecutionResult(success=True, response="", metadata={"parse_error": str(e)})

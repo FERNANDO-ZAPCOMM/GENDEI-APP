@@ -45,6 +45,8 @@ class Clinic:
     cnpj: Optional[str] = None
     description: str = ""           # Clinic description
     greeting_summary: str = ""      # AI-generated greeting summary
+    vertical: str = ""              # Vertical slug (med, dental, psi, nutri, etc.)
+    category: str = ""              # Clinic category (clinica_medica, odontologia, etc.)
 
     # WhatsApp connection
     whatsapp_phone_number_id: Optional[str] = None
@@ -85,6 +87,8 @@ class Clinic:
             "cnpj": self.cnpj,
             "description": self.description,
             "greetingSummary": self.greeting_summary,
+            "vertical": self.vertical,
+            "category": self.category,
             "whatsappPhoneNumberId": self.whatsapp_phone_number_id,
             "whatsappWabaId": self.whatsapp_waba_id,
             "whatsappConnected": self.whatsapp_connected,
@@ -115,6 +119,8 @@ class Clinic:
             cnpj=data.get("cnpj"),
             description=data.get("description", ""),
             greeting_summary=data.get("greetingSummary", ""),
+            vertical=data.get("vertical", ""),
+            category=data.get("category", ""),
             whatsapp_phone_number_id=data.get("whatsappPhoneNumberId"),
             whatsapp_waba_id=data.get("whatsappWabaId"),
             whatsapp_access_token=data.get("whatsappAccessToken"),

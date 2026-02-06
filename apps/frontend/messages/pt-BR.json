@@ -1645,9 +1645,9 @@
       "description": "Complete as informações para aparecer corretamente"
     },
     "basicInfo": {
-      "nameLabel": "Nome do Negócio",
-      "namePlaceholder": "Ex: Clínica São Paulo",
-      "nameHelp": "Use o nome oficial como aparece na fachada",
+      "nameLabel": "Nome do Profissional ou Clínica",
+      "namePlaceholder": "Ex: Dra. Ana Silva / Clínica São Paulo",
+      "nameHelp": "O nome que seus pacientes vão ver ao entrar em contato",
       "categoriesLabel": "Categorias",
       "categoriesHint": "selecione uma ou mais",
       "selectCategories": "Selecione as categorias",

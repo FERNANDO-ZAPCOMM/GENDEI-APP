@@ -1,5 +1,8 @@
 """
 OpenAI provider implementation using OpenAI Agents SDK.
+
+Uses direct @function_tool functions from function_tools.py (SDK-native tools)
+instead of the ToolConverter, and attaches SDK guardrails to agents.
 """
 
 from typing import Dict, List, Any, Optional
@@ -11,10 +14,8 @@ from ..base import (
     BaseAgent, BaseAgentFactory, BaseRunner,
     AgentDefinition, AgentType, ModelConfig
 )
-from ..tools.base import get_tool_registry
 from .runner import OpenAIRunner
 from .session import OpenAISessionManager
-from .tools import OpenAIToolConverter
 
 logger = logging.getLogger(__name__)
 
@@ -38,11 +39,9 @@ class OpenAIAgent(BaseAgent):
 
 
 class OpenAIAgentFactory(BaseAgentFactory):
-    """Factory for creating OpenAI agents."""
+    """Factory for creating OpenAI agents using direct SDK tools and guardrails."""
 
     def __init__(self):
-        self.tool_registry = get_tool_registry()
-        self.tool_converter = OpenAIToolConverter()
         self.session_manager = OpenAISessionManager()
         self._runner: Optional[OpenAIRunner] = None
 
@@ -53,9 +52,10 @@ class OpenAIAgentFactory(BaseAgentFactory):
     ) -> OpenAIAgent:
         """Create an OpenAI agent from definition."""
 
-        # Get and convert tools
-        tool_defs = self.tool_registry.get_tools(definition.tools)
-        sdk_tools = self.tool_converter.convert_all(tool_defs, context)
+        # Use direct @function_tool functions from function_tools.py
+        # These are SDK-native tools with RunContextWrapper support
+        from src.agents.function_tools import get_tools_for_agent
+        sdk_tools = get_tools_for_agent(definition.name)
 
         # Create model settings
         model_settings = ModelSettings(
@@ -69,16 +69,22 @@ class OpenAIAgentFactory(BaseAgentFactory):
         # Build system prompt with context
         system_prompt = self._build_prompt(definition, context)
 
-        # Create SDK agent
+        # Load SDK guardrails
+        from src.agents.guardrails import injection_guard, output_sanitizer
+
+        # Create SDK agent with guardrails
         sdk_agent = Agent(
             name=definition.name,
+            handoff_description=definition.description,
             instructions=system_prompt,
             model=definition.model_config.openai_model,
             model_settings=model_settings,
             tools=sdk_tools,
+            input_guardrails=[injection_guard],
+            output_guardrails=[output_sanitizer],
         )
 
-        logger.debug(f"Created OpenAI agent: {definition.name} with {len(sdk_tools)} tools")
+        logger.debug(f"Created OpenAI agent: {definition.name} with {len(sdk_tools)} tools, guardrails attached")
 
         return OpenAIAgent(
             definition=definition,
@@ -102,7 +108,7 @@ class OpenAIAgentFactory(BaseAgentFactory):
         # Second pass: set up handoffs after all agents are created
         self._setup_handoffs(agents, definitions)
 
-        logger.info(f"Created {len(agents)} OpenAI agents")
+        logger.info(f"Created {len(agents)} OpenAI agents with SDK guardrails")
         return agents
 
     def _setup_handoffs(
@@ -141,6 +147,21 @@ class OpenAIAgentFactory(BaseAgentFactory):
             prompt = prompt.replace("{clinic_name}", str(clinic.get("name", "Clínica")))
             prompt = prompt.replace("{clinic_context}", self._format_clinic_context(clinic))
 
+        # Inject vertical terminology
+        if "vertical" in context:
+            v = context["vertical"]
+            appointment_term = v.get("appointment_term", "consulta")
+            appointment_plural = v.get("appointment_plural", "consultas")
+            prompt = prompt.replace("{appointment_term}", appointment_term)
+            prompt = prompt.replace("{appointment_plural}", appointment_plural)
+            prompt = prompt.replace("{appointment_term_upper}", appointment_term.upper())
+            prompt = prompt.replace("{appointment_plural_upper}", appointment_plural.upper())
+            prompt = prompt.replace("{client_term}", v.get("client_term", "paciente"))
+            prompt = prompt.replace("{professional_term}", v.get("professional_term", "médico(a)"))
+            prompt = prompt.replace("{professional_emoji}", v.get("professional_emoji", ""))
+            prompt = prompt.replace("{convenio_instruction}", v.get("convenio_instruction", ""))
+            prompt = prompt.replace("{no_emoji_reason}", "ambiente profissional")
+
         # Inject professionals context
         if "professionals" in context:
             prof_str = self._format_professionals(context["professionals"])
@@ -173,7 +194,6 @@ class OpenAIAgentFactory(BaseAgentFactory):
         if not greeting_summary:
             description = (clinic.get("description") or "").strip()
             if description:
-                # Simple fallback summary: first sentence or first 180 chars.
                 summary = description.split(".")[0].strip()
                 if not summary:
                     summary = description[:180].strip()

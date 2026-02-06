@@ -4,6 +4,12 @@ import { routing } from './i18n/routing';
 
 const intlMiddleware = createIntlMiddleware(routing);
 
+// Known vertical subdomains
+const VERTICAL_SUBDOMAINS = new Set([
+  'med', 'dental', 'psi', 'nutri', 'fisio',
+  'dermato', 'oftalmo', 'pediatra', 'fono', 'estetica',
+]);
+
 // Protected routes that require authentication
 const PROTECTED_PATHS = [
   '/dashboard',
@@ -24,6 +30,34 @@ const PUBLIC_PATHS = [
   '/meta/callback',
 ];
 
+/**
+ * Extract the vertical slug from the request hostname.
+ * Examples:
+ *   "nutri.gendei.app" → "nutri"
+ *   "dental.gendei.app" → "dental"
+ *   "app.gendei.app" → null (not a vertical)
+ *   "gendei.app" → null (no subdomain)
+ *   "localhost:3002" → uses ?vertical= query param for dev
+ */
+function extractVertical(request: NextRequest): string | null {
+  const hostname = request.headers.get('host') || '';
+
+  // Development: allow ?vertical=nutri override
+  if (hostname.includes('localhost') || hostname.match(/^127\./)) {
+    return request.nextUrl.searchParams.get('vertical') || null;
+  }
+
+  const parts = hostname.split('.');
+  if (parts.length >= 3) {
+    const subdomain = parts[0];
+    if (VERTICAL_SUBDOMAINS.has(subdomain)) {
+      return subdomain;
+    }
+  }
+
+  return null;
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
@@ -36,6 +70,9 @@ export async function middleware(request: NextRequest) {
   if (pathname === '/meta/callback' || pathname.startsWith('/meta/callback?')) {
     return NextResponse.next();
   }
+
+  // Detect vertical from subdomain
+  const vertical = extractVertical(request);
 
   // Extract locale from path (supports pt-BR and en)
   const localeMatch = pathname.match(/^\/(pt-BR|en)/);
@@ -80,7 +117,14 @@ export async function middleware(request: NextRequest) {
 
   // Apply internationalization middleware
   // Type assertion to handle Next.js type conflicts in monorepo setup
-  return intlMiddleware(request as any);
+  const response = intlMiddleware(request as any) as NextResponse;
+
+  // Inject vertical into response header so client components can read it
+  if (vertical) {
+    response.headers.set('x-gendei-vertical', vertical);
+  }
+
+  return response;
 }
 
 export const config = {

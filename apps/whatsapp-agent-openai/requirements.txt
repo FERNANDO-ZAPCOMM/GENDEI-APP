@@ -18,8 +18,8 @@ google-cloud-storage>=2.18.0
 google-auth>=2.34.0
 
 # AI Provider SDK
-openai>=1.40.0
-openai-agents>=0.6.3
+openai>=2.0.0
+openai-agents>=0.8.0
 
 # HTTP & Data
 requests==2.32.0

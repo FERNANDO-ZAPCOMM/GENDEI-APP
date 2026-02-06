@@ -47,7 +47,8 @@ try:
         format_reminder_message,
         mark_reminder_sent,
     )
-    from src.flows.handler import FlowsHandler, CLINICA_MEDICA_SPECIALTIES
+    from src.flows.handler import FlowsHandler
+    from src.vertical_config import get_vertical_config, ALL_SPECIALTIES
     from src.flows.manager import send_whatsapp_flow, send_booking_flow, generate_flow_token
     from src.flows.crypto import handle_encrypted_flow_request, prepare_flow_response, is_encryption_configured
     from src.agents.orchestrator import get_orchestrator
@@ -98,24 +99,37 @@ async def run_agent_response(
     if not db:
         return
 
-    token = set_runtime(Runtime(
+    # Get vertical slug from clinic data
+    clinic_obj = db.get_clinic(clinic_id)
+    v_slug = getattr(clinic_obj, 'vertical', '') if clinic_obj else ''
+
+    runtime = Runtime(
         clinic_id=clinic_id,
         db=db,
         phone_number_id=phone_number_id,
-        access_token=access_token
-    ))
+        access_token=access_token,
+        vertical_slug=v_slug or None,
+    )
+    # Keep contextvars for backward compatibility with non-SDK code paths
+    token = set_runtime(runtime)
     try:
         orchestrator = get_orchestrator(clinic_id, db)
         result = await orchestrator.process_message(
             phone=phone,
             message=message,
-            contact_name=contact_name
+            contact_name=contact_name,
+            runtime=runtime  # Pass Runtime for SDK RunContextWrapper injection
         )
     finally:
         reset_runtime(token)
 
-    # If agent didn't call tools to send a message, send response directly
-    if result and result.success and result.response and not result.tool_calls:
+    # If agent didn't send a WhatsApp message via tools, send response directly
+    # Note: handoffs (triage→greeter) appear as tool_calls but don't send messages,
+    # so we check specifically for send_text_message rather than any tool call
+    message_sent = any(
+        tc.get("name") == "send_text_message" for tc in (result.tool_calls or [])
+    )
+    if result and result.success and result.response and not message_sent:
         # Avoid sending SDK debug dumps to users
         if result.response.strip().startswith("RunResult"):
             return
@@ -194,7 +208,7 @@ def build_deterministic_greeting(clinic_id: str) -> str:
         return (
             f"Olá! Tudo bem?\n\n"
             f"{summary}\n\n"
-            "Como posso ajudar você hoje?"
+            "O que você deseja?"
         )
 
     if clinic_name:
@@ -202,10 +216,10 @@ def build_deterministic_greeting(clinic_id: str) -> str:
             f"Olá! Tudo bem?\n\n"
             f"Seja bem-vindo(a) à {clinic_name}. "
             f"Estou aqui para ajudá-lo(a) com informações e agendamentos.\n\n"
-            "Como posso ajudar você hoje?"
+            "O que você deseja?"
         )
 
-    return "Olá! Tudo bem?\n\nComo posso ajudar você hoje?"
+    return "Olá! Tudo bem?\n\nO que você deseja?"
 
 
 def _adaptive_buffer_seconds(first_message_text: str) -> float:
@@ -339,22 +353,28 @@ async def get_ai_response(
                         clinic_info += f" - R$ {price:.2f}".replace('.', ',')
                     clinic_info += "\n"
 
-        system_prompt = f"""Você é o assistente virtual amigável de uma clínica médica.
+        # Get vertical-aware terminology
+        vertical_info = clinic_context.get("vertical", {}) if clinic_context else {}
+        apt_term = vertical_info.get("appointment_term", "consulta")
+        apt_plural = vertical_info.get("appointment_plural", "consultas")
+        client_t = vertical_info.get("client_term", "paciente")
+
+        system_prompt = f"""Você é o assistente virtual amigável de uma clínica.
 
 INFORMAÇÕES DA CLÍNICA:
 {clinic_info if clinic_info else "Informações não disponíveis no momento."}
 
 SUAS RESPONSABILIDADES:
 1. Responder perguntas sobre a clínica (endereço, horário, profissionais, serviços)
-2. Ajudar pacientes a agendar consultas
-3. Informar sobre consultas existentes
+2. Ajudar {client_t}s a agendar {apt_plural}
+3. Informar sobre {apt_plural} existentes
 4. Ser educado, prestativo e conciso
 
 REGRAS IMPORTANTES:
 - Responda SEMPRE em português brasileiro
 - Seja breve e direto (máximo 2-3 frases por resposta)
 - Use formatação WhatsApp (*negrito*, _itálico_)
-- Se não souber uma informação específica, sugira que o paciente entre em contato por telefone
+- Se não souber uma informação específica, sugira que o {client_t} entre em contato por telefone
 - Para agendar, pergunte: qual profissional, qual data/horário preferido
 - Nunca invente informações que não estão no contexto
 
@@ -392,6 +412,7 @@ def load_clinic_context(clinic_id: str) -> Dict[str, Any]:
     try:
         clinic = db.get_clinic(clinic_id)
         if clinic:
+            vertical_slug = getattr(clinic, 'vertical', '') or ''
             context["clinic"] = {
                 "name": clinic.name,
                 "address": getattr(clinic, 'address', ''),
@@ -399,6 +420,19 @@ def load_clinic_context(clinic_id: str) -> Dict[str, Any]:
                 "opening_hours": getattr(clinic, 'opening_hours', ''),
                 "description": getattr(clinic, 'description', ''),
                 "greeting_summary": getattr(clinic, 'greeting_summary', ''),
+                "vertical": vertical_slug,
+            }
+            # Add vertical config for prompt formatting
+            vc = get_vertical_config(vertical_slug)
+            context["vertical"] = {
+                "slug": vc.slug,
+                "appointment_term": vc.terminology.appointment_term,
+                "appointment_plural": vc.terminology.appointment_term_plural,
+                "client_term": vc.terminology.client_term,
+                "professional_term": vc.terminology.professional_term,
+                "professional_emoji": vc.terminology.professional_emoji,
+                "has_convenio": vc.features.has_convenio,
+                "has_deposit": vc.features.has_deposit,
             }
 
         professionals = db.get_clinic_professionals(clinic_id)
@@ -1701,11 +1735,13 @@ async def handle_conversational_booking(
                             access_token
                         )
                         # Set runtime context for messaging functions
+                        _cli = db.get_clinic(clinic_id) if db else None
                         runtime_token = set_runtime(Runtime(
                             clinic_id=clinic_id,
                             db=db,
                             phone_number_id=phone_number_id,
-                            access_token=access_token
+                            access_token=access_token,
+                            vertical_slug=getattr(_cli, 'vertical', '') or None,
                         ))
                         try:
                             await send_pix_payment_to_customer(
@@ -2370,6 +2406,11 @@ async def send_initial_greeting(
     clinic = db.get_clinic(clinic_id) if db else None
     clinic_name = clinic.name if clinic else "nossa clínica"
 
+    # Get vertical config for terminology
+    vertical_slug = getattr(clinic, 'vertical', '') if clinic else ''
+    vc = get_vertical_config(vertical_slug)
+    term = vc.terminology
+
     # Check for upcoming appointments
     upcoming_appointments = get_patient_upcoming_appointments(clinic_id, phone)
 
@@ -2394,12 +2435,12 @@ async def send_initial_greeting(
             state["current_appointment_professional_id"] = apt.professional_id
             db.save_conversation_state(clinic_id, phone, state)
 
-        # Build personalized greeting
+        # Build personalized greeting with vertical-aware terminology
         greeting = f"👋 *Olá{', ' + greeting_name if greeting_name else ''}!*\n\n"
-        greeting += f"Vi que você tem uma consulta agendada:\n\n"
+        greeting += f"Vi que você tem uma {term.appointment_term} agendada:\n\n"
         greeting += f"📅 *{apt_date_formatted}*\n"
-        greeting += f"👨‍⚕️ *{apt.professional_name}*\n\n"
-        greeting += f"Como posso ajudar?"
+        greeting += f"{term.professional_emoji} *{apt.professional_name}*\n\n"
+        greeting += f"O que você deseja?"
 
         buttons = [
             {"id": "apt_reagendar", "title": "Reagendar"},
@@ -2416,20 +2457,11 @@ async def send_initial_greeting(
         logger.info(f"👋 Sent appointment-aware greeting to {phone} (apt: {apt.id})")
 
     else:
-        # No upcoming appointments - HUMAN-LIKE simple text greeting (no buttons initially)
-        # Save state with timestamp for follow-up button logic
-        if db:
-            state = db.load_conversation_state(clinic_id, phone)
-            state["state"] = "awaiting_initial_response"
-            state["clinic_id"] = clinic_id
-            state["greeting_sent_at"] = datetime.now().isoformat()
-            state["buttons_sent"] = False
-            db.save_conversation_state(clinic_id, phone, state)
-
+        # No upcoming appointments - send greeting with action buttons
         # Check workflow mode (default to 'booking' for backward compatibility)
         workflow_mode = getattr(clinic, 'workflow_mode', 'booking') if clinic else 'booking'
 
-        # Build personalized greeting with clinic context (SIMPLE TEXT, no buttons)
+        # Build personalized greeting with clinic context
         greeting_message = f"👋 Bem-vindo(a) a *{clinic_name}*!\n\n"
 
         # Add greeting summary if available
@@ -2464,23 +2496,35 @@ async def send_initial_greeting(
                     else:
                         greeting_message += f"🏥 Atendemos em *{', '.join(spec_list)}*\n\n"
 
-        greeting_message += "Como posso ajudar?"
+        greeting_message += "O que você deseja?"
 
-        # Send simple text message (NO buttons) - like a real human agent
-        await send_whatsapp_message(
+        # Configure buttons based on workflow mode
+        if workflow_mode == 'info':
+            buttons = [
+                {"id": "greeting_nao", "title": "TIRAR DÚVIDAS"},
+                {"id": "greeting_contato", "title": "FALAR COM ATENDENTE"},
+            ]
+        else:
+            buttons = [
+                {"id": "greeting_sim", "title": "AGENDAR HORÁRIO"},
+                {"id": "greeting_nao", "title": "TIRAR DÚVIDAS"},
+            ]
+
+        # Save state for greeting response handling
+        if db:
+            state = db.load_conversation_state(clinic_id, phone)
+            state["clinic_id"] = clinic_id
+            state["buttons_sent"] = True
+            state["state"] = "awaiting_greeting_response"
+            db.save_conversation_state(clinic_id, phone, state)
+
+        await send_whatsapp_buttons(
             phone_number_id, phone,
             greeting_message,
+            buttons,
             access_token
         )
-        logger.info(f"👋 Sent human-like text greeting to {phone} (mode: {workflow_mode}) - waiting for natural response")
-
-        # Schedule follow-up buttons if no response in 60 seconds
-        asyncio.create_task(
-            send_followup_buttons_if_no_response(
-                clinic_id, phone, phone_number_id, access_token,
-                workflow_mode=workflow_mode, delay_seconds=60
-            )
-        )
+        logger.info(f"👋 Sent greeting with buttons to {phone} (mode: {workflow_mode})")
 
 
 async def send_followup_buttons_if_no_response(
@@ -3052,11 +3096,13 @@ async def handle_flow_completion(
                         await send_whatsapp_message(phone_number_id, phone, confirmation_msg, access_token)
 
                         # Send PIX payment (set runtime context for messaging functions)
+                        _cli2 = db.get_clinic(clinic_id) if db else None
                         runtime_token = set_runtime(Runtime(
                             clinic_id=clinic_id,
                             db=db,
                             phone_number_id=phone_number_id,
-                            access_token=access_token
+                            access_token=access_token,
+                            vertical_slug=getattr(_cli2, 'vertical', '') or None,
                         ))
                         try:
                             await send_pix_payment_to_customer(
@@ -3302,7 +3348,7 @@ async def handle_scheduling_intent(
             # Use primary (first) specialty for display, or fallback to old format
             specialties = getattr(prof, 'specialties', []) or []
             specialty = specialties[0] if specialties else (getattr(prof, 'specialty', '') or '')
-            specialty_name = CLINICA_MEDICA_SPECIALTIES.get(specialty, specialty) if specialty else "Especialista"
+            specialty_name = ALL_SPECIALTIES.get(specialty, specialty) if specialty else "Especialista"
             prof_name = (prof.full_name or prof.name or "")[:72]
             especialidades.append({
                 "id": prof.id,
@@ -4323,13 +4369,17 @@ async def process_message(
     except Exception as e:
         logger.error(f"❌ AI error: {e}")
 
-    # Default fallback response
+    # Default fallback response (vertical-aware)
+    fallback_vc = get_vertical_config(
+        getattr(db.get_clinic(clinic_id), 'vertical', '') if db else ''
+    )
+    fallback_term = fallback_vc.terminology
     await send_whatsapp_message(
         phone_number_id, phone,
-        "Olá! 👋\n\nSou o assistente virtual da clínica.\n\nPosso ajudar você a:\n"
-        "• *Agendar* uma consulta\n"
-        "• Ver *suas consultas* agendadas\n\n"
-        "Como posso ajudar?",
+        f"Olá! 👋\n\nSou o assistente virtual da clínica.\n\nPosso ajudar você a:\n"
+        f"• *Agendar* uma {fallback_term.appointment_term}\n"
+        f"• Ver *suas {fallback_term.appointment_term_plural}* agendadas\n\n"
+        f"Como posso ajudar?",
         access_token
     )
 
