@@ -1646,7 +1646,7 @@
       "description": "Complete the information to appear correctly"
     },
     "basicInfo": {
-      "nameLabel": "Professional or Clinic Name",
+      "nameLabel": "Clinic or Professional Name",
       "namePlaceholder": "E.g.: Dr. Ana Silva / São Paulo Clinic",
       "nameHelp": "The name your patients will see when reaching out",
       "categoriesLabel": "Categories",

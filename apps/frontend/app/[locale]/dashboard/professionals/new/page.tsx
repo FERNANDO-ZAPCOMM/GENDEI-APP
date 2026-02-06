@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useTranslations, useLocale } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Loader2, Camera, User, DollarSign, Save, Clock, Plus, Trash2, Briefcase, Mail, Phone, CheckCircle2 } from 'lucide-react';
@@ -18,7 +18,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { PageLoader } from '@/components/PageLoader';
 import { filterSpecialties } from '@/lib/specialties';
-import { getSpecialtiesForCategories } from '@/lib/clinic-categories';
+import { useVertical } from '@/lib/vertical-provider';
 import { uploadFile } from '@/lib/upload';
 import type { WorkingHoursBackend } from '@/lib/clinic-types';
 import {
@@ -30,11 +30,11 @@ import {
 } from '@/components/ui/select';
 
 const DAYS_OF_WEEK = [
-  { key: '0', label: 'Segunda-feira' },
-  { key: '1', label: 'Terça-feira' },
-  { key: '2', label: 'Quarta-feira' },
-  { key: '3', label: 'Quinta-feira' },
-  { key: '4', label: 'Sexta-feira' },
+  { key: '0', label: 'Segunda' },
+  { key: '1', label: 'Terça' },
+  { key: '2', label: 'Quarta' },
+  { key: '3', label: 'Quinta' },
+  { key: '4', label: 'Sexta' },
   { key: '5', label: 'Sábado' },
   { key: '6', label: 'Domingo' },
 ];
@@ -55,11 +55,17 @@ const isValidEmail = (email: string): boolean => {
 };
 
 // Name formatting helper - capitalize first letter of each word
+// Portuguese prepositions/articles stay lowercase (except when first word)
+const LOWERCASE_WORDS = ['de', 'do', 'da', 'dos', 'das', 'com', 'e', 'em', 'no', 'na', 'nos', 'nas', 'por', 'para'];
 const formatName = (value: string): string => {
   return value
     .toLowerCase()
     .split(' ')
-    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .map((word, index) => {
+      if (!word) return word;
+      if (index > 0 && LOWERCASE_WORDS.includes(word)) return word;
+      return word.charAt(0).toUpperCase() + word.slice(1);
+    })
     .join(' ');
 };
 
@@ -72,15 +78,6 @@ interface ProfessionalService {
 }
 
 type TabKey = 'personal' | 'contact' | 'services' | 'hours';
-
-// Default working hours: Monday to Friday 9-18
-const defaultWorkingHours: WorkingHoursBackend = {
-  '0': [{ start: '09:00', end: '18:00' }],
-  '1': [{ start: '09:00', end: '18:00' }],
-  '2': [{ start: '09:00', end: '18:00' }],
-  '3': [{ start: '09:00', end: '18:00' }],
-  '4': [{ start: '09:00', end: '18:00' }],
-};
 
 interface ProfessionalFormData {
   name: string;
@@ -104,10 +101,25 @@ export default function NewProfessionalPage() {
   const { currentClinic: clinic, isLoading: clinicLoading } = useClinic();
   const { create } = useProfessionals(clinic?.id || '');
 
-  // Get available specialties based on clinic categories
-  const clinicCategories = (clinic as any)?.categories || [];
-  const allowedSpecialtyIds = getSpecialtiesForCategories(clinicCategories);
-  const availableSpecialties = filterSpecialties(allowedSpecialtyIds);
+  // Redirect to clinic settings if profile isn't complete
+  useEffect(() => {
+    if (!clinicLoading && clinic) {
+      const clinicData = clinic as any;
+      const hasClinicProfile = !!(
+        clinicData?.name &&
+        clinicData?.name !== 'Nova Clínica' &&
+        clinicData?.phone
+      );
+      if (!hasClinicProfile) {
+        toast.error('Complete o perfil da clínica antes de adicionar profissionais');
+        router.push(`/${locale}/dashboard/clinic`);
+      }
+    }
+  }, [clinicLoading, clinic, router, locale]);
+
+  // Get available specialties based on the clinic's vertical
+  const vertical = useVertical();
+  const availableSpecialties = filterSpecialties(vertical.specialties);
 
   const [formData, setFormData] = useState<ProfessionalFormData>({
     name: '',
@@ -119,7 +131,7 @@ export default function NewProfessionalPage() {
     active: true,
     photoUrl: '',
     bio: '',
-    workingHours: { ...defaultWorkingHours },
+    workingHours: {},
     services: [],
   });
   const [isSaving, setIsSaving] = useState(false);
@@ -646,7 +658,7 @@ export default function NewProfessionalPage() {
                           </div>
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                             <div className="space-y-1">
-                              <Label className="text-xs">Nome</Label>
+                              <Label className="text-sm">Nome</Label>
                               <Input
                                 value={service.name}
                                 onChange={(e) => updateService(service.id, { name: e.target.value })}
@@ -656,7 +668,7 @@ export default function NewProfessionalPage() {
                               />
                             </div>
                             <div className="space-y-1">
-                              <Label className="text-xs">Duração</Label>
+                              <Label className="text-sm">Duração</Label>
                               <Select
                                 value={String(service.duration)}
                                 onValueChange={(value) => updateService(service.id, { duration: parseInt(value) })}
@@ -676,7 +688,7 @@ export default function NewProfessionalPage() {
                               </Select>
                             </div>
                             <div className="space-y-1">
-                              <Label className="text-xs">Valor (R$)</Label>
+                              <Label className="text-sm">Valor (R$)</Label>
                               <div className="relative">
                                 <DollarSign className="absolute left-2 top-1/2 transform -translate-y-1/2 w-3 h-3 text-gray-400" />
                                 <Input

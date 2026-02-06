@@ -1645,7 +1645,7 @@
       "description": "Complete as informações para aparecer corretamente"
     },
     "basicInfo": {
-      "nameLabel": "Nome do Profissional ou Clínica",
+      "nameLabel": "Nome da Clínica ou Profissional",
       "namePlaceholder": "Ex: Dra. Ana Silva / Clínica São Paulo",
       "nameHelp": "O nome que seus pacientes vão ver ao entrar em contato",
       "categoriesLabel": "Categorias",

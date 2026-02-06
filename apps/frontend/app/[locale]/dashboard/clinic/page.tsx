@@ -59,6 +59,21 @@ const COMMON_CONVENIOS = [
   'São Francisco',
 ];
 
+// Name formatting helper - capitalize first letter of each word
+// Portuguese prepositions/articles stay lowercase (except when first word)
+const LOWERCASE_WORDS = ['de', 'do', 'da', 'dos', 'das', 'com', 'e', 'em', 'no', 'na', 'nos', 'nas', 'por', 'para'];
+const formatName = (value: string): string => {
+  return value
+    .toLowerCase()
+    .split(' ')
+    .map((word, index) => {
+      if (!word) return word;
+      if (index > 0 && LOWERCASE_WORDS.includes(word)) return word;
+      return word.charAt(0).toUpperCase() + word.slice(1);
+    })
+    .join(' ');
+};
+
 // Phone formatting helper
 const formatPhone = (value: string): string => {
   const numbers = value.replace(/\D/g, '');
@@ -114,7 +129,7 @@ export default function ClinicSettingsPage() {
   const [addressData, setAddressData] = useState<ClinicAddress | undefined>();
   const [emailError, setEmailError] = useState('');
   const [paymentSettings, setPaymentSettings] = useState({
-    acceptsParticular: true,
+    acceptsParticular: false,
     acceptsConvenio: false,
     convenioList: [] as string[],
   });
@@ -402,7 +417,7 @@ export default function ClinicSettingsPage() {
                     <Input
                       id="name"
                       value={formData.name}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      onChange={(e) => setFormData({ ...formData, name: formatName(e.target.value) })}
                       placeholder={t('clinicPage.basicInfo.namePlaceholder')}
                     />
                     <p className="text-xs text-muted-foreground">

@@ -301,14 +301,6 @@ export default function DashboardPage() {
               Ver Agenda
             </Button>
           </Link>
-          {!isWhatsAppConnected && (
-            <Link href={`/${locale}/dashboard/whatsapp`}>
-              <Button className="bg-emerald-600 hover:bg-emerald-700">
-                <CheckCircle className="w-4 h-4 mr-2" />
-                Conectar WhatsApp
-              </Button>
-            </Link>
-          )}
         </CardContent>
       </Card>
     </div>

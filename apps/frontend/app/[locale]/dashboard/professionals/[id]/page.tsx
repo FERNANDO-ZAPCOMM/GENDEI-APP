@@ -18,7 +18,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { PageLoader } from '@/components/PageLoader';
 import { filterSpecialties } from '@/lib/specialties';
-import { getSpecialtiesForCategories } from '@/lib/clinic-categories';
+import { useVertical } from '@/lib/vertical-provider';
 import { uploadFile } from '@/lib/upload';
 import type { WorkingHoursBackend } from '@/lib/clinic-types';
 import {
@@ -41,11 +41,11 @@ import {
 } from '@/components/ui/alert-dialog';
 
 const DAYS_OF_WEEK = [
-  { key: '0', label: 'Segunda-feira' },
-  { key: '1', label: 'Terça-feira' },
-  { key: '2', label: 'Quarta-feira' },
-  { key: '3', label: 'Quinta-feira' },
-  { key: '4', label: 'Sexta-feira' },
+  { key: '0', label: 'Segunda' },
+  { key: '1', label: 'Terça' },
+  { key: '2', label: 'Quarta' },
+  { key: '3', label: 'Quinta' },
+  { key: '4', label: 'Sexta' },
   { key: '5', label: 'Sábado' },
   { key: '6', label: 'Domingo' },
 ];
@@ -66,11 +66,17 @@ const isValidEmail = (email: string): boolean => {
 };
 
 // Name formatting helper - capitalize first letter of each word
+// Portuguese prepositions/articles stay lowercase (except when first word)
+const LOWERCASE_WORDS = ['de', 'do', 'da', 'dos', 'das', 'com', 'e', 'em', 'no', 'na', 'nos', 'nas', 'por', 'para'];
 const formatName = (value: string): string => {
   return value
     .toLowerCase()
     .split(' ')
-    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .map((word, index) => {
+      if (!word) return word;
+      if (index > 0 && LOWERCASE_WORDS.includes(word)) return word;
+      return word.charAt(0).toUpperCase() + word.slice(1);
+    })
     .join(' ');
 };
 
@@ -112,10 +118,9 @@ export default function ProfessionalEditPage() {
   );
   const { update, remove } = useProfessionals(clinic?.id || '');
 
-  // Get available specialties based on clinic categories
-  const clinicCategories = (clinic as any)?.categories || [];
-  const allowedSpecialtyIds = getSpecialtiesForCategories(clinicCategories);
-  const availableSpecialties = filterSpecialties(allowedSpecialtyIds);
+  // Get available specialties based on the clinic's vertical
+  const vertical = useVertical();
+  const availableSpecialties = filterSpecialties(vertical.specialties);
 
   const [formData, setFormData] = useState<ProfessionalFormData>({
     name: '',
@@ -698,7 +703,7 @@ export default function ProfessionalEditPage() {
                           </div>
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                             <div className="space-y-1">
-                              <Label className="text-xs">Nome</Label>
+                              <Label className="text-sm">Nome</Label>
                               <Input
                                 value={service.name}
                                 onChange={(e) => updateService(service.id, { name: e.target.value })}
@@ -708,7 +713,7 @@ export default function ProfessionalEditPage() {
                               />
                             </div>
                             <div className="space-y-1">
-                              <Label className="text-xs">Duração</Label>
+                              <Label className="text-sm">Duração</Label>
                               <Select
                                 value={String(service.duration)}
                                 onValueChange={(value) => updateService(service.id, { duration: parseInt(value) })}
@@ -728,7 +733,7 @@ export default function ProfessionalEditPage() {
                               </Select>
                             </div>
                             <div className="space-y-1">
-                              <Label className="text-xs">Valor (R$)</Label>
+                              <Label className="text-sm">Valor (R$)</Label>
                               <div className="relative">
                                 <DollarSign className="absolute left-2 top-1/2 transform -translate-y-1/2 w-3 h-3 text-gray-400" />
                                 <Input

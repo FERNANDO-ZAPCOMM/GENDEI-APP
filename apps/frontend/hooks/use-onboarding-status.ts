@@ -17,21 +17,26 @@ export function useOnboardingStatus() {
   const { status: metaStatus, isLoading: metaLoading } = useMetaStatus(clinicId);
 
   const setupStatus = useMemo((): ClinicSetupStatus => {
-    // Step 1: Clinic info is complete if clinic has a name (not the default "Nova Clínica")
+    // Step 1: Clinic info is complete if clinic has name, phone, address, and vertical
+    const clinicData = currentClinic as any;
     const clinicInfoComplete = Boolean(
-      currentClinic?.name &&
-      currentClinic.name !== 'Nova Clínica' &&
-      currentClinic.name.trim().length > 0
+      clinicData?.name &&
+      clinicData.name !== 'Nova Clínica' &&
+      clinicData.name.trim().length > 0 &&
+      clinicData?.phone &&
+      clinicData?.vertical &&
+      clinicData?.addressData?.formatted
     );
 
     // Step 2: Professionals complete if at least 1 active professional exists
     const activeProfessionals = (professionals || []).filter((p: Professional) => p.active);
     const professionalsComplete = activeProfessionals.length > 0;
 
-    // Step 3: Payment complete if payment settings are configured
+    // Step 3: Payment complete if payment method is configured (particular or convênio)
+    const paymentSettings = clinicData?.paymentSettings;
     const paymentComplete = Boolean(
-      currentClinic?.depositPercentage !== undefined ||
-      (currentClinic as unknown as { paymentSettings?: unknown })?.paymentSettings
+      paymentSettings &&
+      (paymentSettings.acceptsParticular || paymentSettings.acceptsConvenio)
     );
 
     // Step 4: WhatsApp complete if status is CONNECTED or READY

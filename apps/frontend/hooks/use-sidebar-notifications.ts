@@ -76,7 +76,7 @@ export function useSidebarNotifications(): SidebarNotifications {
       clinicData?.name !== 'Nova Clínica' &&
       clinicData?.addressData?.formatted &&
       clinicData?.phone &&
-      clinicData?.categories?.length > 0
+      clinicData?.vertical
     );
 
     const hasPaymentSettings = !!(
