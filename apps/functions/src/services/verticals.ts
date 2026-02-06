@@ -14,11 +14,7 @@ const VERTICAL_TERMS: Record<string, VerticalTerms> = {
   psi: { appointmentTerm: 'sessão', professionalEmoji: '🧠', showArriveEarlyTip: false },
   nutri: { appointmentTerm: 'consulta', professionalEmoji: '🥗', showArriveEarlyTip: false },
   fisio: { appointmentTerm: 'sessão', professionalEmoji: '💪', showArriveEarlyTip: true },
-  dermato: { appointmentTerm: 'consulta', professionalEmoji: '✨', showArriveEarlyTip: true },
-  oftalmo: { appointmentTerm: 'consulta', professionalEmoji: '👁️', showArriveEarlyTip: true },
-  pediatra: { appointmentTerm: 'consulta', professionalEmoji: '👶', showArriveEarlyTip: true },
-  fono: { appointmentTerm: 'sessão', professionalEmoji: '🗣️', showArriveEarlyTip: false },
-  estetica: { appointmentTerm: 'procedimento', professionalEmoji: '💎', showArriveEarlyTip: false },
+  // Future: dermato, oftalmo, pediatra, fono, estetica
 };
 
 const DEFAULT_TERMS: VerticalTerms = {

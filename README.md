@@ -12,6 +12,7 @@ Gendei enables healthcare clinics to manage appointments, patient interactions, 
 
 - **WhatsApp AI Agent**: Natural language appointment booking via WhatsApp using OpenAI Agents SDK
 - **Multi-Clinic Support**: Single platform supporting multiple independent clinics
+- **Vertical SaaS**: Subdomain-based verticals (med, dental, psi, nutri, fisio) with per-vertical terminology, features, and branding
 - **Real-time Dashboard**: Modern React dashboard for clinic management
 - **Automated Reminders**: 24h and 2h appointment reminders via WhatsApp
 - **Payment Integration**: PIX key management with deposit tracking
@@ -84,6 +85,10 @@ gendei/
 │   │   │   └── whatsapp/            # WhatsApp integration components
 │   │   ├── hooks/                   # Custom React hooks
 │   │   ├── lib/                     # Utilities and configs
+│   │   │   ├── verticals.ts        # Vertical configurations (5 active + geral)
+│   │   │   ├── vertical-provider.tsx # React context for useVertical()
+│   │   │   └── ...                  # Other utilities
+│   │   ├── middleware.ts            # Subdomain → vertical detection
 │   │   └── messages/                # i18n translation files
 │   │
 │   ├── admin/                       # Next.js admin portal (port 3003)
@@ -112,28 +117,31 @@ gendei/
 │   │       │   └── meta.ts          # WhatsApp/Meta webhooks
 │   │       ├── services/            # Business logic
 │   │       │   ├── reminders.ts     # Automated reminders
-│   │       │   └── onboarding.ts    # Clinic onboarding
+│   │       │   ├── onboarding.ts    # Clinic onboarding
+│   │       │   └── verticals.ts     # Vertical terminology for reminders
 │   │       └── middleware/          # Auth middleware
 │   │
 │   ├── whatsapp-agent-openai/       # Python WhatsApp AI Agent (PRIMARY)
 │   │   ├── src/
 │   │   │   ├── main.py              # FastAPI app with webhook handlers
+│   │   │   ├── vertical_config.py   # Per-vertical terminology & features
 │   │   │   ├── agents/              # AI agent definitions
-│   │   │   │   ├── openai_factory.py # Agent creation
-│   │   │   │   ├── function_tools.py # Tool implementations
-│   │   │   │   ├── prompts.py       # System prompts (pt-BR)
-│   │   │   │   ├── orchestrator.py  # Agent routing
+│   │   │   │   ├── definitions.py   # Agent definitions (OpenAI Agents SDK)
+│   │   │   │   ├── openai_factory.py # Legacy agent factory
+│   │   │   │   ├── function_tools.py # Tool implementations (@function_tool)
+│   │   │   │   ├── prompts.py       # System prompts (pt-BR) with {placeholders}
+│   │   │   │   ├── orchestrator.py  # Agent routing via Runner.run()
 │   │   │   │   └── guardrails.py    # Input/output validation
-│   │   │   ├── adapters/            # WhatsApp message parsing
-│   │   │   ├── database/            # Firestore interface
+│   │   │   ├── adapters/            # Firestore data adapters
+│   │   │   ├── database/            # Firestore client and queries
 │   │   │   ├── flows/               # WhatsApp Flows handlers
 │   │   │   ├── providers/           # AI provider abstraction
-│   │   │   ├── runtime/             # Execution context
+│   │   │   │   └── openai/          # OpenAI-specific factory, runner, session
+│   │   │   ├── runtime/             # Runtime context (clinic + vertical)
 │   │   │   ├── scheduler/           # Appointment scheduling logic
 │   │   │   ├── services/            # Business services
-│   │   │   ├── templates/           # Message templates
-│   │   │   ├── utils/               # Utility functions
-│   │   │   └── workflows/           # Complex workflow handlers
+│   │   │   ├── utils/               # Messaging, payment, transcription
+│   │   │   └── workflows/           # Workflow contract and executor
 │   │   ├── deploy.sh                # Cloud Run deployment script
 │   │   ├── Dockerfile               # Container configuration
 │   │   └── requirements.txt         # Python dependencies
@@ -177,11 +185,29 @@ gendei/
 
 ## Applications
 
+### Vertical SaaS System
+
+Gendei is a vertical SaaS platform — each clinic belongs to a healthcare vertical that customizes terminology, features, and branding across both the dashboard and the WhatsApp agent.
+
+| Subdomain | Vertical | Platform Name | Appointment Term | Client Term |
+|-----------|----------|---------------|-----------------|-------------|
+| `med.gendei.app` | Medical | Gendei Med | consulta | paciente |
+| `dental.gendei.app` | Dentistry | Gendei Dental | consulta | paciente |
+| `psi.gendei.app` | Psychology | Gendei Psi | sessao | cliente |
+| `nutri.gendei.app` | Nutrition | Gendei Nutri | consulta | cliente |
+| `fisio.gendei.app` | Physiotherapy | Gendei Fisio | sessao | paciente |
+
+**How it works:**
+- **Frontend**: Middleware detects subdomain from `host` header, `useVertical()` React context provides config
+- **WhatsApp Agent**: `vertical_config.py` provides terminology/features, prompts use `{placeholders}`
+- **Cloud Functions**: `services/verticals.ts` provides vertical terms for reminders/notifications
+- **Dev override**: Use `?vertical=dental` query param on localhost
+
 ### 1. Frontend (Clinic Dashboard)
 
 The main web application for clinic staff to manage their operations.
 
-**URL**: `https://app.gendei.com` (production) | `http://localhost:3002` (development)
+**URL**: `https://{vertical}.gendei.app` (production) | `http://localhost:3002` (development)
 
 #### Dashboard Pages
 
@@ -192,7 +218,7 @@ The main web application for clinic staff to manage their operations.
 | **Professionals** | Staff management | Add/edit professionals, specialties, working hours, pricing, photo upload |
 | **Patients** | Patient database | Search, filter by professional, appointment history, CRM tags |
 | **Conversations** | WhatsApp inbox | Message list, conversation states, human takeover, AI chat history |
-| **Clinic** | Clinic settings | Business profile, address (Google Maps autocomplete), operating hours, categories |
+| **Clinic** | Clinic settings | Business profile, address (Google Maps autocomplete), operating hours, vertical |
 | **Payments** | Payment settings | PIX key setup with confirmation, deposit percentage, health insurance (convenio) |
 | **WhatsApp** | WhatsApp setup | Embedded signup flow, phone verification, connection status |
 | **Account** | User profile | Email/password management, profile settings |
@@ -249,7 +275,7 @@ Admin access is controlled by email whitelist in `apps/admin/src/lib/firebase.ts
 
 ```typescript
 export const ADMIN_EMAILS = [
-  'hello@zapcomm.app',
+  'hello@gendei.app',
   // Add additional admin emails here
 ];
 ```
@@ -284,11 +310,14 @@ AI-powered WhatsApp chatbot for patient interactions, built with OpenAI Agents S
 | File | Purpose |
 |------|---------|
 | `src/main.py` | FastAPI app with webhook handlers |
-| `src/agents/openai_factory.py` | OpenAI agent definitions |
+| `src/vertical_config.py` | Per-vertical terminology, features, specialties |
+| `src/agents/definitions.py` | Agent definitions (OpenAI Agents SDK) |
 | `src/agents/function_tools.py` | Tool implementations (@function_tool) |
-| `src/agents/prompts.py` | System prompts (Brazilian Portuguese) |
-| `src/agents/orchestrator.py` | Agent routing and execution |
+| `src/agents/prompts.py` | System prompts (pt-BR) with {vertical_placeholders} |
+| `src/agents/orchestrator.py` | Agent routing and execution via Runner.run() |
 | `src/agents/guardrails.py` | Input/output validation |
+| `src/providers/openai/factory.py` | OpenAI-specific agent creation |
+| `src/runtime/context.py` | Runtime dataclass (clinic, patient, vertical) |
 
 #### Guardrails
 
@@ -600,8 +629,8 @@ STORAGE_BUCKET=your_storage_bucket
 ```
 gendei_clinics/{clinicId}
 ├── name, slug, description
+├── vertical (med, dental, psi, nutri, fisio, geral)
 ├── address (street, number, city, state, zipCode, lat, lng)
-├── businessCategory
 ├── operatingHours (per day with breaks)
 ├── phone, email, website
 ├── paymentSettings

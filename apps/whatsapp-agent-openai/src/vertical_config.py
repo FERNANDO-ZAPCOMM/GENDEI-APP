@@ -115,59 +115,17 @@ PHYSIO_SPECIALTIES = {
     "acupuntura_fisioterapia": "Acupuntura",
 }
 
-DERMATOLOGY_SPECIALTIES = {
-    "dermatologia_clinica": "Dermatologia Clínica",
-    "dermatologia_estetica": "Dermatologia Estética",
-    "dermatologia_cirurgica": "Dermatologia Cirúrgica",
-    "tricologia": "Tricologia",
-}
+# Future verticals (uncomment when ready to launch):
+# DERMATOLOGY_SPECIALTIES, OPHTHALMOLOGY_SPECIALTIES, PEDIATRICS_SPECIALTIES,
+# SPEECH_THERAPY_SPECIALTIES, AESTHETICS_SPECIALTIES
 
-OPHTHALMOLOGY_SPECIALTIES = {
-    "oftalmologia_geral": "Oftalmologia Geral",
-    "retina": "Retina e Vítreo",
-    "glaucoma": "Glaucoma",
-    "catarata": "Catarata",
-    "cirurgia_refrativa": "Cirurgia Refrativa",
-    "oftalmopediatria": "Oftalmopediatria",
-}
-
-PEDIATRICS_SPECIALTIES = {
-    "pediatria_geral": "Pediatria Geral",
-    "neonatologia": "Neonatologia",
-    "neuropediatria": "Neuropediatria",
-    "alergia_pediatrica": "Alergia Pediátrica",
-    "gastropediatria": "Gastropediatria",
-}
-
-SPEECH_THERAPY_SPECIALTIES = {
-    "fonoaudiologia_clinica": "Fonoaudiologia Clínica",
-    "audiologia": "Audiologia",
-    "linguagem": "Linguagem",
-    "motricidade_orofacial": "Motricidade Orofacial",
-    "voz": "Voz",
-    "disfagia": "Disfagia",
-}
-
-AESTHETICS_SPECIALTIES = {
-    "estetica": "Estética",
-    "harmonizacao_facial": "Harmonização Facial",
-    "dermatologia_estetica": "Dermatologia Estética",
-    "cirurgia_plastica": "Cirurgia Plástica",
-    "medicina_estetica": "Medicina Estética",
-}
-
-# Merge all specialties for 'geral' vertical
+# Merge all active specialties for 'geral' vertical
 ALL_SPECIALTIES = {
     **MEDICAL_SPECIALTIES,
     **DENTAL_SPECIALTIES,
     **PSYCHOLOGY_SPECIALTIES,
     **NUTRITION_SPECIALTIES,
     **PHYSIO_SPECIALTIES,
-    **DERMATOLOGY_SPECIALTIES,
-    **OPHTHALMOLOGY_SPECIALTIES,
-    **PEDIATRICS_SPECIALTIES,
-    **SPEECH_THERAPY_SPECIALTIES,
-    **AESTHETICS_SPECIALTIES,
 }
 
 
@@ -299,130 +257,7 @@ VERTICALS: Dict[str, VerticalConfig] = {
         ),
     ),
 
-    "dermato": VerticalConfig(
-        slug="dermato",
-        name="Gendei Dermato",
-        council="CRM",
-        specialties=DERMATOLOGY_SPECIALTIES,
-        terminology=VerticalTerminology(
-            appointment_term="consulta",
-            appointment_term_plural="consultas",
-            client_term="paciente",
-            professional_term="dermatologista",
-            professional_term_generic="profissional",
-            professional_emoji="✨",
-            service_emoji="💊",
-            greeting_context="dermatologia",
-            no_show_emoji="✨",
-        ),
-        features=VerticalFeatures(
-            has_convenio=True,
-            has_deposit=True,
-            has_telemedicine=True,
-            ask_convenio_number=True,
-            show_arrive_early_tip=True,
-        ),
-    ),
-
-    "oftalmo": VerticalConfig(
-        slug="oftalmo",
-        name="Gendei Oftalmo",
-        council="CRM",
-        specialties=OPHTHALMOLOGY_SPECIALTIES,
-        terminology=VerticalTerminology(
-            appointment_term="consulta",
-            appointment_term_plural="consultas",
-            client_term="paciente",
-            professional_term="oftalmologista",
-            professional_term_generic="profissional",
-            professional_emoji="👁️",
-            service_emoji="👓",
-            greeting_context="oftalmologia",
-            no_show_emoji="👁️",
-        ),
-        features=VerticalFeatures(
-            has_convenio=True,
-            has_deposit=True,
-            has_telemedicine=False,
-            ask_convenio_number=True,
-            show_arrive_early_tip=True,
-        ),
-    ),
-
-    "pediatra": VerticalConfig(
-        slug="pediatra",
-        name="Gendei Pediatra",
-        council="CRM",
-        specialties=PEDIATRICS_SPECIALTIES,
-        terminology=VerticalTerminology(
-            appointment_term="consulta",
-            appointment_term_plural="consultas",
-            client_term="paciente",
-            professional_term="pediatra",
-            professional_term_generic="profissional",
-            professional_emoji="👶",
-            service_emoji="🧸",
-            greeting_context="pediatria",
-            no_show_emoji="👶",
-        ),
-        features=VerticalFeatures(
-            has_convenio=True,
-            has_deposit=True,
-            has_telemedicine=True,
-            ask_convenio_number=True,
-            show_arrive_early_tip=True,
-        ),
-    ),
-
-    "fono": VerticalConfig(
-        slug="fono",
-        name="Gendei Fono",
-        council="CRFa",
-        specialties=SPEECH_THERAPY_SPECIALTIES,
-        terminology=VerticalTerminology(
-            appointment_term="sessão",
-            appointment_term_plural="sessões",
-            client_term="paciente",
-            professional_term="fonoaudiólogo(a)",
-            professional_term_generic="profissional",
-            professional_emoji="🗣️",
-            service_emoji="🎤",
-            greeting_context="fonoaudiologia",
-            no_show_emoji="🗣️",
-        ),
-        features=VerticalFeatures(
-            has_convenio=True,
-            has_deposit=False,
-            has_telemedicine=True,
-            ask_convenio_number=True,
-            show_arrive_early_tip=True,
-        ),
-    ),
-
-    "estetica": VerticalConfig(
-        slug="estetica",
-        name="Gendei Estética",
-        council="CRM/CRBM",
-        specialties=AESTHETICS_SPECIALTIES,
-        terminology=VerticalTerminology(
-            appointment_term="procedimento",
-            appointment_term_plural="procedimentos",
-            client_term="cliente",
-            professional_term="profissional",
-            professional_term_generic="profissional",
-            professional_emoji="💎",
-            service_emoji="✨",
-            greeting_context="estética e beleza",
-            no_show_emoji="💎",
-        ),
-        features=VerticalFeatures(
-            has_convenio=False,
-            has_deposit=True,
-            has_telemedicine=False,
-            ask_convenio_number=False,
-            show_arrive_early_tip=True,
-        ),
-    ),
+    # Future verticals: dermato, oftalmo, pediatra, fono, estetica
 }
 
 # Default / fallback (generic clinic)

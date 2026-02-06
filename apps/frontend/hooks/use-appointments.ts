@@ -1,14 +1,25 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from './use-auth';
 import { apiClient } from '@/lib/api';
+import { nowInTimezone } from '@/lib/timezone';
 import type { Appointment, DayAvailability } from '@/lib/clinic-types';
 
 interface AppointmentFilters {
-  date?: string;
   startDate?: string;
   endDate?: string;
   professionalId?: string;
   status?: string;
+}
+
+/**
+ * Normalize raw API response to match frontend Appointment type.
+ * The WhatsApp agent writes `durationMinutes` but the frontend expects `duration`.
+ */
+function normalizeAppointment(raw: any): Appointment {
+  return {
+    ...raw,
+    duration: raw.duration ?? raw.durationMinutes ?? 30,
+  };
 }
 
 /**
@@ -25,7 +36,6 @@ export function useAppointments(clinicId: string, filters?: AppointmentFilters) 
       if (!token) throw new Error('Not authenticated');
 
       const params = new URLSearchParams();
-      if (filters?.date) params.append('date', filters.date);
       if (filters?.startDate) params.append('startDate', filters.startDate);
       if (filters?.endDate) params.append('endDate', filters.endDate);
       if (filters?.professionalId) params.append('professionalId', filters.professionalId);
@@ -34,7 +44,8 @@ export function useAppointments(clinicId: string, filters?: AppointmentFilters) 
       const queryString = params.toString();
       const url = `/appointments/clinic/${clinicId}${queryString ? `?${queryString}` : ''}`;
 
-      return apiClient<Appointment[]>(url, { token });
+      const raw = await apiClient<any[]>(url, { token });
+      return raw.map(normalizeAppointment);
     },
     enabled: !!clinicId,
     staleTime: 30 * 1000, // Refresh more frequently for appointments
@@ -117,9 +128,9 @@ export function useAppointments(clinicId: string, filters?: AppointmentFilters) 
 /**
  * Hook to fetch today's appointments
  */
-export function useTodayAppointments(clinicId: string) {
-  const today = new Date().toISOString().split('T')[0];
-  return useAppointments(clinicId, { date: today });
+export function useTodayAppointments(clinicId: string, clinicTimezone?: string) {
+  const today = nowInTimezone(clinicTimezone).dateString;
+  return useAppointments(clinicId, { startDate: today, endDate: today });
 }
 
 /**

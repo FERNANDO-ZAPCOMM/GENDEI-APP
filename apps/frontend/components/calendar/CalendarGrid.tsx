@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { format, addDays, addMinutes, startOfWeek, getDay, parseISO, isAfter } from 'date-fns';
-import { isTodayInTimezone, nowInTimezone } from '@/lib/timezone';
+import { isTodayInTimezone, nowInTimezone, formatDateInTimezone } from '@/lib/timezone';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { Clock, User, X, Plus, Phone, FileText, MoreHorizontal, Repeat } from 'lucide-react';
@@ -274,7 +274,7 @@ export function CalendarGrid({
 
   // Filter appointments and blocks for a specific day
   const getItemsForDay = (date: Date) => {
-    const dateStr = format(date, 'yyyy-MM-dd');
+    const dateStr = formatDateInTimezone(date, clinicTimezone);
 
     const dayAppointments = appointments.filter(apt => {
       if (apt.date !== dateStr) return false;

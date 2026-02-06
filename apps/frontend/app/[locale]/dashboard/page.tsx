@@ -15,8 +15,7 @@ import {
   AlertCircle,
   Clock,
 } from 'lucide-react';
-import { format } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
+
 
 import { useClinic, useClinicStats } from '@/hooks/use-clinic';
 import { useTodayAppointments } from '@/hooks/use-appointments';
@@ -50,7 +49,8 @@ export default function DashboardPage() {
   const { currentUser } = useAuth();
   const { currentClinic: clinic, isLoading: clinicLoading } = useClinic();
   const { data: stats, isLoading: statsLoading } = useClinicStats(clinic?.id || '');
-  const { data: todayAppointments, isLoading: appointmentsLoading } = useTodayAppointments(clinic?.id || '');
+  const clinicTimezone = clinic?.timezone || 'America/Sao_Paulo';
+  const { data: todayAppointments, isLoading: appointmentsLoading } = useTodayAppointments(clinic?.id || '', clinicTimezone);
   const { status: metaStatus, error: metaError } = useMetaStatus(currentUser?.uid || '');
 
   // Onboarding status
@@ -197,7 +197,12 @@ export default function DashboardPage() {
                 {t('dashboard.recentActivity')}
               </CardTitle>
               <CardDescription>
-                {format(new Date(), "EEEE, d 'de' MMMM", { locale: ptBR })}
+                {new Intl.DateTimeFormat('pt-BR', {
+                  timeZone: clinicTimezone,
+                  weekday: 'long',
+                  day: 'numeric',
+                  month: 'long',
+                }).format(new Date())}
               </CardDescription>
             </div>
             <Link href={`/${locale}/dashboard/appointments`}>

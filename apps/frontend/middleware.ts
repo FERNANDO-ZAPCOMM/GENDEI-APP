@@ -7,7 +7,7 @@ const intlMiddleware = createIntlMiddleware(routing);
 // Known vertical subdomains
 const VERTICAL_SUBDOMAINS = new Set([
   'med', 'dental', 'psi', 'nutri', 'fisio',
-  'dermato', 'oftalmo', 'pediatra', 'fono', 'estetica',
+  // Future: 'dermato', 'oftalmo', 'pediatra', 'fono', 'estetica',
 ]);
 
 // Protected routes that require authentication
