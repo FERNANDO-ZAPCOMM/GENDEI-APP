@@ -110,7 +110,7 @@ export default function DashboardPage() {
       <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
         {/* Today's Appointments */}
         <Link href={`/${locale}/dashboard/appointments`} className="block h-full">
-          <Card className="border-blue-100 cursor-pointer hover:shadow-md transition-shadow h-full" style={{ background: 'linear-gradient(to bottom right, #f0f7ff, white)' }}>
+          <Card className="border-l-4 border-l-blue-500 bg-gradient-to-br from-blue-50 to-white cursor-pointer hover:shadow-md transition-shadow h-full">
             <CardContent className="p-4 h-full">
               <div className="flex items-center justify-between h-full min-h-[72px]">
                 <div>
@@ -121,7 +121,7 @@ export default function DashboardPage() {
                     <p className="text-2xl font-bold text-blue-700">{stats?.todayAppointments || 0}</p>
                   )}
                 </div>
-                <Calendar className="w-5 h-5 text-blue-600 shrink-0" />
+                <Calendar className="w-5 h-5 text-blue-500 shrink-0" />
               </div>
             </CardContent>
           </Card>
@@ -129,18 +129,18 @@ export default function DashboardPage() {
 
         {/* Week Appointments */}
         <Link href={`/${locale}/dashboard/appointments`} className="block h-full">
-          <Card className="border-purple-100 cursor-pointer hover:shadow-md transition-shadow h-full" style={{ background: 'linear-gradient(to bottom right, #fdfaff, white)' }}>
+          <Card className="border-l-4 border-l-violet-500 bg-gradient-to-br from-violet-50 to-white cursor-pointer hover:shadow-md transition-shadow h-full">
             <CardContent className="p-4 h-full">
               <div className="flex items-center justify-between h-full min-h-[72px]">
                 <div>
-                  <p className="text-xs text-purple-600 font-medium">{t('dashboard.weekAppointments')}</p>
+                  <p className="text-xs text-violet-600 font-medium">{t('dashboard.weekAppointments')}</p>
                   {statsLoading ? (
                     <Skeleton className="h-7 w-16 mt-1" />
                   ) : (
-                    <p className="text-2xl font-bold text-purple-700">{stats?.weekAppointments || 0}</p>
+                    <p className="text-2xl font-bold text-violet-700">{stats?.weekAppointments || 0}</p>
                   )}
                 </div>
-                <CalendarDays className="w-5 h-5 text-purple-600 shrink-0" />
+                <CalendarDays className="w-5 h-5 text-violet-500 shrink-0" />
               </div>
             </CardContent>
           </Card>
@@ -148,18 +148,18 @@ export default function DashboardPage() {
 
         {/* Total Patients */}
         <Link href={`/${locale}/dashboard/patients`} className="block h-full">
-          <Card className="border-indigo-100 cursor-pointer hover:shadow-md transition-shadow h-full" style={{ background: 'linear-gradient(to bottom right, #f5f5ff, white)' }}>
+          <Card className="border-l-4 border-l-emerald-500 bg-gradient-to-br from-emerald-50 to-white cursor-pointer hover:shadow-md transition-shadow h-full">
             <CardContent className="p-4 h-full">
               <div className="flex items-center justify-between h-full min-h-[72px]">
                 <div>
-                  <p className="text-xs text-indigo-600 font-medium">{t('dashboard.totalPatients')}</p>
+                  <p className="text-xs text-emerald-600 font-medium">{t('dashboard.totalPatients')}</p>
                   {statsLoading ? (
                     <Skeleton className="h-7 w-16 mt-1" />
                   ) : (
-                    <p className="text-2xl font-bold text-indigo-700">{stats?.totalPatients || 0}</p>
+                    <p className="text-2xl font-bold text-emerald-700">{stats?.totalPatients || 0}</p>
                   )}
                 </div>
-                <Users className="w-5 h-5 text-indigo-600 shrink-0" />
+                <Users className="w-5 h-5 text-emerald-500 shrink-0" />
               </div>
             </CardContent>
           </Card>
@@ -167,7 +167,7 @@ export default function DashboardPage() {
 
         {/* WhatsApp Status */}
         <Link href={`/${locale}/dashboard/whatsapp`} className="block h-full">
-          <Card className={`cursor-pointer hover:shadow-md transition-shadow h-full ${isWhatsAppConnected ? 'border-green-100' : 'border-gray-200'}`} style={{ background: isWhatsAppConnected ? 'linear-gradient(to bottom right, #f7fefa, white)' : 'linear-gradient(to bottom right, #fcfcfc, white)' }}>
+          <Card className={`border-l-4 cursor-pointer hover:shadow-md transition-shadow h-full ${isWhatsAppConnected ? 'border-l-green-500 bg-gradient-to-br from-green-50 to-white' : 'border-l-gray-400 bg-gradient-to-br from-gray-50 to-white'}`}>
             <CardContent className="p-4 h-full">
               <div className="flex items-center justify-between h-full min-h-[72px]">
                 <div>

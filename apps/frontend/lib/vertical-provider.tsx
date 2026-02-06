@@ -1,7 +1,8 @@
 'use client';
 
-import { createContext, useContext, useMemo, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, type ReactNode } from 'react';
 import { getVertical, getVerticalFromHostname, type VerticalConfig, type VerticalSlug } from './verticals';
+import { setApiVerticalSlug } from './api';
 
 const VerticalContext = createContext<VerticalConfig | null>(null);
 
@@ -28,6 +29,11 @@ export function VerticalProvider({ children, forcedSlug }: VerticalProviderProps
 
     return getVertical(null);
   }, [forcedSlug]);
+
+  // Keep API client vertical header in sync
+  useEffect(() => {
+    setApiVerticalSlug(vertical.slug);
+  }, [vertical.slug]);
 
   return (
     <VerticalContext.Provider value={vertical}>

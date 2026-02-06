@@ -1576,18 +1576,47 @@
       "description": "AI answers questions about the clinic - no focus on booking"
     },
     "bookingSteps": {
-      "step1": {
+      "inicio": {
         "title": "Start",
-        "description": "Customer sends a message"
+        "description": "Customer sends a message via WhatsApp"
       },
-      "step2": {
-        "title": "AI Takes Over",
-        "badge": "Automatic",
-        "description": "AI decides everything automatically: schedules, professionals, payments"
+      "triagem": {
+        "title": "Triage",
+        "description": "AI understands what the customer needs (service, professional)"
       },
-      "step3": {
+      "agendamento": {
+        "title": "Scheduling",
+        "description": "AI finds available slots and schedules the appointment"
+      },
+      "pagamento": {
+        "title": "Deposit Payment",
+        "description": "Customer pays deposit via PIX to confirm"
+      },
+      "confirmacao": {
+        "title": "Confirmation",
+        "description": "Appointment confirmed, details sent to customer"
+      },
+      "lembrete": {
+        "title": "Reminder",
+        "description": "Automatic reminder sent before the appointment"
+      },
+      "fim": {
         "title": "End",
-        "description": "Appointment scheduled and confirmed"
+        "description": "Appointment completed"
+      }
+    },
+    "infoSteps": {
+      "info_inicio": {
+        "title": "Start",
+        "description": "Customer sends a message via WhatsApp"
+      },
+      "info_responde": {
+        "title": "AI Responds",
+        "description": "AI answers questions based on configured information"
+      },
+      "info_fim": {
+        "title": "End",
+        "description": "Question answered or customer directed"
       }
     },
     "topicCard": {
@@ -1623,8 +1652,9 @@
     "saveButton": "Save",
     "saving": "Saving...",
     "toasts": {
-      "faqFillRequired": "Fill in the topic and description to automatically generate FAQs",
+      "faqNeedsProfile": "Fill in the clinic description in the profile before generating FAQs",
       "faqGenerated": "FAQs generated successfully!",
+      "faqError": "Error generating FAQs. Please try again.",
       "bookingActivated": "Booking Mode activated! The bot will help patients schedule appointments.",
       "infoActivated": "Information Mode activated! The bot will provide information about the clinic.",
       "saveError": "Error saving the service mode"
@@ -1656,6 +1686,7 @@
       "categoriesHelp": "This defines which specialties will be available for professionals",
       "descriptionLabel": "Description",
       "descriptionPlaceholder": "Describe the services offered...",
+      "enhanceButton": "Enhance with AI",
       "summaryLabel": "Greeting Summary (AI)",
       "generateButton": "Generate",
       "summaryHelp": "Click \"Generate\" to create an automatic summary of your description for the bot greeting."
@@ -1712,7 +1743,9 @@
       "saveSuccess": "Settings saved successfully",
       "saveError": "Error saving settings",
       "summaryGenerated": "Summary generated successfully!",
-      "summaryError": "Error generating summary"
+      "summaryError": "Error generating summary",
+      "descriptionEnhanced": "Description enhanced successfully!",
+      "descriptionEnhanceError": "Error enhancing description. Please try again."
     }
   }
 }

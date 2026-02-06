@@ -63,7 +63,7 @@ router.get('/clinic/:clinicId', verifyAuth, async (req: Request, res: Response) 
     const professionalId = req.query.professionalId as string;
     const status = req.query.status as string;
 
-    if (user?.uid !== clinicId) {
+    if (user?.clinicId !== clinicId) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
@@ -79,7 +79,7 @@ router.get('/clinic/:clinicId', verifyAuth, async (req: Request, res: Response) 
 router.get('/', verifyAuth, async (req: Request, res: Response) => {
   try {
     const user = (req as any).user;
-    const clinicId = req.query.clinicId as string || user?.uid;
+    const clinicId = req.query.clinicId as string || user?.clinicId;
     const startDate = req.query.startDate as string;
     const endDate = req.query.endDate as string;
     const professionalId = req.query.professionalId as string;
@@ -89,7 +89,7 @@ router.get('/', verifyAuth, async (req: Request, res: Response) => {
       return res.status(400).json({ message: 'Clinic ID is required' });
     }
 
-    if (user?.uid !== clinicId) {
+    if (user?.clinicId !== clinicId) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
@@ -105,13 +105,13 @@ router.get('/', verifyAuth, async (req: Request, res: Response) => {
 router.get('/today', verifyAuth, async (req: Request, res: Response) => {
   try {
     const user = (req as any).user;
-    const clinicId = req.query.clinicId as string || user?.uid;
+    const clinicId = req.query.clinicId as string || user?.clinicId;
 
     if (!clinicId) {
       return res.status(400).json({ message: 'Clinic ID is required' });
     }
 
-    if (user?.uid !== clinicId) {
+    if (user?.clinicId !== clinicId) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
@@ -141,7 +141,7 @@ router.get('/:appointmentId', verifyAuth, async (req: Request, res: Response) =>
   try {
     const { appointmentId } = req.params;
     const user = (req as any).user;
-    const clinicId = user?.uid;
+    const clinicId = user?.clinicId;
 
     if (!clinicId) {
       return res.status(401).json({ message: 'Not authenticated' });
@@ -175,7 +175,7 @@ router.put('/:appointmentId', verifyAuth, async (req: Request, res: Response) =>
   try {
     const { appointmentId } = req.params;
     const user = (req as any).user;
-    const clinicId = user?.uid;
+    const clinicId = user?.clinicId;
 
     if (!clinicId) {
       return res.status(401).json({ message: 'Not authenticated' });
@@ -236,7 +236,7 @@ router.patch('/:appointmentId/status', verifyAuth, async (req: Request, res: Res
     const { appointmentId } = req.params;
     const { status, reason, notes } = req.body;
     const user = (req as any).user;
-    const clinicId = user?.uid;
+    const clinicId = user?.clinicId;
 
     if (!clinicId) {
       return res.status(401).json({ message: 'Not authenticated' });
@@ -304,7 +304,7 @@ router.put('/:appointmentId/status', verifyAuth, async (req: Request, res: Respo
     const { appointmentId } = req.params;
     const { status, reason } = req.body;
     const user = (req as any).user;
-    const clinicId = user?.uid;
+    const clinicId = user?.clinicId;
 
     if (!clinicId) {
       return res.status(401).json({ message: 'Not authenticated' });
@@ -368,7 +368,7 @@ router.put('/:appointmentId/reschedule', verifyAuth, async (req: Request, res: R
     const { appointmentId } = req.params;
     const { date, time, professionalId } = req.body;
     const user = (req as any).user;
-    const clinicId = user?.uid;
+    const clinicId = user?.clinicId;
 
     if (!clinicId) {
       return res.status(401).json({ message: 'Not authenticated' });
@@ -420,7 +420,7 @@ router.post('/:appointmentId/cancel', verifyAuth, async (req: Request, res: Resp
   try {
     const { appointmentId } = req.params;
     const user = (req as any).user;
-    const clinicId = user?.uid;
+    const clinicId = user?.clinicId;
     const reason = req.body.reason || 'Cancelado pela clínica';
 
     if (!clinicId) {
@@ -461,7 +461,7 @@ router.delete('/:appointmentId', verifyAuth, async (req: Request, res: Response)
   try {
     const { appointmentId } = req.params;
     const user = (req as any).user;
-    const clinicId = user?.uid;
+    const clinicId = user?.clinicId;
     const reason = req.query.reason as string || 'Cancelado pela clínica';
 
     if (!clinicId) {

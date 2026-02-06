@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
+import { useClinic } from '@/hooks/use-clinic';
 import { useMetaStatus } from '@/hooks/use-meta-status';
 import { Loader2, ChevronDown, ChevronUp, Wifi, User, QrCode, MessageSquare, Workflow, LogOut } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -94,6 +95,7 @@ export function WhatsAppSettingsContent({ onConnected }: WhatsAppSettingsContent
   const params = useParams();
   const locale = params.locale as string || 'pt-BR';
   const { currentUser } = useAuth();
+  const { currentClinic } = useClinic();
   const hasCalledOnConnected = useRef(false);
 
   // Collapsible section states
@@ -119,7 +121,7 @@ export function WhatsAppSettingsContent({ onConnected }: WhatsAppSettingsContent
     disconnect,
     isSyncing,
     isDisconnecting,
-  } = useMetaStatus(currentUser?.uid || '');
+  } = useMetaStatus(currentClinic?.id || '');
 
   // Call onConnected when WhatsApp becomes ready
   useEffect(() => {

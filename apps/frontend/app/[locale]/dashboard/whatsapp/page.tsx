@@ -20,7 +20,9 @@ export default function WhatsAppSettingsPage() {
       </div>
 
       {/* Shared WhatsApp Settings Content */}
-      <WhatsAppSettingsContent />
+      <div className="w-full lg:w-3/4">
+        <WhatsAppSettingsContent />
+      </div>
     </div>
   );
 }

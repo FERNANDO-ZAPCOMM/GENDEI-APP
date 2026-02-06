@@ -4,6 +4,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
+import { isValidVertical, buildCompositeClinicId } from '../utils/verticals';
 
 const db = getFirestore();
 
@@ -16,6 +17,7 @@ export interface AuthenticatedUser {
   email?: string;
   emailVerified?: boolean;
   clinicId?: string;
+  vertical?: string;
   isOwner?: boolean;
   isAdmin?: boolean;
 }
@@ -62,14 +64,19 @@ export async function verifyAuth(
   try {
     const decodedToken = await getAuth().verifyIdToken(idToken);
 
-    // Find clinic for this user
-    const clinicInfo = await findClinicForUser(decodedToken.uid);
+    // Read vertical from X-Vertical header, default to 'geral'
+    const verticalHeader = (req.headers['x-vertical'] as string) || 'geral';
+    const vertical = isValidVertical(verticalHeader) ? verticalHeader : 'geral';
+
+    // Find clinic for this user + vertical
+    const clinicInfo = await findClinicForUser(decodedToken.uid, vertical);
 
     req.user = {
       uid: decodedToken.uid,
       email: decodedToken.email,
       emailVerified: decodedToken.email_verified,
       clinicId: clinicInfo?.clinicId,
+      vertical,
       isOwner: clinicInfo?.isOwner,
       isAdmin: clinicInfo?.isAdmin,
     };
@@ -86,16 +93,29 @@ export async function verifyAuth(
 }
 
 /**
- * Find clinic for a user (owner or admin)
+ * Find clinic for a user + vertical combination
+ * Uses composite clinic ID: {userId}_{vertical}
+ * Falls back to legacy {userId} doc during migration
  */
 async function findClinicForUser(
-  userId: string
+  userId: string,
+  vertical: string
 ): Promise<{ clinicId: string; isOwner: boolean; isAdmin: boolean } | null> {
-  // In Gendei, the clinic document ID is the user's UID for owners
-  // Check if a clinic exists with doc ID = userId (primary ownership check)
-  const clinicDoc = await db.collection(CLINICS).doc(userId).get();
+  const compositeId = buildCompositeClinicId(userId, vertical);
 
-  if (clinicDoc.exists) {
+  // 1. Check composite ID first (new format)
+  const compositeDoc = await db.collection(CLINICS).doc(compositeId).get();
+  if (compositeDoc.exists) {
+    return {
+      clinicId: compositeId,
+      isOwner: true,
+      isAdmin: true,
+    };
+  }
+
+  // 2. Fallback: check legacy doc ID = userId (backward compat during migration)
+  const legacyDoc = await db.collection(CLINICS).doc(userId).get();
+  if (legacyDoc.exists) {
     return {
       clinicId: userId,
       isOwner: true,
@@ -103,7 +123,7 @@ async function findClinicForUser(
     };
   }
 
-  // Check if user is a clinic owner via ownerId field (legacy support)
+  // 3. Check if user is a clinic owner via ownerId field (legacy support)
   const ownerQuery = await db
     .collection(CLINICS)
     .where('ownerId', '==', userId)
@@ -118,7 +138,7 @@ async function findClinicForUser(
     };
   }
 
-  // Check if user is an admin (in adminIds array)
+  // 4. Check if user is an admin (in adminIds array)
   const adminQuery = await db
     .collection(CLINICS)
     .where('adminIds', 'array-contains', userId)
@@ -133,7 +153,12 @@ async function findClinicForUser(
     };
   }
 
-  return null;
+  // No clinic found - return composite ID so routes can create one
+  return {
+    clinicId: compositeId,
+    isOwner: true,
+    isAdmin: true,
+  };
 }
 
 /**
@@ -187,7 +212,7 @@ export async function verifyClinicAccess(
 }
 
 /**
- * Check if a user has access to a clinic
+ * Check if a user has access to a clinic (by ownerId or adminIds)
  */
 async function checkClinicAccess(userId: string, clinicId: string): Promise<boolean> {
   try {
@@ -199,7 +224,7 @@ async function checkClinicAccess(userId: string, clinicId: string): Promise<bool
 
     const data = clinicDoc.data();
 
-    // Check if owner
+    // Check if owner (ownerId is always the raw Firebase uid)
     if (data?.ownerId === userId) {
       return true;
     }
@@ -215,4 +240,3 @@ async function checkClinicAccess(userId: string, clinicId: string): Promise<bool
     return false;
   }
 }
-

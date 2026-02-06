@@ -2,6 +2,8 @@
 
 import { useTranslations } from 'next-intl';
 import { useClinic } from '@/hooks/use-clinic';
+import { useAuth } from '@/hooks/use-auth';
+import { apiClient } from '@/lib/api';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -29,7 +31,7 @@ import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import type { ClinicAddress, PaymentSettings } from '@/lib/clinic-types';
 import { useVertical } from '@/lib/vertical-provider';
-import { X, CreditCard, Plus } from 'lucide-react';
+import { X, CreditCard, Plus, MessageSquare } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 
 // Days of the week - label/full are for parsing saved data, UI uses translations
@@ -103,9 +105,11 @@ export default function ClinicSettingsPage() {
   const params = useParams();
   const locale = (params?.locale as string) || 'pt-BR';
   const { currentClinic, isLoading, updateClinic, generateSummary } = useClinic();
+  const { getIdToken } = useAuth();
   const vertical = useVertical();
 
   const [activeTab, setActiveTab] = useState<TabKey>('basic');
+  const [isEnhancing, setIsEnhancing] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -438,9 +442,47 @@ export default function ClinicSettingsPage() {
                       maxLength={750}
                       className="resize-none min-h-[80px] sm:min-h-[100px]"
                     />
-                    <p className="text-xs text-muted-foreground text-right">
-                      {formData.description.length}/750
-                    </p>
+                    <div className="flex items-center justify-between">
+                      {formData.description.length >= 20 && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="text-xs h-6 px-2"
+                          disabled={isEnhancing}
+                          onClick={async () => {
+                            setIsEnhancing(true);
+                            try {
+                              const token = await getIdToken();
+                              const result = await apiClient<{ description: string }>('/clinics/me/enhance-description', {
+                                method: 'POST',
+                                token: token || undefined,
+                                body: JSON.stringify({
+                                  description: formData.description,
+                                  clinicName: formData.name,
+                                }),
+                              });
+                              setFormData({ ...formData, description: result.description });
+                              toast.success(t('clinicPage.toasts.descriptionEnhanced'));
+                            } catch {
+                              toast.error(t('clinicPage.toasts.descriptionEnhanceError'));
+                            } finally {
+                              setIsEnhancing(false);
+                            }
+                          }}
+                        >
+                          {isEnhancing ? (
+                            <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                          ) : (
+                            <Sparkles className="h-3 w-3 mr-1" />
+                          )}
+                          {t('clinicPage.basicInfo.enhanceButton')}
+                        </Button>
+                      )}
+                      <p className="text-xs text-muted-foreground text-right ml-auto">
+                        {formData.description.length}/750
+                      </p>
+                    </div>
                   </div>
 
                   {/* AI Summary Generation */}
@@ -736,7 +778,7 @@ export default function ClinicSettingsPage() {
 
           {/* Save Button */}
           <div className="flex justify-end">
-            <Button type="submit" form="clinic-form" disabled={updateClinic.isPending}>
+            <Button type="submit" form="clinic-form" disabled={updateClinic.isPending || !formData.name.trim() || !formData.description.trim()}>
               {updateClinic.isPending ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -753,27 +795,25 @@ export default function ClinicSettingsPage() {
         </div>
 
         {/* WhatsApp Preview - Hidden on mobile, sticky on desktop */}
-        <div className="hidden lg:block w-[360px] flex-shrink-0">
+        <div className="hidden lg:block w-[380px] flex-shrink-0">
           <div className="sticky top-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>{t('clinicPage.preview.title')}</CardTitle>
-                <CardDescription>{t('clinicPage.preview.description')}</CardDescription>
-              </CardHeader>
-              <CardContent className="flex justify-center py-4">
-                <ClinicWhatsAppPreview
-                  clinicData={{
-                    name: formData.name,
-                    phone: formData.phone,
-                    email: formData.email,
-                    openingHours: formData.openingHours,
-                    address: formData.address,
-                    addressData: addressData || currentClinic?.addressData,
-                    greetingSummary: formData.greetingSummary,
-                  }}
-                />
-              </CardContent>
-            </Card>
+            <div className="flex flex-col items-center">
+              <ClinicWhatsAppPreview
+                clinicData={{
+                  name: formData.name,
+                  phone: formData.phone,
+                  email: formData.email,
+                  openingHours: formData.openingHours,
+                  address: formData.address,
+                  addressData: addressData || currentClinic?.addressData,
+                  greetingSummary: formData.greetingSummary,
+                }}
+              />
+              <p className="text-sm text-gray-500 mt-4 flex items-center gap-2">
+                <MessageSquare className="h-4 w-4" />
+                {t('clinicPage.preview.description')}
+              </p>
+            </div>
           </div>
         </div>
       </div>

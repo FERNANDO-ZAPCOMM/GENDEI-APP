@@ -1,5 +1,12 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
+// Vertical slug sent as X-Vertical header on every API call
+let _verticalSlug = 'geral';
+
+export function setApiVerticalSlug(slug: string) {
+  _verticalSlug = slug;
+}
+
 type ApiClientOptions = RequestInit & {
   token?: string;
   suppressErrorLog?: boolean;
@@ -13,6 +20,7 @@ export async function apiClient<T>(
   const { token, suppressErrorLog, ...fetchOptions } = options || {};
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
+    'X-Vertical': _verticalSlug,
     ...(token && { Authorization: `Bearer ${token}` }),
     ...(fetchOptions.headers || {}),
   };

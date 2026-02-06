@@ -345,6 +345,7 @@ export default function NewProfessionalPage() {
       </div>
 
       {/* Main Card with Tabs */}
+      <div className="w-full lg:w-3/4">
       <Card>
         <CardHeader className="pb-3 sm:pb-6">
           <div className="flex items-center justify-between">
@@ -446,7 +447,7 @@ export default function NewProfessionalPage() {
                     </div>
                     <div className="space-y-2">
                       <Label>Especialidades <span className="text-red-500">*</span></Label>
-                      <div className="flex flex-wrap gap-2">
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                         {availableSpecialties.map((specialty) => {
                           const isSelected = formData.specialties.includes(specialty.id);
                           return (
@@ -468,7 +469,7 @@ export default function NewProfessionalPage() {
                               }}
                               disabled={isSaving}
                               className={cn(
-                                "px-3 py-1.5 text-sm rounded-full border transition-colors",
+                                "px-3 py-1.5 text-sm rounded-full border transition-colors text-center",
                                 isSelected
                                   ? "bg-black text-white border-black"
                                   : "bg-white text-gray-700 border-gray-200 hover:border-gray-400"
@@ -783,6 +784,7 @@ export default function NewProfessionalPage() {
             </>
           )}
         </Button>
+      </div>
       </div>
     </div>
   );

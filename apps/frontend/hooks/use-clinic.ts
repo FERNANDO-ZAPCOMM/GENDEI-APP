@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from './use-auth';
+import { useVertical } from '@/lib/vertical-provider';
 import { apiClient } from '@/lib/api';
 import type { Clinic, ClinicStats } from '@/lib/clinic-types';
 
@@ -9,10 +10,11 @@ import type { Clinic, ClinicStats } from '@/lib/clinic-types';
  */
 export function useClinic() {
   const { currentUser, getIdToken, loading: authLoading } = useAuth();
+  const vertical = useVertical();
   const queryClient = useQueryClient();
 
   const query = useQuery({
-    queryKey: ['clinic', currentUser?.uid],
+    queryKey: ['clinic', currentUser?.uid, vertical.slug],
     queryFn: async (): Promise<Clinic> => {
       const token = await getIdToken();
       if (!token) throw new Error('Not authenticated');
@@ -24,10 +26,9 @@ export function useClinic() {
         });
         return clinic;
       } catch {
-        // New user or no clinic exists - return minimal object with user's uid as id
-        // The clinic id is always the user's uid, so we use that even for new clinics
+        // New user or no clinic exists - return minimal object with composite ID
         return {
-          id: currentUser!.uid,
+          id: `${currentUser!.uid}_${vertical.slug}`,
           name: currentUser!.displayName || 'Nova Clínica',
           ownerId: currentUser!.uid,
           isNewClinic: true,
@@ -51,7 +52,7 @@ export function useClinic() {
       });
     },
     onSuccess: (updatedClinic) => {
-      queryClient.setQueryData(['clinic', currentUser?.uid], updatedClinic);
+      queryClient.setQueryData(['clinic', currentUser?.uid, vertical.slug], updatedClinic);
     },
   });
 
@@ -68,7 +69,7 @@ export function useClinic() {
     },
     onSuccess: () => {
       // Refetch clinic data to get updated greetingSummary
-      queryClient.invalidateQueries({ queryKey: ['clinic', currentUser?.uid] });
+      queryClient.invalidateQueries({ queryKey: ['clinic', currentUser?.uid, vertical.slug] });
     },
   });
 

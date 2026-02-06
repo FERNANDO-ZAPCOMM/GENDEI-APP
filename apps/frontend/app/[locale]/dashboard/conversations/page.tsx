@@ -189,39 +189,39 @@ function ConversationsPageContent() {
       {/* Stats Cards Row - Desktop */}
       <div className="hidden lg:grid grid-cols-3 gap-6">
         <div className="col-span-2 grid grid-cols-2 gap-6">
-          <Card className="bg-gradient-to-br from-blue-50 to-white border-blue-100">
+          <Card className="border-l-4 border-l-blue-500 bg-gradient-to-br from-blue-50 to-white">
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-xs text-blue-600 font-medium">{t('conversations.stats.total')}</p>
                   <p className="text-2xl font-bold text-blue-700">{stats?.totalConversations || 0}</p>
                 </div>
-                <MessageCircle className="w-5 h-5 text-blue-600" />
+                <MessageCircle className="w-5 h-5 text-blue-500" />
               </div>
             </CardContent>
           </Card>
 
-          <Card className="border-emerald-100" style={{ background: 'linear-gradient(to bottom right, #f5fefa, white)' }}>
+          <Card className="border-l-4 border-l-emerald-500 bg-gradient-to-br from-emerald-50 to-white">
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-xs text-emerald-600 font-medium">{t('conversations.stats.active')}</p>
                   <p className="text-2xl font-bold text-emerald-700">{stats?.activeConversations || 0}</p>
                 </div>
-                <Zap className="w-5 h-5 text-emerald-600" />
+                <Zap className="w-5 h-5 text-emerald-500" />
               </div>
             </CardContent>
           </Card>
         </div>
 
-        <Card className="border-purple-100" style={{ background: 'linear-gradient(to bottom right, #fdfaff, white)' }}>
+        <Card className="border-l-4 border-l-violet-500 bg-gradient-to-br from-violet-50 to-white">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs text-purple-600 font-medium">{t('conversations.stats.new7days') || 'Ultimos 7 dias'}</p>
-                <p className="text-2xl font-bold text-purple-700">{stats?.totalConversations || 0}</p>
+                <p className="text-xs text-violet-600 font-medium">{t('conversations.stats.new7days') || 'Ultimos 7 dias'}</p>
+                <p className="text-2xl font-bold text-violet-700">{stats?.totalConversations || 0}</p>
               </div>
-              <CalendarDays className="w-5 h-5 text-purple-600" />
+              <CalendarDays className="w-5 h-5 text-violet-500" />
             </div>
           </CardContent>
         </Card>
@@ -229,7 +229,7 @@ function ConversationsPageContent() {
 
       {/* Mobile Stats Cards */}
       <div className="lg:hidden grid grid-cols-3 gap-3">
-        <Card className="bg-gradient-to-br from-blue-50 to-white border-blue-100">
+        <Card className="border-l-4 border-l-blue-500 bg-gradient-to-br from-blue-50 to-white">
           <CardContent className="p-4">
             <div className="text-center">
               <p className="text-xs text-blue-600 font-medium">Total</p>
@@ -238,7 +238,7 @@ function ConversationsPageContent() {
           </CardContent>
         </Card>
 
-        <Card className="border-emerald-100" style={{ background: 'linear-gradient(to bottom right, #f5fefa, white)' }}>
+        <Card className="border-l-4 border-l-emerald-500 bg-gradient-to-br from-emerald-50 to-white">
           <CardContent className="p-4">
             <div className="text-center">
               <p className="text-xs text-emerald-600 font-medium">Ativas</p>
@@ -247,11 +247,11 @@ function ConversationsPageContent() {
           </CardContent>
         </Card>
 
-        <Card className="border-purple-100" style={{ background: 'linear-gradient(to bottom right, #fdfaff, white)' }}>
+        <Card className="border-l-4 border-l-violet-500 bg-gradient-to-br from-violet-50 to-white">
           <CardContent className="p-4">
             <div className="text-center">
-              <p className="text-xs text-purple-600 font-medium">7 dias</p>
-              <p className="text-2xl font-bold text-purple-700">{stats?.totalConversations || 0}</p>
+              <p className="text-xs text-violet-600 font-medium">7 dias</p>
+              <p className="text-2xl font-bold text-violet-700">{stats?.totalConversations || 0}</p>
             </div>
           </CardContent>
         </Card>

@@ -2,10 +2,13 @@
 
 import { useState, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
-import { Check, Loader2, Save, FileText, MessageSquare, Play, Flag, MousePointer, HelpCircle, Plus, Wand2, X, Calendar } from 'lucide-react';
+import { Check, Loader2, Save, FileText, MessageSquare, Play, Flag, MousePointer, HelpCircle, Plus, Wand2, X, Calendar, Search, CreditCard, CheckCircle, Bell, BotMessageSquare } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { useClinic } from '@/hooks/use-clinic';
+import { useAuth } from '@/hooks/use-auth';
+import { useVertical } from '@/lib/vertical-provider';
+import { apiClient } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -23,14 +26,14 @@ interface FAQItem {
 
 export default function WorkflowPage() {
   const t = useTranslations();
+  const vertical = useVertical();
   const { currentClinic, isLoading: clinicLoading, updateClinic, refetch } = useClinic();
+  const { getIdToken } = useAuth();
 
   const [selectedMode, setSelectedMode] = useState<WorkflowMode>('booking');
   const [isSaving, setIsSaving] = useState(false);
 
   // Info mode specific fields
-  const [topic, setTopic] = useState('');
-  const [description, setDescription] = useState('');
   const [welcomeMessage, setWelcomeMessage] = useState('');
   const [ctaText, setCtaText] = useState('');
   const [faqs, setFaqs] = useState<FAQItem[]>([]);
@@ -44,10 +47,7 @@ export default function WorkflowPage() {
       if (currentClinic.workflowMode) {
         setSelectedMode(currentClinic.workflowMode);
       }
-      // Load info mode settings if they exist
       const clinicData = currentClinic as any;
-      if (clinicData.workflowTopic) setTopic(clinicData.workflowTopic);
-      if (clinicData.workflowDescription) setDescription(clinicData.workflowDescription);
       if (clinicData.workflowWelcomeMessage) setWelcomeMessage(clinicData.workflowWelcomeMessage);
       if (clinicData.workflowCta) setCtaText(clinicData.workflowCta);
       if (clinicData.workflowFaqs) setFaqs(clinicData.workflowFaqs);
@@ -70,22 +70,25 @@ export default function WorkflowPage() {
   };
 
   const handleGenerateFaq = async () => {
-    if (!description && !topic) {
-      toast.error(t('workflowPage.toasts.faqFillRequired'));
+    const clinicData = currentClinic as any;
+    if (!clinicData?.description) {
+      toast.error(t('workflowPage.toasts.faqNeedsProfile'));
       return;
     }
     setIsGeneratingFaq(true);
-    // Simulate AI generation - in real implementation, this would call an API
-    setTimeout(() => {
-      const generatedFaqs: FAQItem[] = [
-        { question: `Quais são os horários de funcionamento?`, answer: 'Funcionamos de segunda a sexta das 8h às 18h, e sábados das 8h às 12h.' },
-        { question: `Quais especialidades vocês atendem?`, answer: 'Atendemos diversas especialidades médicas. Entre em contato para mais informações.' },
-        { question: `Como faço para agendar uma consulta?`, answer: 'Para agendar, entre em contato pelo telefone ou WhatsApp da clínica.' },
-      ];
-      setFaqs([...faqs, ...generatedFaqs]);
-      setIsGeneratingFaq(false);
+    try {
+      const token = await getIdToken();
+      const result = await apiClient<{ faqs: FAQItem[] }>('/clinics/me/generate-faqs', {
+        method: 'POST',
+        token: token || undefined,
+      });
+      setFaqs([...faqs, ...result.faqs]);
       toast.success(t('workflowPage.toasts.faqGenerated'));
-    }, 2000);
+    } catch (error) {
+      toast.error(t('workflowPage.toasts.faqError'));
+    } finally {
+      setIsGeneratingFaq(false);
+    }
   };
 
   const handleSave = async () => {
@@ -97,8 +100,6 @@ export default function WorkflowPage() {
 
       // Save info mode specific fields
       if (selectedMode === 'info') {
-        updateData.workflowTopic = topic;
-        updateData.workflowDescription = description;
         updateData.workflowWelcomeMessage = welcomeMessage;
         updateData.workflowCta = ctaText;
         updateData.workflowFaqs = faqs;
@@ -200,106 +201,160 @@ export default function WorkflowPage() {
           </Card>
 
           {/* Booking Mode - Flow Steps */}
-          {selectedMode === 'booking' && (
-            <Card>
-              <CardContent className="pt-6 space-y-3">
-                {/* Step 1 - Inicio */}
-                <div className="flex items-center gap-4 p-4 rounded-lg border border-gray-200">
-                  <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-gray-100 text-gray-500 text-sm font-medium">
-                    1
-                  </div>
-                  <div className="p-2 rounded-lg bg-gray-100">
-                    <Play className="h-5 w-5 text-gray-600" />
-                  </div>
-                  <div>
-                    <h4 className="font-medium text-gray-900">{t('workflowPage.bookingSteps.step1.title')}</h4>
-                    <p className="text-sm text-gray-500">{t('workflowPage.bookingSteps.step1.description')}</p>
-                  </div>
-                </div>
+          {selectedMode === 'booking' && (() => {
+            const showDeposit = vertical.features.showDeposit;
+            const steps = [
+              { key: 'inicio', icon: Play, color: 'gray', ai: false },
+              { key: 'triagem', icon: Search, color: 'blue', ai: true },
+              { key: 'agendamento', icon: Calendar, color: 'blue', ai: true },
+              ...(showDeposit ? [{ key: 'pagamento', icon: CreditCard, color: 'blue', ai: true }] : []),
+              { key: 'confirmacao', icon: CheckCircle, color: 'green', ai: false },
+              { key: 'lembrete', icon: Bell, color: 'amber', ai: true },
+              { key: 'fim', icon: Flag, color: 'gray', ai: false },
+            ];
+            return (
+              <Card>
+                <CardContent className="pt-6 space-y-1">
+                  {steps.map((step, index) => {
+                    const Icon = step.icon;
+                    const isAi = step.ai;
+                    const stepNum = index + 1;
+                    const colorClasses = {
+                      gray: {
+                        border: 'border-gray-200',
+                        bg: '',
+                        numBg: 'bg-gray-100 text-gray-500',
+                        iconBg: 'bg-gray-100',
+                        iconText: 'text-gray-600',
+                      },
+                      blue: {
+                        border: 'border-blue-200',
+                        bg: 'bg-blue-50/50',
+                        numBg: 'bg-blue-100 text-blue-600',
+                        iconBg: 'bg-blue-100',
+                        iconText: 'text-blue-600',
+                      },
+                      green: {
+                        border: 'border-emerald-200',
+                        bg: 'bg-emerald-50/50',
+                        numBg: 'bg-emerald-100 text-emerald-600',
+                        iconBg: 'bg-emerald-100',
+                        iconText: 'text-emerald-600',
+                      },
+                      amber: {
+                        border: 'border-amber-200',
+                        bg: 'bg-amber-50/50',
+                        numBg: 'bg-amber-100 text-amber-600',
+                        iconBg: 'bg-amber-100',
+                        iconText: 'text-amber-600',
+                      },
+                    };
+                    const c = colorClasses[step.color as keyof typeof colorClasses];
+                    return (
+                      <div key={step.key}>
+                        <div className={`flex items-center gap-4 p-3.5 rounded-lg border ${c.border} ${c.bg}`}>
+                          <div className={`flex items-center justify-center w-7 h-7 rounded-full ${c.numBg} text-xs font-semibold`}>
+                            {stepNum}
+                          </div>
+                          <div className={`p-1.5 rounded-lg ${c.iconBg}`}>
+                            <Icon className={`h-4 w-4 ${c.iconText}`} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <h4 className="font-medium text-sm text-gray-900">
+                                {t(`workflowPage.bookingSteps.${step.key}.title`)}
+                              </h4>
+                              {isAi && (
+                                <Badge variant="secondary" className="bg-blue-100 text-blue-700 text-[10px] px-1.5 py-0">
+                                  IA
+                                </Badge>
+                              )}
+                            </div>
+                            <p className="text-xs text-gray-500">
+                              {t(`workflowPage.bookingSteps.${step.key}.description`)}
+                            </p>
+                          </div>
+                        </div>
+                        {/* Connector line between steps */}
+                        {index < steps.length - 1 && (
+                          <div className="flex justify-start ml-[2.05rem] py-0.5">
+                            <div className="w-px h-3 bg-gray-200" />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </CardContent>
+              </Card>
+            );
+          })()}
 
-                {/* Step 2 - IA Assume */}
-                <div className="flex items-center gap-4 p-4 rounded-lg border-2 border-blue-200 bg-blue-50">
-                  <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-blue-100 text-blue-600 text-sm font-medium">
-                    2
-                  </div>
-                  <div className="p-2 rounded-lg bg-blue-100">
-                    <Calendar className="h-5 w-5 text-blue-600" />
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <h4 className="font-medium text-gray-900">{t('workflowPage.bookingSteps.step2.title')}</h4>
-                      <Badge variant="secondary" className="bg-blue-100 text-blue-700 text-xs">
-                        {t('workflowPage.bookingSteps.step2.badge')}
-                      </Badge>
-                    </div>
-                    <p className="text-sm text-gray-500">{t('workflowPage.bookingSteps.step2.description')}</p>
-                  </div>
-                </div>
-
-                {/* Step 3 - Fim */}
-                <div className="flex items-center gap-4 p-4 rounded-lg border border-gray-200">
-                  <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-gray-100 text-gray-500 text-sm font-medium">
-                    3
-                  </div>
-                  <div className="p-2 rounded-lg bg-gray-100">
-                    <Flag className="h-5 w-5 text-gray-600" />
-                  </div>
-                  <div>
-                    <h4 className="font-medium text-gray-900">{t('workflowPage.bookingSteps.step3.title')}</h4>
-                    <p className="text-sm text-gray-500">{t('workflowPage.bookingSteps.step3.description')}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
+          {/* Info Mode - Flow Steps */}
+          {selectedMode === 'info' && (() => {
+            const infoSteps = [
+              { key: 'info_inicio', icon: Play, color: 'gray' as const, ai: false },
+              { key: 'info_responde', icon: BotMessageSquare, color: 'blue' as const, ai: true },
+              { key: 'info_fim', icon: Flag, color: 'gray' as const, ai: false },
+            ];
+            return (
+              <Card>
+                <CardContent className="pt-6 space-y-1">
+                  {infoSteps.map((step, index) => {
+                    const Icon = step.icon;
+                    const colorClasses = {
+                      gray: {
+                        border: 'border-gray-200', bg: '',
+                        numBg: 'bg-gray-100 text-gray-500',
+                        iconBg: 'bg-gray-100', iconText: 'text-gray-600',
+                      },
+                      blue: {
+                        border: 'border-blue-200', bg: 'bg-blue-50/50',
+                        numBg: 'bg-blue-100 text-blue-600',
+                        iconBg: 'bg-blue-100', iconText: 'text-blue-600',
+                      },
+                    };
+                    const c = colorClasses[step.color];
+                    return (
+                      <div key={step.key}>
+                        <div className={`flex items-center gap-4 p-3.5 rounded-lg border ${c.border} ${c.bg}`}>
+                          <div className={`flex items-center justify-center w-7 h-7 rounded-full ${c.numBg} text-xs font-semibold`}>
+                            {index + 1}
+                          </div>
+                          <div className={`p-1.5 rounded-lg ${c.iconBg}`}>
+                            <Icon className={`h-4 w-4 ${c.iconText}`} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <h4 className="font-medium text-sm text-gray-900">
+                                {t(`workflowPage.infoSteps.${step.key}.title`)}
+                              </h4>
+                              {step.ai && (
+                                <Badge variant="secondary" className="bg-blue-100 text-blue-700 text-[10px] px-1.5 py-0">
+                                  IA
+                                </Badge>
+                              )}
+                            </div>
+                            <p className="text-xs text-gray-500">
+                              {t(`workflowPage.infoSteps.${step.key}.description`)}
+                            </p>
+                          </div>
+                        </div>
+                        {index < infoSteps.length - 1 && (
+                          <div className="flex justify-start ml-[2.05rem] py-0.5">
+                            <div className="w-px h-3 bg-gray-200" />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </CardContent>
+              </Card>
+            );
+          })()}
 
           {/* Info Mode Additional Settings */}
           {selectedMode === 'info' && (
             <>
-              {/* Topic and Description Card */}
-              <Card>
-                <CardHeader className="pb-4">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 rounded-lg bg-gray-100">
-                      <FileText className="h-5 w-5 text-gray-600" />
-                    </div>
-                    <div>
-                      <CardTitle className="text-base">{t('workflowPage.topicCard.title')}</CardTitle>
-                      <CardDescription>{t('workflowPage.topicCard.description')}</CardDescription>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="topic">
-                      {t('workflowPage.topicCard.topicLabel')} <span className="text-red-500">*</span>
-                    </Label>
-                    <Input
-                      id="topic"
-                      value={topic}
-                      onChange={(e) => setTopic(e.target.value)}
-                      placeholder={currentClinic?.name || t('workflowPage.topicCard.topicPlaceholder')}
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      {t('workflowPage.topicCard.topicHelp')}
-                    </p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="description">{t('workflowPage.topicCard.descriptionLabel')}</Label>
-                    <Textarea
-                      id="description"
-                      value={description}
-                      onChange={(e) => setDescription(e.target.value)}
-                      placeholder={t('workflowPage.topicCard.descriptionPlaceholder')}
-                      rows={5}
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      {t('workflowPage.topicCard.descriptionHelp')}
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-
               {/* Welcome Message Card */}
               <Card>
                 <CardHeader className="pb-4">
@@ -457,8 +512,8 @@ export default function WorkflowPage() {
                 <WorkflowWhatsAppPreview
                   mode={selectedMode}
                   clinicName={currentClinic?.name}
-                  topic={topic}
-                  description={description}
+                  topic={currentClinic?.name || ''}
+                  description={(currentClinic as any)?.description || ''}
                   welcomeMessage={welcomeMessage}
                 />
                 <p className="text-sm text-gray-500 mt-4 flex items-center gap-2">

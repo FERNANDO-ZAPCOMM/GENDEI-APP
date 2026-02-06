@@ -25,7 +25,7 @@ const CLINICS = 'gendei_clinics';
 router.get('/', verifyAuth, async (req: Request, res: Response) => {
   try {
     const user = (req as any).user;
-    const clinicId = user?.uid;
+    const clinicId = user?.clinicId;
 
     if (!clinicId) {
       return res.status(401).json({ message: 'Not authenticated' });
@@ -51,7 +51,7 @@ router.get('/', verifyAuth, async (req: Request, res: Response) => {
 router.get('/me', verifyAuth, async (req: Request, res: Response) => {
   try {
     const user = (req as any).user;
-    const clinicId = user?.uid;
+    const clinicId = user?.clinicId;
 
     if (!clinicId) {
       return res.status(401).json({ message: 'Not authenticated' });
@@ -77,7 +77,7 @@ router.get('/me', verifyAuth, async (req: Request, res: Response) => {
 router.patch('/me', verifyAuth, async (req: Request, res: Response) => {
   try {
     const user = (req as any).user;
-    const clinicId = user?.uid;
+    const clinicId = user?.clinicId;
 
     if (!clinicId) {
       return res.status(401).json({ message: 'Not authenticated' });
@@ -97,12 +97,17 @@ router.patch('/me', verifyAuth, async (req: Request, res: Response) => {
         zipCode,
         cnpj,
         categories,
+        description,
+        website,
+        openingHours,
+        addressData,
+        paymentSettings,
         signalPercentage = 15
       } = req.body;
 
-      const clinicData = {
+      const clinicData: Record<string, any> = {
         name: name || 'Nova Clínica',
-        ownerId: clinicId,
+        ownerId: user?.uid,
         phone: phone || '',
         email: email || user?.email || '',
         address: address || '',
@@ -118,9 +123,17 @@ router.patch('/me', verifyAuth, async (req: Request, res: Response) => {
         signalPercentage,
         adminIds: [],
         timezone: 'America/Sao_Paulo',
+        vertical: user?.vertical || 'geral',
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp()
       };
+
+      // Include optional fields if provided
+      if (description) clinicData.description = description;
+      if (website) clinicData.website = website;
+      if (openingHours) clinicData.openingHours = openingHours;
+      if (addressData) clinicData.addressData = addressData;
+      if (paymentSettings) clinicData.paymentSettings = paymentSettings;
 
       await db.collection(CLINICS).doc(clinicId).set(clinicData);
 
@@ -138,7 +151,8 @@ router.patch('/me', verifyAuth, async (req: Request, res: Response) => {
       'zipCode', 'cnpj', 'categories', 'signalPercentage', 'timezone',
       'paymentSettings', 'pixKey', 'depositPercentage', 'requiresDeposit',
       'description', 'website', 'openingHours', 'addressData', 'greetingSummary',
-      'workflowMode', 'vertical'
+      'workflowMode', 'workflowWelcomeMessage', 'workflowCta', 'workflowFaqs',
+      'vertical'
     ];
 
     const updateData: any = {
@@ -172,7 +186,7 @@ router.get('/:clinicId', verifyAuth, async (req: Request, res: Response) => {
     const user = (req as any).user;
 
     // Verify access
-    if (user?.uid !== clinicId) {
+    if (user?.clinicId !== clinicId) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
@@ -196,7 +210,7 @@ router.get('/:clinicId', verifyAuth, async (req: Request, res: Response) => {
 router.post('/', verifyAuth, async (req: Request, res: Response) => {
   try {
     const user = (req as any).user;
-    const clinicId = user?.uid;
+    const clinicId = user?.clinicId;
 
     if (!clinicId) {
       return res.status(401).json({ message: 'Not authenticated' });
@@ -211,6 +225,11 @@ router.post('/', verifyAuth, async (req: Request, res: Response) => {
       state,
       zipCode,
       cnpj,
+      description,
+      website,
+      openingHours,
+      addressData,
+      paymentSettings,
       signalPercentage = 15
     } = req.body;
 
@@ -218,9 +237,9 @@ router.post('/', verifyAuth, async (req: Request, res: Response) => {
       return res.status(400).json({ message: 'Clinic name is required' });
     }
 
-    const clinicData = {
+    const clinicData: Record<string, any> = {
       name,
-      ownerId: clinicId,
+      ownerId: user?.uid,
       phone: phone || '',
       email: email || user?.email || '',
       address: address || '',
@@ -235,9 +254,17 @@ router.post('/', verifyAuth, async (req: Request, res: Response) => {
       signalPercentage,
       adminIds: [],
       timezone: 'America/Sao_Paulo',
+      vertical: user?.vertical || 'geral',
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp()
     };
+
+    // Include optional fields if provided
+    if (description) clinicData.description = description;
+    if (website) clinicData.website = website;
+    if (openingHours) clinicData.openingHours = openingHours;
+    if (addressData) clinicData.addressData = addressData;
+    if (paymentSettings) clinicData.paymentSettings = paymentSettings;
 
     await db.collection(CLINICS).doc(clinicId).set(clinicData);
 
@@ -260,7 +287,7 @@ router.put('/:clinicId', verifyAuth, async (req: Request, res: Response) => {
     const user = (req as any).user;
 
     // Verify ownership
-    if (user?.uid !== clinicId) {
+    if (user?.clinicId !== clinicId) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
@@ -275,7 +302,8 @@ router.put('/:clinicId', verifyAuth, async (req: Request, res: Response) => {
       'zipCode', 'cnpj', 'signalPercentage', 'timezone',
       'paymentSettings', 'pixKey', 'depositPercentage', 'requiresDeposit',
       'description', 'website', 'openingHours', 'addressData', 'greetingSummary', 'categories',
-      'workflowMode', 'vertical'
+      'workflowMode', 'workflowWelcomeMessage', 'workflowCta', 'workflowFaqs',
+      'vertical'
     ];
 
     const updateData: any = {
@@ -308,7 +336,7 @@ router.get('/:clinicId/settings', verifyAuth, async (req: Request, res: Response
     const { clinicId } = req.params;
     const user = (req as any).user;
 
-    if (user?.uid !== clinicId) {
+    if (user?.clinicId !== clinicId) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
@@ -333,7 +361,7 @@ router.put('/:clinicId/settings/:key', verifyAuth, async (req: Request, res: Res
     const { clinicId, key } = req.params;
     const user = (req as any).user;
 
-    if (user?.uid !== clinicId) {
+    if (user?.clinicId !== clinicId) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
@@ -357,7 +385,7 @@ router.get('/:clinicId/stats', verifyAuth, async (req: Request, res: Response) =
     const { clinicId } = req.params;
     const user = (req as any).user;
 
-    if (user?.uid !== clinicId) {
+    if (user?.clinicId !== clinicId) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
@@ -409,7 +437,7 @@ router.get('/:clinicId/pending-counts', verifyAuth, async (req: Request, res: Re
     const { clinicId } = req.params;
     const user = (req as any).user;
 
-    if (user?.uid !== clinicId) {
+    if (user?.clinicId !== clinicId) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
@@ -445,7 +473,7 @@ router.get('/:clinicId/pending-counts', verifyAuth, async (req: Request, res: Re
 router.post('/me/generate-summary', verifyAuth, async (req: Request, res: Response) => {
   try {
     const user = (req as any).user;
-    const clinicId = user?.uid;
+    const clinicId = user?.clinicId;
 
     if (!clinicId) {
       return res.status(401).json({ message: 'Not authenticated' });
@@ -510,6 +538,143 @@ Exemplo de formato:
   }
 });
 
+// POST /clinics/me/enhance-description - Enhance clinic description with AI
+router.post('/me/enhance-description', verifyAuth, async (req: Request, res: Response) => {
+  try {
+    const user = (req as any).user;
+    const clinicId = user?.clinicId;
+
+    if (!clinicId) {
+      return res.status(401).json({ message: 'Not authenticated' });
+    }
+
+    const { description, clinicName } = req.body;
+
+    if (!description || description.trim().length < 10) {
+      return res.status(400).json({ message: 'Description must be at least 10 characters' });
+    }
+
+    if (!process.env.OPENAI_API_KEY) {
+      return res.status(500).json({ message: 'AI service not configured' });
+    }
+
+    const completion = await getOpenAI().chat.completions.create({
+      model: 'gpt-4o-mini',
+      max_tokens: 500,
+      temperature: 0.7,
+      messages: [
+        {
+          role: 'system',
+          content: 'Você é um copywriter especializado em clínicas e consultórios de saúde. Melhore a descrição mantendo as informações originais, mas tornando o texto mais profissional, claro e atrativo. Responda apenas com a descrição melhorada, sem explicações.'
+        },
+        {
+          role: 'user',
+          content: `Melhore a descrição abaixo para a clínica "${clinicName || 'a clínica'}".
+
+Descrição original:
+${description}
+
+Regras:
+- Mantenha todas as informações originais
+- Torne o texto mais profissional e atrativo
+- Use linguagem clara e objetiva
+- Não invente informações novas
+- Máximo 750 caracteres
+- Não use emojis
+- Mantenha em português do Brasil`
+        }
+      ]
+    });
+
+    const enhanced = completion.choices[0]?.message?.content?.trim() || '';
+
+    return res.json({ description: enhanced });
+  } catch (error: any) {
+    console.error('Error enhancing description:', error);
+    return res.status(500).json({ message: error.message || 'Failed to enhance description' });
+  }
+});
+
+// POST /clinics/me/generate-faqs - Generate FAQs based on clinic profile
+router.post('/me/generate-faqs', verifyAuth, async (req: Request, res: Response) => {
+  try {
+    const user = (req as any).user;
+    const clinicId = user?.clinicId;
+
+    if (!clinicId) {
+      return res.status(401).json({ message: 'Not authenticated' });
+    }
+
+    // Get clinic data to build context
+    const clinicDoc = await db.collection(CLINICS).doc(clinicId).get();
+    if (!clinicDoc.exists) {
+      return res.status(404).json({ message: 'Clinic not found' });
+    }
+
+    const clinic = clinicDoc.data()!;
+
+    if (!clinic.description || clinic.description.trim().length < 10) {
+      return res.status(400).json({ message: 'Clinic must have a description to generate FAQs' });
+    }
+
+    if (!process.env.OPENAI_API_KEY) {
+      return res.status(500).json({ message: 'AI service not configured' });
+    }
+
+    // Build context from clinic profile
+    const context = [
+      `Nome: ${clinic.name || 'Clínica'}`,
+      clinic.description ? `Descrição: ${clinic.description}` : '',
+      clinic.phone ? `Telefone: ${clinic.phone}` : '',
+      clinic.address ? `Endereço: ${clinic.address}` : '',
+      clinic.openingHours ? `Horários: ${clinic.openingHours}` : '',
+      clinic.vertical ? `Vertical: ${clinic.vertical}` : '',
+    ].filter(Boolean).join('\n');
+
+    const completion = await getOpenAI().chat.completions.create({
+      model: 'gpt-4o-mini',
+      max_tokens: 800,
+      temperature: 0.7,
+      messages: [
+        {
+          role: 'system',
+          content: 'Você gera perguntas frequentes (FAQs) para clínicas de saúde. Responda APENAS com um array JSON válido, sem markdown, sem explicações.'
+        },
+        {
+          role: 'user',
+          content: `Gere 5 perguntas frequentes (FAQ) para esta clínica, com base nas informações disponíveis:
+
+${context}
+
+Regras:
+- Gere perguntas que pacientes realmente fariam pelo WhatsApp
+- Respostas curtas e objetivas (máximo 2 frases cada)
+- Use informações reais do perfil quando disponíveis
+- Para informações não disponíveis, dê respostas genéricas úteis
+- Não use emojis
+- Responda APENAS com JSON no formato: [{"question": "...", "answer": "..."}]`
+        }
+      ]
+    });
+
+    const content = completion.choices[0]?.message?.content?.trim() || '[]';
+
+    let faqs;
+    try {
+      faqs = JSON.parse(content);
+    } catch {
+      // Try to extract JSON from markdown code blocks
+      const jsonMatch = content.match(/\[[\s\S]*\]/);
+      faqs = jsonMatch ? JSON.parse(jsonMatch[0]) : [];
+    }
+
+    return res.json({ faqs });
+  } catch (error: any) {
+    console.error('Error generating FAQs:', error);
+    return res.status(500).json({ message: error.message || 'Failed to generate FAQs' });
+  }
+});
+
 // ============================================
 // TIME BLOCKS
 // ============================================
@@ -523,7 +688,7 @@ router.get('/:clinicId/time-blocks', verifyAuth, async (req: Request, res: Respo
     const user = (req as any).user;
     const { startDate, endDate, professionalId } = req.query;
 
-    if (user?.uid !== clinicId) {
+    if (user?.clinicId !== clinicId) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
@@ -571,7 +736,7 @@ router.post('/:clinicId/time-blocks', verifyAuth, async (req: Request, res: Resp
     const { clinicId } = req.params;
     const user = (req as any).user;
 
-    if (user?.uid !== clinicId) {
+    if (user?.clinicId !== clinicId) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
@@ -613,7 +778,7 @@ router.delete('/:clinicId/time-blocks/:blockId', verifyAuth, async (req: Request
     const { clinicId, blockId } = req.params;
     const user = (req as any).user;
 
-    if (user?.uid !== clinicId) {
+    if (user?.clinicId !== clinicId) {
       return res.status(403).json({ message: 'Access denied' });
     }
 

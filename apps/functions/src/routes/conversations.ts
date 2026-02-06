@@ -24,7 +24,7 @@ enum ConversationState {
 router.get('/', verifyAuth, async (req: Request, res: Response) => {
   try {
     const user = (req as any).user;
-    const clinicId = req.query.clinicId as string || user?.uid;
+    const clinicId = req.query.clinicId as string || user?.clinicId;
     const state = req.query.state as string;
     const isHumanTakeover = req.query.isHumanTakeover as string;
     const search = req.query.search as string;
@@ -35,7 +35,7 @@ router.get('/', verifyAuth, async (req: Request, res: Response) => {
       return res.status(400).json({ message: 'Clinic ID is required' });
     }
 
-    if (user?.uid !== clinicId) {
+    if (user?.clinicId !== clinicId) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
@@ -90,13 +90,13 @@ router.get('/', verifyAuth, async (req: Request, res: Response) => {
 router.get('/stats', verifyAuth, async (req: Request, res: Response) => {
   try {
     const user = (req as any).user;
-    const clinicId = req.query.clinicId as string || user?.uid;
+    const clinicId = req.query.clinicId as string || user?.clinicId;
 
     if (!clinicId) {
       return res.status(400).json({ message: 'Clinic ID is required' });
     }
 
-    if (user?.uid !== clinicId) {
+    if (user?.clinicId !== clinicId) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
@@ -147,13 +147,13 @@ router.get('/:conversationId', verifyAuth, async (req: Request, res: Response) =
   try {
     const { conversationId } = req.params;
     const user = (req as any).user;
-    const clinicId = req.query.clinicId as string || user?.uid;
+    const clinicId = req.query.clinicId as string || user?.clinicId;
 
     if (!clinicId) {
       return res.status(400).json({ message: 'Clinic ID is required' });
     }
 
-    if (user?.uid !== clinicId) {
+    if (user?.clinicId !== clinicId) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
@@ -191,14 +191,14 @@ router.get('/:conversationId/messages', verifyAuth, async (req: Request, res: Re
   try {
     const { conversationId } = req.params;
     const user = (req as any).user;
-    const clinicId = req.query.clinicId as string || user?.uid;
+    const clinicId = req.query.clinicId as string || user?.clinicId;
     const limit = parseInt(req.query.limit as string) || 100;
 
     if (!clinicId) {
       return res.status(400).json({ message: 'Clinic ID is required' });
     }
 
-    if (user?.uid !== clinicId) {
+    if (user?.clinicId !== clinicId) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
@@ -243,13 +243,13 @@ router.post('/:conversationId/takeover', verifyAuth, async (req: Request, res: R
     const { conversationId } = req.params;
     const { userId } = req.body;
     const user = (req as any).user;
-    const clinicId = req.query.clinicId as string || user?.uid;
+    const clinicId = req.query.clinicId as string || user?.clinicId;
 
     if (!clinicId) {
       return res.status(400).json({ message: 'Clinic ID is required' });
     }
 
-    if (user?.uid !== clinicId) {
+    if (user?.clinicId !== clinicId) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
@@ -287,13 +287,13 @@ router.post('/:conversationId/release', verifyAuth, async (req: Request, res: Re
   try {
     const { conversationId } = req.params;
     const user = (req as any).user;
-    const clinicId = req.query.clinicId as string || user?.uid;
+    const clinicId = req.query.clinicId as string || user?.clinicId;
 
     if (!clinicId) {
       return res.status(400).json({ message: 'Clinic ID is required' });
     }
 
-    if (user?.uid !== clinicId) {
+    if (user?.clinicId !== clinicId) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
@@ -332,13 +332,13 @@ router.post('/:conversationId/messages', verifyAuth, async (req: Request, res: R
     const { conversationId } = req.params;
     const { message, userId } = req.body;
     const user = (req as any).user;
-    const clinicId = req.query.clinicId as string || user?.uid;
+    const clinicId = req.query.clinicId as string || user?.clinicId;
 
     if (!clinicId) {
       return res.status(400).json({ message: 'Clinic ID is required' });
     }
 
-    if (user?.uid !== clinicId) {
+    if (user?.clinicId !== clinicId) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
@@ -444,13 +444,13 @@ router.patch('/:conversationId', verifyAuth, async (req: Request, res: Response)
     const { conversationId } = req.params;
     const { state } = req.body;
     const user = (req as any).user;
-    const clinicId = req.query.clinicId as string || user?.uid;
+    const clinicId = req.query.clinicId as string || user?.clinicId;
 
     if (!clinicId) {
       return res.status(400).json({ message: 'Clinic ID is required' });
     }
 
-    if (user?.uid !== clinicId) {
+    if (user?.clinicId !== clinicId) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
@@ -490,13 +490,13 @@ router.post('/:conversationId/archive', verifyAuth, async (req: Request, res: Re
   try {
     const { conversationId } = req.params;
     const user = (req as any).user;
-    const clinicId = req.query.clinicId as string || user?.uid;
+    const clinicId = req.query.clinicId as string || user?.clinicId;
 
     if (!clinicId) {
       return res.status(400).json({ message: 'Clinic ID is required' });
     }
 
-    if (user?.uid !== clinicId) {
+    if (user?.clinicId !== clinicId) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
@@ -532,13 +532,13 @@ router.post('/:conversationId/unarchive', verifyAuth, async (req: Request, res: 
   try {
     const { conversationId } = req.params;
     const user = (req as any).user;
-    const clinicId = req.query.clinicId as string || user?.uid;
+    const clinicId = req.query.clinicId as string || user?.clinicId;
 
     if (!clinicId) {
       return res.status(400).json({ message: 'Clinic ID is required' });
     }
 
-    if (user?.uid !== clinicId) {
+    if (user?.clinicId !== clinicId) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
@@ -574,13 +574,13 @@ router.delete('/:conversationId', verifyAuth, async (req: Request, res: Response
   try {
     const { conversationId } = req.params;
     const user = (req as any).user;
-    const clinicId = req.query.clinicId as string || user?.uid;
+    const clinicId = req.query.clinicId as string || user?.clinicId;
 
     if (!clinicId) {
       return res.status(400).json({ message: 'Clinic ID is required' });
     }
 
-    if (user?.uid !== clinicId) {
+    if (user?.clinicId !== clinicId) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
@@ -640,13 +640,13 @@ router.get('/:conversationId/window-status', verifyAuth, async (req: Request, re
   try {
     const { conversationId } = req.params;
     const user = (req as any).user;
-    const clinicId = req.query.clinicId as string || user?.uid;
+    const clinicId = req.query.clinicId as string || user?.clinicId;
 
     if (!clinicId) {
       return res.status(400).json({ message: 'Clinic ID is required' });
     }
 
-    if (user?.uid !== clinicId) {
+    if (user?.clinicId !== clinicId) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
@@ -688,13 +688,13 @@ router.post('/:conversationId/queue', verifyAuth, async (req: Request, res: Resp
     const { conversationId } = req.params;
     const { message } = req.body;
     const user = (req as any).user;
-    const clinicId = req.query.clinicId as string || user?.uid;
+    const clinicId = req.query.clinicId as string || user?.clinicId;
 
     if (!clinicId) {
       return res.status(400).json({ message: 'Clinic ID is required' });
     }
 
-    if (user?.uid !== clinicId) {
+    if (user?.clinicId !== clinicId) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
@@ -747,13 +747,13 @@ router.delete('/:conversationId/queue', verifyAuth, async (req: Request, res: Re
   try {
     const { conversationId } = req.params;
     const user = (req as any).user;
-    const clinicId = req.query.clinicId as string || user?.uid;
+    const clinicId = req.query.clinicId as string || user?.clinicId;
 
     if (!clinicId) {
       return res.status(400).json({ message: 'Clinic ID is required' });
     }
 
-    if (user?.uid !== clinicId) {
+    if (user?.clinicId !== clinicId) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
@@ -788,13 +788,13 @@ router.post('/:conversationId/send-queue', verifyAuth, async (req: Request, res:
   try {
     const { conversationId } = req.params;
     const user = (req as any).user;
-    const clinicId = req.query.clinicId as string || user?.uid;
+    const clinicId = req.query.clinicId as string || user?.clinicId;
 
     if (!clinicId) {
       return res.status(400).json({ message: 'Clinic ID is required' });
     }
 
-    if (user?.uid !== clinicId) {
+    if (user?.clinicId !== clinicId) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
@@ -918,13 +918,13 @@ router.post('/:conversationId/reengagement', verifyAuth, async (req: Request, re
   try {
     const { conversationId } = req.params;
     const user = (req as any).user;
-    const clinicId = req.query.clinicId as string || user?.uid;
+    const clinicId = req.query.clinicId as string || user?.clinicId;
 
     if (!clinicId) {
       return res.status(400).json({ message: 'Clinic ID is required' });
     }
 
-    if (user?.uid !== clinicId) {
+    if (user?.clinicId !== clinicId) {
       return res.status(403).json({ message: 'Access denied' });
     }
 

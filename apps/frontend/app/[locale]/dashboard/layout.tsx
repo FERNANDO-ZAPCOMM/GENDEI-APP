@@ -36,6 +36,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { TypingDots } from '@/components/PageLoader';
 import { cn } from '@/lib/utils';
+import { useVertical } from '@/lib/vertical-provider';
 
 // Pulsing dot indicator component
 function NotificationDot({ notification, size = 'sm' }: { notification: SidebarNotification | null; size?: 'sm' | 'md' }) {
@@ -134,7 +135,7 @@ const navigation: NavItem[] = [
       { name: 'clinic', href: '/dashboard/clinic', icon: Stethoscope, notificationKey: 'clinic', step: 1 },
       { name: 'payments', href: '/dashboard/payments', icon: CreditCard, notificationKey: 'payments', step: 2 },
       { name: 'whatsapp', href: '/dashboard/whatsapp', icon: FaWhatsapp, notificationKey: 'whatsapp', step: 3 },
-      { name: 'workflow', href: '/dashboard/workflow', icon: Bot },
+      { name: 'workflow', href: '/dashboard/workflow', icon: Bot, step: 4 },
       { name: 'account', href: '/dashboard/account', icon: User },
     ],
   },
@@ -463,6 +464,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const { currentClinic: clinic, isLoading: clinicLoading } = useClinic();
   const { data: stats } = useClinicStats(clinic?.id || '');
   const notifications = useSidebarNotifications();
+  const vertical = useVertical();
 
   const locale = pathname.split('/')[1];
   const todayCount = stats?.todayAppointments || 0;
@@ -497,6 +499,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <div className="md:hidden fixed top-0 left-0 right-0 z-50 bg-white border-b border-gray-200">
         <div className="flex items-center justify-center px-4 py-3">
           <span className="text-xl text-black logo-font">Gendei</span>
+          {vertical.slug !== 'geral' && (
+            <span className="text-xl text-gray-400 font-light ml-1">| <span className="capitalize">{vertical.slug}</span></span>
+          )}
         </div>
       </div>
 
@@ -505,6 +510,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         {/* Logo */}
         <div className="p-6">
           <span className="text-2xl text-black logo-font">Gendei</span>
+          {vertical.slug !== 'geral' && (
+            <span className="text-2xl text-gray-400 font-light ml-1">| <span className="capitalize">{vertical.slug}</span></span>
+          )}
           <p className="text-sm text-muted-foreground mt-1 truncate">{clinic?.name || 'Painel da Clínica'}</p>
         </div>
 

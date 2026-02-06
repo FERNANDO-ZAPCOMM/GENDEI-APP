@@ -166,26 +166,28 @@ export default function ProfessionalsPage() {
 
       {/* Add Professional Card - Show when no professionals */}
       {!hasProfessionals && !isLoading && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <UserPlus className="w-4 h-4" />
-              {t('professionalsPage.addProfessional')}
-            </CardTitle>
-            <CardDescription>
-              {t('professionalsPage.addFirstDesc')}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-muted-foreground">
-              {t('professionalsPage.noProfessionals')}
-            </p>
-            <Button onClick={() => router.push(`/${locale}/dashboard/professionals/new`)}>
-              <Plus className="h-4 w-4 mr-2" />
-              {t('professionalsPage.addProfessional')}
-            </Button>
-          </CardContent>
-        </Card>
+        <div className="w-full lg:w-3/4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <UserPlus className="w-4 h-4" />
+                {t('professionalsPage.addProfessional')}
+              </CardTitle>
+              <CardDescription>
+                {t('professionalsPage.addFirstDesc')}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-muted-foreground">
+                {t('professionalsPage.noProfessionals')}
+              </p>
+              <Button onClick={() => router.push(`/${locale}/dashboard/professionals/new`)}>
+                <Plus className="h-4 w-4 mr-2" />
+                {t('professionalsPage.addProfessional')}
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
       )}
 
       {/* Professionals List with Horizontal Filters - Show when professionals exist */}

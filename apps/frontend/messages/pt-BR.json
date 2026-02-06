@@ -1575,18 +1575,47 @@
       "description": "IA responde perguntas sobre a clínica - sem foco em agendamento"
     },
     "bookingSteps": {
-      "step1": {
-        "title": "Inicio",
-        "description": "Cliente envia uma mensagem"
+      "inicio": {
+        "title": "Início",
+        "description": "Cliente envia uma mensagem pelo WhatsApp"
       },
-      "step2": {
-        "title": "IA Assume",
-        "badge": "Automático",
-        "description": "IA decide tudo automaticamente: horários, profissionais, pagamentos"
+      "triagem": {
+        "title": "Triagem",
+        "description": "IA entende o que o cliente precisa (serviço, profissional)"
       },
-      "step3": {
+      "agendamento": {
+        "title": "Agendamento",
+        "description": "IA encontra horários disponíveis e agenda a consulta"
+      },
+      "pagamento": {
+        "title": "Pagamento Sinal",
+        "description": "Cliente paga sinal via PIX para confirmar"
+      },
+      "confirmacao": {
+        "title": "Confirmação",
+        "description": "Consulta confirmada, detalhes enviados ao cliente"
+      },
+      "lembrete": {
+        "title": "Lembrete",
+        "description": "Lembrete automático enviado antes da consulta"
+      },
+      "fim": {
         "title": "Fim",
-        "description": "Consulta agendada e confirmada"
+        "description": "Consulta realizada"
+      }
+    },
+    "infoSteps": {
+      "info_inicio": {
+        "title": "Início",
+        "description": "Cliente envia uma mensagem pelo WhatsApp"
+      },
+      "info_responde": {
+        "title": "IA Responde",
+        "description": "IA responde perguntas com base nas informações configuradas"
+      },
+      "info_fim": {
+        "title": "Fim",
+        "description": "Dúvida respondida ou cliente direcionado"
       }
     },
     "topicCard": {
@@ -1622,8 +1651,9 @@
     "saveButton": "Salvar",
     "saving": "Salvando...",
     "toasts": {
-      "faqFillRequired": "Preencha o tópico e descrição para gerar FAQs automaticamente",
+      "faqNeedsProfile": "Preencha a descrição da clínica no perfil antes de gerar FAQs",
       "faqGenerated": "FAQs geradas com sucesso!",
+      "faqError": "Erro ao gerar FAQs. Tente novamente.",
       "bookingActivated": "Modo Agendamento ativado! O bot irá auxiliar pacientes a agendar consultas.",
       "infoActivated": "Modo Informativo ativado! O bot irá fornecer informações sobre a clínica.",
       "saveError": "Erro ao salvar o modo de atendimento"
@@ -1655,6 +1685,7 @@
       "categoriesHelp": "Isso define quais especialidades estarão disponíveis para os profissionais",
       "descriptionLabel": "Descrição",
       "descriptionPlaceholder": "Descreva os serviços oferecidos...",
+      "enhanceButton": "Melhorar com IA",
       "summaryLabel": "Resumo para Saudação (IA)",
       "generateButton": "Gerar",
       "summaryHelp": "Clique em \"Gerar\" para criar um resumo automático da sua descrição para a saudação do bot."
@@ -1711,7 +1742,9 @@
       "saveSuccess": "Configurações salvas com sucesso",
       "saveError": "Erro ao salvar configurações",
       "summaryGenerated": "Resumo gerado com sucesso!",
-      "summaryError": "Erro ao gerar resumo"
+      "summaryError": "Erro ao gerar resumo",
+      "descriptionEnhanced": "Descrição melhorada com sucesso!",
+      "descriptionEnhanceError": "Erro ao melhorar descrição. Tente novamente."
     }
   }
 }

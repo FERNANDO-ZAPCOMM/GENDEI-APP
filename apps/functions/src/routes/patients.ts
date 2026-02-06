@@ -15,7 +15,7 @@ const APPOINTMENTS = 'gendei_appointments';
 router.get('/', verifyAuth, async (req: Request, res: Response) => {
   try {
     const user = (req as any).user;
-    const clinicId = req.query.clinicId as string || user?.uid;
+    const clinicId = req.query.clinicId as string || user?.clinicId;
     const search = req.query.search as string;
     const limit = parseInt(req.query.limit as string) || 50;
 
@@ -23,7 +23,7 @@ router.get('/', verifyAuth, async (req: Request, res: Response) => {
       return res.status(400).json({ message: 'Clinic ID is required' });
     }
 
-    if (user?.uid !== clinicId) {
+    if (user?.clinicId !== clinicId) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
@@ -67,7 +67,7 @@ router.get('/:patientId', verifyAuth, async (req: Request, res: Response) => {
   try {
     const { patientId } = req.params;
     const user = (req as any).user;
-    const clinicId = user?.uid;
+    const clinicId = user?.clinicId;
 
     const doc = await db.collection(PATIENTS).doc(patientId).get();
 
@@ -97,7 +97,7 @@ router.get('/:patientId/appointments', verifyAuth, async (req: Request, res: Res
   try {
     const { patientId } = req.params;
     const user = (req as any).user;
-    const clinicId = user?.uid;
+    const clinicId = user?.clinicId;
     const includePast = req.query.includePast === 'true';
 
     // Verify patient exists and clinic has access
@@ -141,7 +141,7 @@ router.get('/by-phone/:phone', verifyAuth, async (req: Request, res: Response) =
   try {
     const { phone } = req.params;
     const user = (req as any).user;
-    const clinicId = user?.uid;
+    const clinicId = user?.clinicId;
 
     // Normalize phone number
     const normalizedPhone = phone.replace(/\D/g, '');
@@ -194,7 +194,7 @@ router.get('/by-phone/:phone', verifyAuth, async (req: Request, res: Response) =
 router.post('/', verifyAuth, async (req: Request, res: Response) => {
   try {
     const user = (req as any).user;
-    const clinicId = user?.uid;
+    const clinicId = user?.clinicId;
 
     if (!clinicId) {
       return res.status(400).json({ message: 'Clinic ID is required' });
@@ -269,7 +269,7 @@ router.patch('/:patientId', verifyAuth, async (req: Request, res: Response) => {
   try {
     const { patientId } = req.params;
     const user = (req as any).user;
-    const clinicId = user?.uid;
+    const clinicId = user?.clinicId;
 
     const docRef = db.collection(PATIENTS).doc(patientId);
     const doc = await docRef.get();
@@ -318,7 +318,7 @@ router.delete('/:patientId', verifyAuth, async (req: Request, res: Response) => 
   try {
     const { patientId } = req.params;
     const user = (req as any).user;
-    const clinicId = user?.uid;
+    const clinicId = user?.clinicId;
 
     const docRef = db.collection(PATIENTS).doc(patientId);
     const doc = await docRef.get();

@@ -210,7 +210,7 @@ export default function AppointmentsPage() {
       {/* Stats Cards Row */}
       <div className="hidden lg:grid grid-cols-3 gap-6">
         <div className="col-span-2 grid grid-cols-2 gap-6">
-          <Card className="bg-gradient-to-br from-blue-50 to-white border-blue-100">
+          <Card className="border-l-4 border-l-blue-500 bg-gradient-to-br from-blue-50 to-white">
             <CardContent className="p-4">
               <div className="text-center">
                 <p className="text-xs text-blue-600 font-medium">{t('appointmentsPage.today')}</p>
@@ -219,7 +219,7 @@ export default function AppointmentsPage() {
             </CardContent>
           </Card>
 
-          <Card className="border-emerald-100" style={{ background: 'linear-gradient(to bottom right, #f5fefa, white)' }}>
+          <Card className="border-l-4 border-l-emerald-500 bg-gradient-to-br from-emerald-50 to-white">
             <CardContent className="p-4">
               <div className="text-center">
                 <p className="text-xs text-emerald-600 font-medium">{t('appointmentsPage.confirmed')}</p>
@@ -229,11 +229,11 @@ export default function AppointmentsPage() {
           </Card>
         </div>
 
-        <Card className="bg-gradient-to-br from-yellow-50 to-white border-yellow-100">
+        <Card className="border-l-4 border-l-violet-500 bg-gradient-to-br from-violet-50 to-white">
           <CardContent className="p-4">
             <div className="text-center">
-              <p className="text-xs text-yellow-600 font-medium">{t('appointmentsPage.pending')}</p>
-              <p className="text-2xl font-bold text-yellow-700">{stats.pending}</p>
+              <p className="text-xs text-violet-600 font-medium">{t('appointmentsPage.pending')}</p>
+              <p className="text-2xl font-bold text-violet-700">{stats.pending}</p>
             </div>
           </CardContent>
         </Card>
@@ -241,7 +241,7 @@ export default function AppointmentsPage() {
 
       {/* Mobile Stats Cards */}
       <div className="lg:hidden grid grid-cols-3 gap-3">
-        <Card className="bg-gradient-to-br from-blue-50 to-white border-blue-100">
+        <Card className="border-l-4 border-l-blue-500 bg-gradient-to-br from-blue-50 to-white">
           <CardContent className="p-4">
             <div className="text-center">
               <p className="text-xs text-blue-600 font-medium">{t('appointmentsPage.today')}</p>
@@ -250,7 +250,7 @@ export default function AppointmentsPage() {
           </CardContent>
         </Card>
 
-        <Card className="border-emerald-100" style={{ background: 'linear-gradient(to bottom right, #f5fefa, white)' }}>
+        <Card className="border-l-4 border-l-emerald-500 bg-gradient-to-br from-emerald-50 to-white">
           <CardContent className="p-4">
             <div className="text-center">
               <p className="text-xs text-emerald-600 font-medium">{t('appointmentsPage.confirmed')}</p>
@@ -259,11 +259,11 @@ export default function AppointmentsPage() {
           </CardContent>
         </Card>
 
-        <Card className="bg-gradient-to-br from-yellow-50 to-white border-yellow-100">
+        <Card className="border-l-4 border-l-violet-500 bg-gradient-to-br from-violet-50 to-white">
           <CardContent className="p-4">
             <div className="text-center">
-              <p className="text-xs text-yellow-600 font-medium">{t('appointmentsPage.pending')}</p>
-              <p className="text-2xl font-bold text-yellow-700">{stats.pending}</p>
+              <p className="text-xs text-violet-600 font-medium">{t('appointmentsPage.pending')}</p>
+              <p className="text-2xl font-bold text-violet-700">{stats.pending}</p>
             </div>
           </CardContent>
         </Card>
