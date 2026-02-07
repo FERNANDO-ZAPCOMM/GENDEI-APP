@@ -2099,6 +2099,56 @@ async def send_whatsapp_buttons(
             return False
 
 
+async def send_whatsapp_location_request(
+    phone_number_id: str,
+    to: str,
+    body_text: str,
+    access_token: str
+) -> bool:
+    """Send WhatsApp location_request_message (interactive)."""
+    url = f"https://graph.facebook.com/{META_API_VERSION}/{phone_number_id}/messages"
+    to_normalized = ensure_phone_has_plus(to)
+
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": to,
+        "type": "interactive",
+        "interactive": {
+            "type": "location_request_message",
+            "body": {"text": body_text},
+            "action": {"name": "send_location"}
+        }
+    }
+
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            url,
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "application/json",
+                "Cache-Control": "no-cache",
+            },
+            json=payload
+        )
+
+        if response.status_code == 200:
+            logger.info(f"✅ Location request sent to {to}")
+            clinic_id = _current_clinic_id.get()
+            if db and clinic_id:
+                db.log_conversation_message(
+                    clinic_id,
+                    to_normalized,
+                    "interactive",
+                    body_text,
+                    source="ai",
+                    phone_number_id=phone_number_id
+                )
+            return True
+
+        logger.error(f"❌ Failed to send location request: {response.text}")
+        return False
+
+
 async def send_whatsapp_list(
     phone_number_id: str,
     to: str,
@@ -2506,7 +2556,7 @@ async def send_initial_greeting(
             ]
         else:
             buttons = [
-                {"id": "greeting_sim", "title": "AGENDAR HORÁRIO"},
+                {"id": "greeting_sim", "title": "AGENDAR"},
                 {"id": "greeting_nao", "title": "TIRAR DÚVIDAS"},
             ]
 
@@ -3567,6 +3617,33 @@ async def process_message(
 
     msg_lower = message.lower().strip()
 
+    # Greeting and appointment action buttons must be handled on the active path.
+    # (The legacy branch below has an early return and is unreachable.)
+    if button_payload in ("greeting_sim", "greeting_nao", "greeting_contato"):
+        if button_payload == "greeting_sim":
+            logger.info(f"📅 User {phone} wants to schedule (greeting button)")
+            await handle_scheduling_intent(
+                clinic_id, phone, "quero agendar",
+                phone_number_id, access_token, contact_name
+            )
+            return
+
+        if button_payload == "greeting_nao":
+            logger.info(f"❓ User {phone} has a question (greeting button)")
+            await handle_greeting_response_duvida(
+                clinic_id, phone, phone_number_id, access_token
+            )
+            return
+
+        logger.info(f"📞 User {phone} wants human support (greeting button)")
+        await escalate_to_human(
+            clinic_id, phone,
+            phone_number_id, access_token,
+            reason="user_requested_contact_info_mode",
+            auto_takeover=True
+        )
+        return
+
     # =============================================
     # SENTIMENT / HUMAN ESCALATION (PRIORITY)
     # =============================================
@@ -3590,14 +3667,38 @@ async def process_message(
         )
         return
 
+    location_keywords = [
+        "compartilhar localização",
+        "compartilhar localizacao",
+        "enviar localização",
+        "enviar localizacao",
+        "mandar localização",
+        "mandar localizacao",
+    ]
+    if any(kw in msg_lower for kw in location_keywords):
+        sent = await send_whatsapp_location_request(
+            phone_number_id,
+            phone,
+            "Perfeito. Toque no botão abaixo para compartilhar sua localização atual.",
+            access_token
+        )
+        if not sent:
+            await send_whatsapp_message(
+                phone_number_id,
+                phone,
+                "Não consegui abrir o pedido automático de localização agora. "
+                "Você pode compartilhar manualmente pelo clipe 📎 > Localização.",
+                access_token
+            )
+        return
+
     # =============================================
     # GREETING - ROUTE TO AGENT
     # =============================================
     if is_simple_greeting(message):
-        logger.info(f"Greeting detected, routing to agent for {phone}")
-        await run_agent_response(
-            clinic_id, phone, message,
-            phone_number_id, access_token,
+        logger.info(f"Greeting detected, sending greeting buttons for {phone}")
+        await send_initial_greeting(
+            clinic_id, phone, phone_number_id, access_token,
             contact_name=contact_name
         )
         return
@@ -4665,6 +4766,23 @@ async def receive_webhook(request: Request, background_tasks: BackgroundTasks):
                                 logger.error(f"❌ Failed to parse flow response: {e}")
 
                             continue  # Skip normal message processing
+
+                    elif msg_type == "location":
+                        location = msg.get("location", {})
+                        lat = location.get("latitude")
+                        lng = location.get("longitude")
+                        location_name = location.get("name")
+                        address = location.get("address")
+                        parts = []
+                        if location_name:
+                            parts.append(f"nome: {location_name}")
+                        if address:
+                            parts.append(f"endereço: {address}")
+                        if lat is not None and lng is not None:
+                            parts.append(f"lat: {lat}, lng: {lng}")
+                        text = "Localização compartilhada"
+                        if parts:
+                            text += " (" + " | ".join(parts) + ")"
 
                     elif msg_type == "button":
                         button_payload = msg.get("button", {}).get("payload")

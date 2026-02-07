@@ -27,6 +27,7 @@ TOKENS = "gendei_tokens"
 
 class GendeiDatabase:
     """Firestore database operations for Gendei"""
+    MAX_MESSAGES_PER_CONVERSATION = 250
 
     def __init__(self, project_id: Optional[str] = None):
         """Initialize Firestore client"""
@@ -637,11 +638,12 @@ class GendeiDatabase:
         metadata: Optional[Dict[str, Any]] = None,
         phone_number_id: Optional[str] = None
     ) -> bool:
-        """Log a conversation message with schema matching frontend expectations"""
+        """Log a conversation message using single-doc chat history format."""
         try:
             conv_ref = self.db.collection(CLINICS).document(clinic_id).collection(
                 "conversations"
             ).document(phone)
+            chat_history_ref = conv_ref.collection("messages").document("chat_history")
 
             # Create conversation doc if not exists
             conv_doc = conv_ref.get()
@@ -666,8 +668,11 @@ class GendeiDatabase:
             # Determine direction based on source
             is_outbound = source in ["ai", "human", "system", "clinic"]
             direction = "out" if is_outbound else "in"
+            now = datetime.utcnow()
+            timestamp_iso = now.isoformat()
+            timestamp_key = timestamp_iso.replace(".", "_")
 
-            # Add message to subcollection with schema matching frontend
+            # Store all messages in a single chat_history document map.
             msg_data = {
                 "conversationId": phone,
                 "clinicId": clinic_id,
@@ -676,21 +681,74 @@ class GendeiDatabase:
                 "to": phone if is_outbound else phone_number_id,
                 "body": content,
                 "messageType": message_type,
-                "timestamp": datetime.now(),  # Firestore Timestamp
+                "timestamp": timestamp_iso,
                 "isAiGenerated": source == "ai",
                 "isHumanSent": source == "human",
             }
             if metadata:
                 msg_data["metadata"] = metadata
 
-            conv_ref.collection("messages").add(msg_data)
+            existing_doc = chat_history_ref.get()
+            if not existing_doc.exists:
+                # One-time bootstrap: migrate legacy per-message docs into chat_history.
+                legacy_docs = conv_ref.collection("messages").order_by(
+                    "timestamp", direction=firestore.Query.DESCENDING
+                ).limit(self.MAX_MESSAGES_PER_CONVERSATION - 1).get()
+
+                messages_map: Dict[str, Dict[str, Any]] = {}
+                for legacy_doc in reversed(list(legacy_docs)):
+                    legacy_data = legacy_doc.to_dict()
+                    legacy_ts = legacy_data.get("timestamp")
+                    if hasattr(legacy_ts, "isoformat"):
+                        legacy_ts_iso = legacy_ts.isoformat()
+                    elif legacy_ts:
+                        legacy_ts_iso = str(legacy_ts)
+                    else:
+                        legacy_ts_iso = datetime.utcnow().isoformat()
+                    legacy_key = legacy_ts_iso.replace(".", "_")
+                    legacy_data["timestamp"] = legacy_ts_iso
+                    messages_map[legacy_key] = legacy_data
+
+                messages_map[timestamp_key] = msg_data
+                sorted_entries = sorted(messages_map.items(), key=lambda item: item[0])
+                trimmed_entries = sorted_entries[-self.MAX_MESSAGES_PER_CONVERSATION:]
+                trimmed_map = dict(trimmed_entries)
+
+                chat_history_ref.set({
+                    "messages": trimmed_map,
+                    "lastUpdated": timestamp_iso,
+                    "messageCount": len(trimmed_map),
+                    "clinicId": clinic_id,
+                    "waUserId": phone,
+                })
+            else:
+                existing_count = int(existing_doc.to_dict().get("messageCount", 0))
+                next_count = existing_count + 1
+                trim_count = max(next_count - self.MAX_MESSAGES_PER_CONVERSATION, 0)
+
+                history_updates: Dict[str, Any] = {
+                    f"messages.{timestamp_key}": msg_data,
+                    "lastUpdated": timestamp_iso,
+                    "messageCount": min(next_count, self.MAX_MESSAGES_PER_CONVERSATION),
+                    "clinicId": clinic_id,
+                    "waUserId": phone,
+                }
+
+                if trim_count > 0:
+                    messages_map = existing_doc.to_dict().get("messages", {})
+                    sorted_keys = sorted(messages_map.keys())
+                    keys_to_remove = sorted_keys[:trim_count]
+                    for key in keys_to_remove:
+                        history_updates[f"messages.{key}"] = firestore.DELETE_FIELD
+
+                chat_history_ref.set(history_updates, merge=True)
 
             # Update conversation last message
-            now = datetime.now().isoformat()
+            now_iso = datetime.now().isoformat()
             conv_ref.update({
                 "lastMessage": content[:100],
-                "updatedAt": now,
-                "lastMessageAt": now,
+                "updatedAt": now_iso,
+                "lastMessageAt": now_iso,
                 "messageCount": firestore.Increment(1)
             })
 
@@ -706,23 +764,41 @@ class GendeiDatabase:
         phone: str,
         limit: int = 50
     ) -> List[Dict[str, Any]]:
-        """Get conversation history for a phone number"""
+        """Get conversation history for a phone number."""
         try:
-            messages = self.db.collection(CLINICS).document(clinic_id).collection(
+            conv_ref = self.db.collection(CLINICS).document(clinic_id).collection(
                 "conversations"
-            ).document(phone).collection("messages").order_by(
+            ).document(phone)
+
+            # New format: single chat_history document.
+            chat_history_doc = conv_ref.collection("messages").document("chat_history").get()
+            if chat_history_doc.exists:
+                data = chat_history_doc.to_dict() or {}
+                messages_map = data.get("messages", {})
+                sorted_messages = sorted(
+                    messages_map.items(),
+                    key=lambda item: item[1].get("timestamp", item[0])
+                )[-limit:]
+                result = []
+                for message_id, message_data in sorted_messages:
+                    message = dict(message_data)
+                    message["id"] = message_id
+                    result.append(message)
+                return result
+
+            # Legacy fallback: one document per message in subcollection.
+            messages = conv_ref.collection("messages").order_by(
                 "timestamp", direction=firestore.Query.DESCENDING
             ).limit(limit).get()
 
-            result = []
+            legacy_result = []
             for msg in messages:
-                data = msg.to_dict()
-                data["id"] = msg.id
-                result.append(data)
+                message_data = msg.to_dict()
+                message_data["id"] = msg.id
+                legacy_result.append(message_data)
 
-            # Return in chronological order
-            result.reverse()
-            return result
+            legacy_result.reverse()
+            return legacy_result
         except Exception as e:
             logger.error(f"Error getting conversation history: {e}")
             return []

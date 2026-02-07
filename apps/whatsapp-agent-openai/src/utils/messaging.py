@@ -422,6 +422,57 @@ async def send_whatsapp_buttons(
         return f"Error sending buttons: {str(e)}"
 
 
+async def send_whatsapp_location_request(
+    phone: str,
+    body_text: str = "Por favor, compartilhe sua localização atual."
+) -> str:
+    """
+    send a WhatsApp location_request_message (interactive).
+    """
+    phone, is_valid, error_msg = validate_and_format_phone(phone)
+    if not is_valid:
+        logger.error(f"Invalid phone: {error_msg}")
+        return f"Error: {error_msg}"
+
+    access_token, phone_number_id = get_whatsapp_credentials()
+    if not access_token or not phone_number_id:
+        logger.error("Missing WhatsApp credentials")
+        return "Error: Missing WhatsApp credentials"
+
+    url = f"https://graph.facebook.com/{WHATSAPP_API_VERSION}/{phone_number_id}/messages"
+
+    payload = {
+        "messaging_product": "whatsapp",
+        "recipient_type": "individual",
+        "to": phone,
+        "type": "interactive",
+        "interactive": {
+            "type": "location_request_message",
+            "body": {"text": body_text},
+            "action": {"name": "send_location"},
+        },
+    }
+
+    try:
+        response = requests.post(
+            url,
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "application/json",
+            },
+            json=payload,
+            timeout=30,
+        )
+        if response.status_code == 200:
+            logger.info(f"✅ Location request sent to {phone}")
+            return "Location request sent successfully"
+        logger.error(f"Failed to send location request: {response.status_code} - {response.text}")
+        return f"Failed to send location request: {response.status_code}"
+    except Exception as e:
+        logger.error(f"Error sending location request: {e}")
+        return f"Error sending location request: {str(e)}"
+
+
 async def send_payment_button(
     phone: str,
     payment_url: str,

@@ -70,5 +70,30 @@ export function isTodayInTimezone(date: Date, timezone?: string): boolean {
  */
 export function todayInTimezone(timezone?: string): Date {
   const { year, month, day } = nowInTimezone(timezone);
-  return new Date(year, month - 1, day);
+  // Use noon UTC so formatDateInTimezone returns the correct calendar date
+  // regardless of the browser's local timezone (e.g. NZ is UTC+13).
+  return new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
+}
+
+/**
+ * Format a Date as "dd/MM" in the clinic's timezone.
+ */
+export function formatDayMonthInTimezone(date: Date, timezone?: string): string {
+  const tz = timezone || DEFAULT_TIMEZONE;
+  return new Intl.DateTimeFormat('pt-BR', {
+    timeZone: tz,
+    day: '2-digit',
+    month: '2-digit',
+  }).format(date);
+}
+
+/**
+ * Format a Date as a short weekday name (e.g. "seg") in the clinic's timezone.
+ */
+export function formatWeekdayInTimezone(date: Date, timezone?: string): string {
+  const tz = timezone || DEFAULT_TIMEZONE;
+  return new Intl.DateTimeFormat('pt-BR', {
+    timeZone: tz,
+    weekday: 'short',
+  }).format(date);
 }

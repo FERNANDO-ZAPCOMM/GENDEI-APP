@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { format, addDays, addMinutes, startOfWeek, getDay, parseISO, isAfter } from 'date-fns';
-import { isTodayInTimezone, nowInTimezone, formatDateInTimezone } from '@/lib/timezone';
+import { format, addDays, addMinutes, getDay, parseISO, isAfter } from 'date-fns';
+import { isTodayInTimezone, nowInTimezone, formatDateInTimezone, formatWeekdayInTimezone, formatDayMonthInTimezone } from '@/lib/timezone';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { Clock, User, X, Plus, Phone, FileText, MoreHorizontal, Repeat } from 'lucide-react';
@@ -164,13 +164,15 @@ export function CalendarGrid({
   }, [startHour, endHour]);
 
   // Generate days for week view - always start from Monday
+  // Uses UTC arithmetic to avoid browser-timezone day-boundary issues
   const weekDays = useMemo(() => {
     if (viewMode === 'day') {
       return [selectedDate];
     }
-    // Get Monday of the week containing selectedDate
-    const monday = startOfWeek(selectedDate, { weekStartsOn: 1 });
-    return Array.from({ length: 7 }, (_, i) => addDays(monday, i));
+    const utcDay = selectedDate.getUTCDay(); // 0=Sun … 6=Sat
+    const mondayOffset = utcDay === 0 ? -6 : 1 - utcDay;
+    const mondayMs = selectedDate.getTime() + mondayOffset * 86400000;
+    return Array.from({ length: 7 }, (_, i) => new Date(mondayMs + i * 86400000));
   }, [selectedDate, viewMode]);
 
   // Calculate position and height for an appointment
@@ -193,7 +195,7 @@ export function CalendarGrid({
 
   // Handle slot click for blocking
   const handleSlotClick = (date: Date, time: string) => {
-    const dateStr = format(date, 'yyyy-MM-dd');
+    const dateStr = formatDateInTimezone(date, clinicTimezone);
 
     // Check if there's already an appointment or block at this time
     const hasAppointment = appointments.some(
@@ -211,7 +213,7 @@ export function CalendarGrid({
     const [hours, minutes] = time.split(':').map(Number);
     const endDate = addMinutes(new Date(2000, 0, 1, hours, minutes), 60);
     // Default repeat until: 4 weeks from selected date
-    const defaultRepeatUntil = format(addDays(date, 28), 'yyyy-MM-dd');
+    const defaultRepeatUntil = formatDateInTimezone(new Date(date.getTime() + 28 * 86400000), clinicTimezone);
     setBlockForm({
       endTime: format(endDate, 'HH:mm'),
       reason: '',
@@ -349,13 +351,13 @@ export function CalendarGrid({
                   'text-[10px] font-medium uppercase tracking-wide',
                   isToday(day) ? 'text-gray-300' : 'text-gray-500'
                 )}>
-                  {format(day, 'EEE', { locale: ptBR })}
+                  {formatWeekdayInTimezone(day, clinicTimezone)}
                 </p>
                 <p className={cn(
                   'text-sm font-semibold',
                   isToday(day) ? 'text-white' : 'text-gray-900'
                 )}>
-                  {format(day, 'dd/MM')}
+                  {formatDayMonthInTimezone(day, clinicTimezone)}
                 </p>
               </div>
             ))}
@@ -382,7 +384,7 @@ export function CalendarGrid({
             {weekDays.map((day) => {
               const { appointments: dayAppts, blocks: dayBlocks } = getItemsForDay(day);
               const showCurrentTime = isToday(day) && currentTimePosition !== null;
-              const dateStr = format(day, 'yyyy-MM-dd');
+              const dateStr = formatDateInTimezone(day, clinicTimezone);
 
               return (
                 <div

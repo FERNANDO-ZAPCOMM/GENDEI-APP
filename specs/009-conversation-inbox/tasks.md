@@ -18,13 +18,13 @@
 
 **Purpose**: Backend API and real-time listeners — blocks all UI
 
-- [ ] T005 Create conversations Express router in `apps/functions/src/routes/conversations.ts`
-- [ ] T006 Implement GET /conversations endpoint (list by clinic, sorted by lastMessageAt)
-- [ ] T007 [P] Implement GET /conversations/:id endpoint with messages
+- [x] T005 Create conversations Express router in `apps/functions/src/routes/conversations.ts`
+- [x] T006 Implement GET /conversations endpoint (list by clinic, sorted by lastMessageAt)
+- [x] T007 [P] Implement GET /conversations/:id endpoint with messages
 - [ ] T008 [P] Implement PATCH /conversations/:id endpoint (status, assignedTo, tags, priority)
-- [ ] T009 Implement POST /conversations/:id/messages endpoint (send message via WhatsApp API)
-- [ ] T010 [P] Add Firestore security rules and indexes for conversations and messages
-- [ ] T011 Create TanStack Query hooks in `apps/frontend/hooks/useConversations.ts`
+- [x] T009 Implement POST /conversations/:id/messages endpoint (send message via WhatsApp API)
+- [x] T010 [P] Add Firestore security rules and indexes for conversations and messages
+- [x] T011 Create TanStack Query hooks in `apps/frontend/hooks/useConversations.ts`
 
 **Checkpoint**: Conversation CRUD + real-time listeners operational
 
@@ -38,10 +38,10 @@
 
 ### Implementation
 
-- [ ] T012 [US1] Create inbox page in `apps/frontend/app/[locale]/dashboard/conversations/page.tsx`
+- [x] T012 [US1] Create inbox page in `apps/frontend/app/[locale]/dashboard/conversations/page.tsx`
 - [ ] T013 [US1] Build conversation list component with real-time Firestore listener
 - [ ] T014 [P] [US1] Build conversation item component (patient name, preview, unread badge, timestamp)
-- [ ] T015 [US1] Implement status filter (active/waiting/resolved/spam)
+- [x] T015 [US1] Implement status filter (active/waiting/resolved/spam)
 - [ ] T016 [US1] Handle unread count decrement when conversation is opened
 
 **Checkpoint**: Real-time conversation list functional
@@ -57,9 +57,9 @@
 ### Implementation
 
 - [ ] T017 [US2] Build message thread component with Firestore listener
-- [ ] T018 [P] [US2] Build message bubble component with sender type indicator (patient/AI/staff)
+- [x] T018 [P] [US2] Build message bubble component with sender type indicator (patient/AI/staff)
 - [ ] T019 [P] [US2] Build delivery status indicators (pending/sent/delivered/read)
-- [ ] T020 [US2] Build message input with send button
+- [x] T020 [US2] Build message input with send button
 - [ ] T021 [US2] Wire send to POST /conversations/:id/messages API with optimistic update
 - [ ] T022 [US2] Support media message display (images, audio, documents inline)
 
@@ -76,9 +76,9 @@
 ### Implementation
 
 - [ ] T023 [US3] Implement POST /conversations/:id/handoff endpoint
-- [ ] T024 [P] [US3] Implement POST /conversations/:id/release endpoint
-- [ ] T025 [US3] Build AI status indicator (active/paused) on conversation header
-- [ ] T026 [US3] Build "Take Over" / "Return to AI" toggle buttons
+- [x] T024 [P] [US3] Implement POST /conversations/:id/release endpoint
+- [x] T025 [US3] Build AI status indicator (active/paused) on conversation header
+- [x] T026 [US3] Build "Take Over" / "Return to AI" toggle buttons
 - [ ] T027 [US3] Display assigned staff member name when AI is paused
 
 **Checkpoint**: Human takeover and AI return flow functional
@@ -105,7 +105,7 @@
 ## Phase 7: Polish & Cross-Cutting Concerns
 
 - [ ] T032 [P] Add loading skeletons to conversation list and thread
-- [ ] T033 [P] Add i18n translations
+- [x] T033 [P] Add i18n translations
 - [ ] T034 Handle WebSocket/listener cleanup on component unmount
 - [ ] T035 Run quickstart.md validation
 

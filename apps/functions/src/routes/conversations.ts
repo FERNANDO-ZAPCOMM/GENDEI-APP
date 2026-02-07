@@ -10,6 +10,7 @@ const db = getFirestore();
 
 const CLINICS = 'gendei_clinics';
 const TOKENS = 'gendei_tokens';
+const MAX_MESSAGES_PER_CONVERSATION = 250;
 
 // Conversation state enum
 enum ConversationState {
@@ -18,6 +19,176 @@ enum ConversationState {
   NEGOCIANDO = 'negociando',
   CHECKOUT = 'checkout',
   FECHADO = 'fechado',
+}
+
+type MessageDirection = 'in' | 'out';
+
+interface StoredConversationMessage {
+  conversationId: string;
+  clinicId: string;
+  direction: MessageDirection;
+  from: string | null;
+  to: string | null;
+  body: string;
+  messageType: string;
+  timestamp: string;
+  isAiGenerated?: boolean;
+  isHumanSent?: boolean;
+  sentBy?: string;
+  wasQueued?: boolean;
+  metadata?: Record<string, unknown>;
+}
+
+function sanitizeTimestampKey(timestamp: string): string {
+  return timestamp.replace(/\./g, '_');
+}
+
+function parseTimestamp(value: unknown): Date {
+  if (value && typeof value === 'object' && typeof (value as any).toDate === 'function') {
+    return (value as any).toDate();
+  }
+
+  if (typeof value === 'string' || value instanceof Date) {
+    const parsed = new Date(value);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed;
+    }
+  }
+
+  return new Date();
+}
+
+function mapChatHistoryMessage(
+  messageId: string,
+  value: Record<string, unknown>,
+  fallbackConversationId: string,
+  fallbackClinicId: string
+): StoredConversationMessage {
+  const source = String(value.source || '').toLowerCase();
+  const explicitDirection = value.direction === 'in' || value.direction === 'out'
+    ? value.direction
+    : null;
+  const inferredDirection: MessageDirection = source === 'patient' || source === 'human'
+    ? 'in'
+    : 'out';
+  const direction = (explicitDirection || inferredDirection) as MessageDirection;
+
+  const timestampRaw = value.timestamp || messageId;
+  const timestamp = parseTimestamp(timestampRaw);
+
+  return {
+    conversationId: String(value.conversationId || fallbackConversationId),
+    clinicId: String(value.clinicId || fallbackClinicId),
+    direction,
+    from: (value.from as string) || (direction === 'in' ? 'patient' : 'agent'),
+    to: (value.to as string) || (direction === 'in' ? 'agent' : 'patient'),
+    body: String(value.body || value.content || value.text || ''),
+    messageType: String(value.messageType || value.type || 'text'),
+    timestamp: timestamp.toISOString(),
+    isAiGenerated: Boolean(value.isAiGenerated || source === 'ai' || source === 'agent'),
+    isHumanSent: Boolean(value.isHumanSent),
+    sentBy: value.sentBy as string | undefined,
+    wasQueued: Boolean(value.wasQueued),
+    metadata: value.metadata as Record<string, unknown> | undefined,
+  };
+}
+
+async function appendMessageToChatHistory(
+  convRef: FirebaseFirestore.DocumentReference,
+  message: Omit<StoredConversationMessage, 'timestamp'> & { timestamp?: string }
+): Promise<string> {
+  const chatHistoryRef = convRef.collection('messages').doc('chat_history');
+  const timestamp = message.timestamp || new Date().toISOString();
+  const messageId = sanitizeTimestampKey(timestamp);
+
+  const payload: StoredConversationMessage = {
+    ...message,
+    timestamp,
+  };
+
+  const chatHistoryDoc = await chatHistoryRef.get();
+
+  if (!chatHistoryDoc.exists) {
+    // One-time bootstrap: migrate legacy per-message docs into chat_history.
+    const legacySnapshot = await convRef
+      .collection('messages')
+      .orderBy('timestamp', 'asc')
+      .limit(MAX_MESSAGES_PER_CONVERSATION - 1)
+      .get();
+
+    const messagesMap: Record<string, StoredConversationMessage> = {};
+    for (const legacyDoc of legacySnapshot.docs) {
+      const legacyData = legacyDoc.data() as Record<string, unknown>;
+      const legacyTimestamp = parseTimestamp(legacyData.timestamp).toISOString();
+      const legacyId = sanitizeTimestampKey(legacyTimestamp);
+      messagesMap[legacyId] = {
+        ...mapChatHistoryMessage(
+          legacyId,
+          legacyData,
+          payload.conversationId,
+          payload.clinicId
+        ),
+        timestamp: legacyTimestamp,
+      };
+    }
+
+    messagesMap[messageId] = payload;
+    const entries = Object.entries(messagesMap).sort((a, b) => a[0].localeCompare(b[0]));
+    const trimmed = entries.slice(-MAX_MESSAGES_PER_CONVERSATION);
+
+    await chatHistoryRef.set({
+      messages: Object.fromEntries(trimmed),
+      lastUpdated: timestamp,
+      messageCount: trimmed.length,
+      conversationId: payload.conversationId,
+      clinicId: payload.clinicId,
+    });
+  } else {
+    await chatHistoryRef.set({
+      [`messages.${messageId}`]: payload,
+      lastUpdated: timestamp,
+      messageCount: FieldValue.increment(1),
+      conversationId: payload.conversationId,
+      clinicId: payload.clinicId,
+    }, { merge: true });
+  }
+
+  return messageId;
+}
+
+async function getConversationMessages(
+  convRef: FirebaseFirestore.DocumentReference,
+  clinicId: string,
+  conversationId: string,
+  limit: number
+): Promise<Array<StoredConversationMessage & { id: string }>> {
+  const chatHistoryDoc = await convRef.collection('messages').doc('chat_history').get();
+
+  if (chatHistoryDoc.exists) {
+    const data = chatHistoryDoc.data() || {};
+    const messagesMap = (data.messages || {}) as Record<string, Record<string, unknown>>;
+    const mapped = Object.entries(messagesMap)
+      .map(([id, value]) => ({
+        id,
+        ...mapChatHistoryMessage(id, value || {}, conversationId, clinicId),
+      }))
+      .sort((a, b) => parseTimestamp(a.timestamp).getTime() - parseTimestamp(b.timestamp).getTime());
+
+    return mapped.slice(-limit);
+  }
+
+  // Legacy fallback: one document per message in subcollection.
+  const legacySnapshot = await convRef
+    .collection('messages')
+    .orderBy('timestamp', 'asc')
+    .limit(limit)
+    .get();
+
+  return legacySnapshot.docs.map(doc => ({
+    id: doc.id,
+    ...(doc.data() as StoredConversationMessage),
+    timestamp: parseTimestamp(doc.data().timestamp).toISOString(),
+  }));
 }
 
 // GET /conversations?clinicId=xxx - Get conversations for a clinic
@@ -214,21 +385,13 @@ router.get('/:conversationId/messages', verifyAuth, async (req: Request, res: Re
       return res.status(404).json({ message: 'Conversation not found' });
     }
 
-    const snapshot = await db
+    const convRef = db
       .collection(CLINICS)
       .doc(clinicId)
       .collection('conversations')
-      .doc(conversationId)
-      .collection('messages')
-      .orderBy('timestamp', 'asc')
-      .limit(limit)
-      .get();
+      .doc(conversationId);
 
-    const messages = snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data(),
-      timestamp: doc.data().timestamp?.toDate?.() || doc.data().timestamp,
-    }));
+    const messages = await getConversationMessages(convRef, clinicId, conversationId, limit);
 
     return res.json({ data: messages });
   } catch (error: any) {
@@ -405,8 +568,8 @@ router.post('/:conversationId/messages', verifyAuth, async (req: Request, res: R
       throw new Error('Failed to send WhatsApp message');
     }
 
-    // Save message to Firestore
-    const messageRef = await convRef.collection('messages').add({
+    // Save message to Firestore (single-document chat_history format)
+    const messageId = await appendMessageToChatHistory(convRef, {
       conversationId,
       clinicId,
       direction: 'out',
@@ -414,7 +577,6 @@ router.post('/:conversationId/messages', verifyAuth, async (req: Request, res: R
       to: waUserPhone,
       body: message,
       messageType: 'text',
-      timestamp: FieldValue.serverTimestamp(),
       isAiGenerated: false,
       isHumanSent: true,
       sentBy: userId || user?.uid,
@@ -429,7 +591,7 @@ router.post('/:conversationId/messages', verifyAuth, async (req: Request, res: R
     return res.json({
       data: {
         success: true,
-        messageId: messageRef.id,
+        messageId,
       }
     });
   } catch (error: any) {
@@ -869,8 +1031,8 @@ router.post('/:conversationId/send-queue', verifyAuth, async (req: Request, res:
         );
 
         if (response.ok) {
-          // Save message to Firestore
-          await convRef.collection('messages').add({
+          // Save message to Firestore (single-document chat_history format)
+          await appendMessageToChatHistory(convRef, {
             conversationId,
             clinicId,
             direction: 'out',
@@ -878,7 +1040,6 @@ router.post('/:conversationId/send-queue', verifyAuth, async (req: Request, res:
             to: waUserPhone,
             body: queuedMsg.text,
             messageType: 'text',
-            timestamp: FieldValue.serverTimestamp(),
             isAiGenerated: false,
             isHumanSent: true,
             sentBy: queuedMsg.queuedBy,

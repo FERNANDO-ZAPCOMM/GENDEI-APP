@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import { useSearchParams } from 'next/navigation';
-import { format, addDays, parseISO, startOfWeek } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
   ChevronLeft,
@@ -41,7 +41,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { CalendarGrid } from '@/components/calendar/CalendarGrid';
-import { nowInTimezone, todayInTimezone } from '@/lib/timezone';
+import { nowInTimezone, todayInTimezone, formatDateInTimezone, formatDayMonthInTimezone } from '@/lib/timezone';
 import { getSpecialtyNames, getProfessionalSpecialties } from '@/lib/specialties';
 import type { Appointment, AppointmentStatus } from '@/lib/clinic-types';
 
@@ -82,8 +82,8 @@ export default function AppointmentsPage() {
 
   const statusConfig = getStatusConfig(t);
 
-  const clinicTz = clinic?.timezone || 'America/Sao_Paulo';
-  const [selectedDate, setSelectedDate] = useState(() => todayInTimezone(clinicTz));
+  const clinicTimezone = clinic?.timezone || 'America/Sao_Paulo';
+  const [selectedDate, setSelectedDate] = useState(() => todayInTimezone(clinicTimezone));
 
   // Get professional from URL query parameter
   const professionalFromUrl = searchParams.get('professional');
@@ -99,10 +99,13 @@ export default function AppointmentsPage() {
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
 
-  // Always start week from Monday
-  const monday = startOfWeek(selectedDate, { weekStartsOn: 1 });
-  const weekStart = format(monday, 'yyyy-MM-dd');
-  const weekEnd = format(addDays(monday, 6), 'yyyy-MM-dd');
+  // Compute Monday of the week using UTC arithmetic (avoids browser timezone issues)
+  const utcDay = selectedDate.getUTCDay(); // 0=Sun … 6=Sat
+  const mondayOffset = utcDay === 0 ? -6 : 1 - utcDay;
+  const monday = new Date(selectedDate.getTime() + mondayOffset * 86400000);
+  const sunday = new Date(monday.getTime() + 6 * 86400000);
+  const weekStart = formatDateInTimezone(monday, clinicTimezone);
+  const weekEnd = formatDateInTimezone(sunday, clinicTimezone);
 
   const { data: appointments = [], isLoading, updateStatus, cancel } = useAppointments(
     clinic?.id || '',
@@ -113,8 +116,6 @@ export default function AppointmentsPage() {
     clinic?.id || '',
     { startDate: weekStart, endDate: weekEnd }
   );
-
-  const clinicTimezone = clinic?.timezone || 'America/Sao_Paulo';
 
   const stats = useMemo(() => {
     const todayStr = nowInTimezone(clinicTimezone).dateString;
@@ -127,11 +128,11 @@ export default function AppointmentsPage() {
   }, [appointments, clinicTimezone]);
 
   const handlePrevWeek = () => {
-    setSelectedDate(prev => addDays(prev, -7));
+    setSelectedDate(prev => new Date(prev.getTime() - 7 * 86400000));
   };
 
   const handleNextWeek = () => {
-    setSelectedDate(prev => addDays(prev, 7));
+    setSelectedDate(prev => new Date(prev.getTime() + 7 * 86400000));
   };
 
   const handleStatusChange = async (appointmentId: string, newStatus: AppointmentStatus) => {
@@ -287,7 +288,7 @@ export default function AppointmentsPage() {
                 </Button>
                 <div className="text-center min-w-[120px]">
                   <p className="text-sm font-medium">
-                    {format(monday, 'dd/MM')} - {format(addDays(monday, 6), 'dd/MM')}
+                    {formatDayMonthInTimezone(monday, clinicTimezone)} - {formatDayMonthInTimezone(sunday, clinicTimezone)}
                   </p>
                 </div>
                 <Button variant="outline" size="icon" onClick={handleNextWeek}>
@@ -389,7 +390,7 @@ export default function AppointmentsPage() {
                 </Button>
                 <div className="text-center min-w-[100px]">
                   <p className="text-xs font-medium">
-                    {format(monday, 'dd/MM')} - {format(addDays(monday, 6), 'dd/MM')}
+                    {formatDayMonthInTimezone(monday, clinicTimezone)} - {formatDayMonthInTimezone(sunday, clinicTimezone)}
                   </p>
                 </div>
                 <Button variant="outline" size="icon" onClick={handleNextWeek}>
