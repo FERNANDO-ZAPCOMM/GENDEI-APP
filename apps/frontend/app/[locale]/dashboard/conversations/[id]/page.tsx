@@ -441,7 +441,7 @@ export default function ConversationDetailPage() {
           ) : (
             <>
               {messages.map((message) => {
-                const isOutbound = message.direction === 'out';
+                const isOutbound = message.direction === 'out' || message.isAiGenerated || message.isHumanSent;
                 const bubbleMessage: BubbleMessage = {
                   id: message.id,
                   who: isOutbound ? 'user' : 'bot',

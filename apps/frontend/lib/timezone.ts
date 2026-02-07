@@ -62,3 +62,13 @@ export function formatDateInTimezone(date: Date, timezone?: string): string {
 export function isTodayInTimezone(date: Date, timezone?: string): boolean {
   return formatDateInTimezone(date, timezone) === nowInTimezone(timezone).dateString;
 }
+
+/**
+ * Get a Date object representing "today" in the clinic's timezone.
+ * Useful for initializing selectedDate so it matches the clinic's local date,
+ * regardless of the browser's timezone.
+ */
+export function todayInTimezone(timezone?: string): Date {
+  const { year, month, day } = nowInTimezone(timezone);
+  return new Date(year, month - 1, day);
+}

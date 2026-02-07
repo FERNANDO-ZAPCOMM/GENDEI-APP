@@ -43,7 +43,6 @@ export function ChatBubble({ message, variant = 'clone' }: ChatBubbleProps) {
     isBot &&
     message.category &&
     ((message.isPrompt ?? inferredPrompt) === true);
-  const bubbleWidthClass = 'w-[420px] max-w-[90%]';
 
   const bubbleClasses = (() => {
     if (variant === 'whatsapp') {
@@ -56,6 +55,8 @@ export function ChatBubble({ message, variant = 'clone' }: ChatBubbleProps) {
       ? 'bg-slate-100 text-slate-900 rounded-tl-none'
       : 'bg-primary text-primary-foreground rounded-br-none';
   })();
+
+  const bubbleWidthClass = 'w-[420px] max-w-[90%]';
 
   return (
     <div className={cn('flex items-start', isBot ? 'justify-start' : 'justify-end')}>

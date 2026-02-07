@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { format, addDays, addMinutes, startOfWeek, getDay, parseISO, isAfter } from 'date-fns';
 import { isTodayInTimezone, nowInTimezone, formatDateInTimezone } from '@/lib/timezone';
 import { ptBR } from 'date-fns/locale';
@@ -308,11 +308,20 @@ export function CalendarGrid({
   }, [selectedSlot, endHour]);
 
   const isToday = (date: Date) => isTodayInTimezone(date, clinicTimezone);
+
+  // Update current time indicator every minute
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    const interval = setInterval(() => setTick(t => t + 1), 60_000);
+    return () => clearInterval(interval);
+  }, []);
+
   const currentTimePosition = useMemo(() => {
     const { hours, minutes } = nowInTimezone(clinicTimezone);
     if (hours < startHour || hours >= endHour) return null;
     return (hours - startHour) * HOUR_HEIGHT + (minutes / 60) * HOUR_HEIGHT;
-  }, [startHour, endHour, clinicTimezone]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startHour, endHour, clinicTimezone, tick]);
 
   const columnWidth = viewMode === 'day' ? 'min-w-full' : 'min-w-[70px]';
 

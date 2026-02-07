@@ -41,7 +41,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { CalendarGrid } from '@/components/calendar/CalendarGrid';
-import { nowInTimezone } from '@/lib/timezone';
+import { nowInTimezone, todayInTimezone } from '@/lib/timezone';
 import { getSpecialtyNames, getProfessionalSpecialties } from '@/lib/specialties';
 import type { Appointment, AppointmentStatus } from '@/lib/clinic-types';
 
@@ -82,7 +82,8 @@ export default function AppointmentsPage() {
 
   const statusConfig = getStatusConfig(t);
 
-  const [selectedDate, setSelectedDate] = useState(new Date());
+  const clinicTz = clinic?.timezone || 'America/Sao_Paulo';
+  const [selectedDate, setSelectedDate] = useState(() => todayInTimezone(clinicTz));
 
   // Get professional from URL query parameter
   const professionalFromUrl = searchParams.get('professional');
@@ -292,7 +293,7 @@ export default function AppointmentsPage() {
                 <Button variant="outline" size="icon" onClick={handleNextWeek}>
                   <ChevronRight className="w-4 h-4" />
                 </Button>
-                <Button variant="ghost" size="sm" onClick={() => setSelectedDate(new Date())}>
+                <Button variant="ghost" size="sm" onClick={() => setSelectedDate(todayInTimezone(clinicTimezone))}>
                   {t('appointmentsPage.today')}
                 </Button>
               </div>

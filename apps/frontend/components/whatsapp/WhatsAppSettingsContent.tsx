@@ -99,7 +99,7 @@ export function WhatsAppSettingsContent({ onConnected }: WhatsAppSettingsContent
   // Collapsible section states
   const [expandedSections, setExpandedSections] = useState({
     connection: true,
-    businessProfile: false,
+    businessProfile: true,
     qrCodes: false,
     templates: false,
     flows: false,
