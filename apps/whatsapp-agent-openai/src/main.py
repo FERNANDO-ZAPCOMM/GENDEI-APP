@@ -4421,6 +4421,16 @@ async def verify_webhook(request: Request):
     raise HTTPException(status_code=403, detail="Verification failed")
 
 
+# Alias routes so Meta webhook configured at /whatsapp keeps working
+@app.get("/whatsapp")
+async def verify_webhook_alias(request: Request):
+    return await verify_webhook(request)
+
+@app.post("/whatsapp")
+async def receive_webhook_alias(request: Request, background_tasks: BackgroundTasks):
+    return await receive_webhook(request, background_tasks)
+
+
 async def process_buffered_messages(
     clinic_id: str,
     phone: str,
