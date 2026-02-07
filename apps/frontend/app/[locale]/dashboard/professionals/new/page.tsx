@@ -546,6 +546,20 @@ export default function NewProfessionalPage() {
             {activeTab === 'contact' && (
               <div className="space-y-4">
                 <div className="space-y-2">
+                  <Label htmlFor="phone">Telefone <span className="text-red-500">*</span></Label>
+                  <div className="relative">
+                    <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <Input
+                      id="phone"
+                      value={formData.phone}
+                      onChange={(e) => handlePhoneChange(e.target.value)}
+                      placeholder="(11) 99999-9999"
+                      disabled={isSaving}
+                      className="pl-9"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
                   <Label htmlFor="email">E-mail <span className="text-red-500">*</span></Label>
                   <div className="relative">
                     <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -562,20 +576,6 @@ export default function NewProfessionalPage() {
                   {emailError && (
                     <p className="text-sm text-red-500">{emailError}</p>
                   )}
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="phone">Telefone <span className="text-red-500">*</span></Label>
-                  <div className="relative">
-                    <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                    <Input
-                      id="phone"
-                      value={formData.phone}
-                      onChange={(e) => handlePhoneChange(e.target.value)}
-                      placeholder="(11) 99999-9999"
-                      disabled={isSaving}
-                      className="pl-9"
-                    />
-                  </div>
                 </div>
               </div>
             )}

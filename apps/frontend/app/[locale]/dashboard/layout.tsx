@@ -500,7 +500,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div className="flex items-center justify-center px-4 py-3">
           <span className="text-xl text-black logo-font">Gendei</span>
           {vertical.slug !== 'geral' && (
-            <span className="text-xl text-gray-400 font-light ml-1">| <span className="capitalize">{vertical.slug}</span></span>
+            <span className="text-xl text-gray-400 logo-font ml-1">- {vertical.slug}</span>
           )}
         </div>
       </div>
@@ -511,7 +511,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div className="p-6">
           <span className="text-2xl text-black logo-font">Gendei</span>
           {vertical.slug !== 'geral' && (
-            <span className="text-2xl text-gray-400 font-light ml-1">| <span className="capitalize">{vertical.slug}</span></span>
+            <span className="text-2xl text-gray-400 logo-font ml-1">- {vertical.slug}</span>
           )}
           <p className="text-sm text-muted-foreground mt-1 truncate">{clinic?.name || 'Painel da Clínica'}</p>
         </div>

@@ -70,13 +70,14 @@ export function useSidebarNotifications(): SidebarNotifications {
     // Type assertion for clinic with extended properties
     const clinicData = clinic as any;
 
-    // Check onboarding steps
+    // Check onboarding steps — matches the clinic page's 5-tab completion logic
     const hasClinicProfile = !!(
       clinicData?.name &&
       clinicData?.name !== 'Nova Clínica' &&
-      clinicData?.addressData?.formatted &&
+      clinicData?.description &&
       clinicData?.phone &&
-      clinicData?.vertical
+      (clinicData?.addressData?.formatted || clinicData?.address) &&
+      clinicData?.openingHours
     );
 
     const hasPaymentSettings = !!(

@@ -159,7 +159,7 @@ export default function WorkflowPage() {
                   }`}
                 >
                   <div className="flex items-center justify-between mb-2">
-                    <h4 className="font-medium text-gray-900">{t('workflowPage.bookingMode.title')}</h4>
+                    <h4 className="text-sm text-gray-900">{t('workflowPage.bookingMode.title')}</h4>
                     <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
                       selectedMode === 'booking'
                         ? 'border-green-500 bg-green-500'
@@ -183,7 +183,7 @@ export default function WorkflowPage() {
                   }`}
                 >
                   <div className="flex items-center justify-between mb-2">
-                    <h4 className="font-medium text-gray-900">{t('workflowPage.infoMode.title')}</h4>
+                    <h4 className="text-sm text-gray-900">{t('workflowPage.infoMode.title')}</h4>
                     <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
                       selectedMode === 'info'
                         ? 'border-green-500 bg-green-500'
@@ -221,44 +221,30 @@ export default function WorkflowPage() {
                     const stepNum = index + 1;
                     const colorClasses = {
                       gray: {
-                        border: 'border-gray-200',
-                        bg: '',
                         numBg: 'bg-gray-100 text-gray-500',
-                        iconBg: 'bg-gray-100',
-                        iconText: 'text-gray-600',
+                        iconText: 'text-gray-400',
                       },
                       blue: {
-                        border: 'border-blue-200',
-                        bg: 'bg-blue-50/50',
                         numBg: 'bg-blue-100 text-blue-600',
-                        iconBg: 'bg-blue-100',
-                        iconText: 'text-blue-600',
+                        iconText: 'text-blue-500',
                       },
                       green: {
-                        border: 'border-emerald-200',
-                        bg: 'bg-emerald-50/50',
                         numBg: 'bg-emerald-100 text-emerald-600',
-                        iconBg: 'bg-emerald-100',
-                        iconText: 'text-emerald-600',
+                        iconText: 'text-emerald-500',
                       },
                       amber: {
-                        border: 'border-amber-200',
-                        bg: 'bg-amber-50/50',
                         numBg: 'bg-amber-100 text-amber-600',
-                        iconBg: 'bg-amber-100',
-                        iconText: 'text-amber-600',
+                        iconText: 'text-amber-500',
                       },
                     };
                     const c = colorClasses[step.color as keyof typeof colorClasses];
                     return (
                       <div key={step.key}>
-                        <div className={`flex items-center gap-4 p-3.5 rounded-lg border ${c.border} ${c.bg}`}>
+                        <div className="flex items-center gap-4 p-3.5 rounded-lg border border-gray-100">
                           <div className={`flex items-center justify-center w-7 h-7 rounded-full ${c.numBg} text-xs font-semibold`}>
                             {stepNum}
                           </div>
-                          <div className={`p-1.5 rounded-lg ${c.iconBg}`}>
-                            <Icon className={`h-4 w-4 ${c.iconText}`} />
-                          </div>
+                          <Icon className={`h-4 w-4 ${c.iconText}`} />
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
                               <h4 className="font-medium text-sm text-gray-900">
@@ -303,26 +289,22 @@ export default function WorkflowPage() {
                     const Icon = step.icon;
                     const colorClasses = {
                       gray: {
-                        border: 'border-gray-200', bg: '',
                         numBg: 'bg-gray-100 text-gray-500',
-                        iconBg: 'bg-gray-100', iconText: 'text-gray-600',
+                        iconText: 'text-gray-400',
                       },
                       blue: {
-                        border: 'border-blue-200', bg: 'bg-blue-50/50',
                         numBg: 'bg-blue-100 text-blue-600',
-                        iconBg: 'bg-blue-100', iconText: 'text-blue-600',
+                        iconText: 'text-blue-500',
                       },
                     };
                     const c = colorClasses[step.color];
                     return (
                       <div key={step.key}>
-                        <div className={`flex items-center gap-4 p-3.5 rounded-lg border ${c.border} ${c.bg}`}>
+                        <div className="flex items-center gap-4 p-3.5 rounded-lg border border-gray-100">
                           <div className={`flex items-center justify-center w-7 h-7 rounded-full ${c.numBg} text-xs font-semibold`}>
                             {index + 1}
                           </div>
-                          <div className={`p-1.5 rounded-lg ${c.iconBg}`}>
-                            <Icon className={`h-4 w-4 ${c.iconText}`} />
-                          </div>
+                          <Icon className={`h-4 w-4 ${c.iconText}`} />
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
                               <h4 className="font-medium text-sm text-gray-900">
