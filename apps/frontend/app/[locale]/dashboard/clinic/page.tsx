@@ -388,11 +388,11 @@ export default function ClinicSettingsPage() {
                 type="button"
                 onClick={() => setActiveTab(tab.key)}
                 className={cn(
-                  'flex-shrink-0 sm:flex-1 min-w-0 flex items-center justify-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors whitespace-nowrap',
+                  'flex-shrink-0 sm:flex-1 min-w-0 flex items-center justify-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors whitespace-nowrap relative',
                   activeTab === tab.key
                     ? tab.completed
                       ? 'border-2 border-green-500 bg-green-50 text-green-700'
-                      : 'border-2 border-gray-400 bg-gray-100 text-gray-700'
+                      : 'border-2 border-amber-400 bg-amber-50 text-amber-700'
                     : tab.completed
                       ? 'border border-green-200 bg-green-50 text-green-600 hover:bg-green-100'
                       : 'border border-gray-200 bg-gray-50 text-gray-500 hover:bg-gray-100'
@@ -404,6 +404,12 @@ export default function ClinicSettingsPage() {
                   <span className="flex-shrink-0">{tab.icon}</span>
                 )}
                 <span className="hidden sm:inline truncate">{tab.label}</span>
+                {!tab.completed && activeTab !== tab.key && (
+                  <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
+                  </span>
+                )}
               </button>
             ))}
           </div>

@@ -119,7 +119,7 @@ export default function NewProfessionalPage() {
 
   // Get available specialties based on the clinic's vertical
   const vertical = useVertical();
-  const availableSpecialties = filterSpecialties(vertical.specialties);
+  const availableSpecialties = filterSpecialties(vertical.specialties).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
 
   const [formData, setFormData] = useState<ProfessionalFormData>({
     name: '',
