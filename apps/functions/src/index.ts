@@ -26,6 +26,7 @@ import metaRouter from './routes/meta';
 import whatsappRouter from './routes/whatsapp';
 import remindersRouter from './routes/reminders';
 import teamRouter from './routes/team';
+import paymentsRouter from './routes/payments';
 
 // Import services
 import { sendScheduledReminders } from './services/reminders';
@@ -58,6 +59,7 @@ app.use('/meta', metaRouter);
 app.use('/whatsapp', whatsappRouter);
 app.use('/reminders', remindersRouter);
 app.use('/team', teamRouter);
+app.use('/payments', paymentsRouter);
 
 // Error handler
 app.use(

@@ -13,12 +13,14 @@ import {
 import { toast } from 'sonner';
 
 import { useClinic } from '@/hooks/use-clinic';
+import { usePayments } from '@/hooks/use-payments';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { TypingDots } from '@/components/PageLoader';
 import type { PaymentSettings } from '@/lib/clinic-types';
 
@@ -29,6 +31,7 @@ export default function PaymentsPage() {
   const locale = (params?.locale as string) || 'pt-BR';
 
   const { currentClinic, isLoading: clinicLoading, updateClinic } = useClinic();
+  const { data: payments = [], isLoading: paymentsLoading } = usePayments(currentClinic?.id || '');
 
   const [settings, setSettings] = useState<PaymentSettings>({
     acceptsConvenio: false,
@@ -117,6 +120,39 @@ export default function PaymentsPage() {
       </div>
     );
   }
+
+  const formatMoney = (cents: number) =>
+    (cents / 100).toLocaleString(locale, { style: 'currency', currency: 'BRL' });
+
+  const formatDateTime = (raw?: string | Date | Record<string, unknown>) => {
+    if (!raw) return '-';
+    const value = typeof raw === 'string' ? raw : '';
+    if (!value) return '-';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '-';
+    return new Intl.DateTimeFormat(locale, {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(date);
+  };
+
+  const statusLabel = (status: string) => {
+    const normalized = (status || '').toLowerCase();
+    if (normalized === 'completed' || normalized === 'paid') return 'Pago';
+    if (normalized === 'failed' || normalized === 'cancelled' || normalized === 'canceled') return 'Falhou';
+    if (normalized === 'expired') return 'Expirado';
+    return 'Pendente';
+  };
+
+  const statusVariant = (status: string) => {
+    const normalized = (status || '').toLowerCase();
+    if (normalized === 'completed' || normalized === 'paid') return 'default';
+    if (normalized === 'failed' || normalized === 'cancelled' || normalized === 'canceled' || normalized === 'expired') return 'destructive';
+    return 'secondary';
+  };
 
   return (
     <div className="space-y-6 page-transition">
@@ -284,6 +320,53 @@ export default function PaymentsPage() {
           )}
         </Button>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Transações</CardTitle>
+          <CardDescription>
+            Histórico de pagamentos com método, fonte e modo de transferência.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {paymentsLoading ? (
+            <div className="py-10 flex items-center justify-center">
+              <TypingDots />
+            </div>
+          ) : payments.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Nenhuma transação encontrada.</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Data</TableHead>
+                  <TableHead>Valor</TableHead>
+                  <TableHead>Método</TableHead>
+                  <TableHead>Fonte</TableHead>
+                  <TableHead>Transferência</TableHead>
+                  <TableHead>Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {payments.map((payment) => (
+                  <TableRow key={payment.id}>
+                    <TableCell>{formatDateTime(payment.createdAt)}</TableCell>
+                    <TableCell>{formatMoney(payment.amountCents || 0)}</TableCell>
+                    <TableCell>{payment.paymentMethod === 'card' ? 'Cartão' : 'PIX'}</TableCell>
+                    <TableCell className="uppercase text-xs">{payment.paymentSource || '-'}</TableCell>
+                    <TableCell>{payment.transferMode === 'automatic' ? 'Automática' : 'Manual'}</TableCell>
+                    <TableCell>
+                      <Badge variant={statusVariant(payment.paymentStatus) as any}>
+                        {statusLabel(payment.paymentStatus)}
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
       </div>
     </div>
   );

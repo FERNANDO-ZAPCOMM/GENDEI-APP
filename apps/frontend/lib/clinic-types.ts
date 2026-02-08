@@ -196,3 +196,20 @@ export interface PaymentSettings {
 export interface ClinicWithPayment extends Clinic {
   paymentSettings?: PaymentSettings;
 }
+
+export interface PaymentTransaction {
+  id: string;
+  clinicId: string;
+  appointmentId?: string;
+  patientPhone?: string;
+  patientName?: string;
+  amountCents: number;
+  paymentStatus: string;
+  paymentMethod: 'card' | 'pix' | string;
+  paymentSource: string;
+  transferMode: 'automatic' | 'manual' | string;
+  paymentId?: string;
+  createdAt?: string | Date | Record<string, unknown>;
+  updatedAt?: string | Date | Record<string, unknown>;
+  paidAt?: string | Date | Record<string, unknown>;
+}

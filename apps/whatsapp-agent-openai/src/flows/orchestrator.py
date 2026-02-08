@@ -267,109 +267,41 @@ async def handle_flow_completion(
             )
 
             if needs_payment:
-                from src.utils.payment import (
-                    PAGSEGURO_MIN_PIX_AMOUNT_CENTS,
-                    create_pagseguro_pix_order,
-                    format_payment_amount,
-                    is_pagseguro_configured,
-                    send_pix_payment_to_customer,
-                )
+                from src.utils.payment import format_payment_amount
 
                 logger.info(f"💰 Signal required: {format_payment_amount(appointment.signal_cents)}")
+                confirmation_msg = (
+                    f"*Agendamento registrado*\n\n"
+                    f"{weekday}, {formatted_date} às {selected_time}\n"
+                    f"{professional_name}\n"
+                    f"Paciente: {patient_name}\n\n"
+                    f"*Sinal necessário:* {format_payment_amount(appointment.signal_cents)}\n\n"
+                    "Escolha como deseja pagar o sinal para confirmar sua consulta.\n"
+                    "A reserva deste horário fica ativa por 15 minutos."
+                )
+                await deps.send_whatsapp_message(phone_number_id, phone, confirmation_msg, access_token)
 
-                if appointment.signal_cents >= PAGSEGURO_MIN_PIX_AMOUNT_CENTS and is_pagseguro_configured():
-                    payment_info = await create_pagseguro_pix_order(
-                        order_id=appointment.id,
-                        amount=appointment.signal_cents,
-                        customer_name=patient_name,
-                        customer_phone=phone,
-                        product_name=f"Sinal - Consulta {professional_name}",
-                    )
+                await deps.send_whatsapp_buttons(
+                    phone_number_id,
+                    phone,
+                    "Escolha o método de pagamento do sinal:",
+                    [
+                        {"id": "payment_method_card", "title": "Pagar com cartão"},
+                        {"id": "payment_method_pix", "title": "Pagar com PIX"},
+                    ],
+                    access_token,
+                )
 
-                    if payment_info:
-                        if deps.db:
-                            deps.db.update_appointment(
-                                appointment.id,
-                                {"signalPaymentId": payment_info.get("payment_id")},
-                                clinic_id=clinic_id,
-                            )
-                            deps.db.create_order(
-                                appointment.id,
-                                {
-                                    "id": appointment.id,
-                                    "clinicId": clinic_id,
-                                    "appointmentId": appointment.id,
-                                    "patientPhone": phone,
-                                    "paymentId": payment_info.get("payment_id"),
-                                    "paymentStatus": "pending",
-                                    "status": "pending",
-                                    "amountCents": appointment.signal_cents,
-                                    "description": "Sinal de consulta",
-                                    "pixCopiaCola": payment_info.get("qr_code_text"),
-                                    "qrCodeUrl": payment_info.get("qr_code"),
-                                    "expiresAt": payment_info.get("expires_at"),
-                                },
-                                clinic_id=clinic_id,
-                            )
-
-                        confirmation_msg = (
-                            f"*Agendamento registrado*\n\n"
-                            f"{weekday}, {formatted_date} às {selected_time}\n"
-                            f"{professional_name}\n"
-                            f"Paciente: {patient_name}\n\n"
-                            f"*Sinal necessário:* {format_payment_amount(appointment.signal_cents)}\n\n"
-                            "Seu agendamento será confirmado após o pagamento do sinal. "
-                            "Vou enviar o PIX em seguida.\n"
-                            "A reserva deste horário fica ativa por 15 minutos."
-                        )
-                        await deps.send_whatsapp_message(phone_number_id, phone, confirmation_msg, access_token)
-
-                        _cli2 = deps.db.get_clinic(clinic_id) if deps.db else None
-                        runtime_token = deps.set_runtime(
-                            deps.runtime_cls(
-                                clinic_id=clinic_id,
-                                db=deps.db,
-                                phone_number_id=phone_number_id,
-                                access_token=access_token,
-                                vertical_slug=getattr(_cli2, "vertical", "") or None,
-                            )
-                        )
-                        try:
-                            await send_pix_payment_to_customer(
-                                phone=phone,
-                                payment_info=payment_info,
-                                amount=appointment.signal_cents,
-                                product_name="a confirmação da sua consulta",
-                                order_id=appointment.id,
-                            )
-                        finally:
-                            deps.reset_runtime(runtime_token)
-
-                        logger.info(f"💳 PIX payment sent to {phone}")
-                    else:
-                        logger.warning("⚠️ PagSeguro failed, sending confirmation without payment")
-                        confirmation_msg = (
-                            f"*Agendamento registrado*\n\n"
-                            f"{weekday}, {formatted_date} às {selected_time}\n"
-                            f"{professional_name}\n"
-                            f"Paciente: {patient_name}\n\n"
-                            f"*Sinal:* {format_payment_amount(appointment.signal_cents)}\n\n"
-                            "Entre em contato com a clínica para efetuar o pagamento do sinal e confirmar sua consulta."
-                        )
-                        await deps.send_whatsapp_message(phone_number_id, phone, confirmation_msg, access_token)
-                else:
-                    logger.info(
-                        f"⚠️ Signal {appointment.signal_cents} cents below minimum or PagSeguro not configured"
-                    )
-                    confirmation_msg = (
-                        f"*Agendamento confirmado*\n\n"
-                        f"{weekday}, {formatted_date} às {selected_time}\n"
-                        f"{professional_name}\n"
-                        f"Paciente: {patient_name}\n\n"
-                        "Você receberá um lembrete 24h antes da consulta.\n\n"
-                        "Para cancelar ou reagendar, basta enviar uma mensagem!"
-                    )
-                    await deps.send_whatsapp_message(phone_number_id, phone, confirmation_msg, access_token)
+                if deps.db:
+                    current_state = deps.db.load_conversation_state(clinic_id, phone)
+                    current_state["state"] = "awaiting_payment_method"
+                    current_state["clinic_id"] = clinic_id
+                    current_state["current_appointment_id"] = appointment.id
+                    current_state["current_appointment_date"] = appointment.date
+                    current_state["current_appointment_time"] = appointment.time
+                    current_state["current_appointment_professional"] = appointment.professional_name
+                    current_state["current_appointment_professional_id"] = appointment.professional_id
+                    deps.db.save_conversation_state(clinic_id, phone, current_state)
             else:
                 confirmation_msg = (
                     f"*Agendamento confirmado*\n\n"

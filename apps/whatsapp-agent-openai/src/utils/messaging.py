@@ -478,7 +478,11 @@ async def send_payment_button(
     payment_url: str,
     amount_cents: int,
     product_name: str = "Produto",
-    button_text: str = "Pagar com PIX"
+    button_text: str = "Pagar",
+    header_text: str = "Pagamento",
+    body_suffix: str = "Clique no botão abaixo para abrir a página de pagamento.",
+    footer_text: str = "Pagamento seguro",
+    expires_minutes: int = 30,
 ) -> str:
     """
     send a payment CTA button that opens the PagSeguro checkout page.
@@ -488,6 +492,10 @@ async def send_payment_button(
         amount_cents: Amount in cents (for display)
         product_name: Product name for the message
         button_text: Text displayed on the button
+        header_text: Header shown in WhatsApp card
+        body_suffix: Instructional text in body
+        footer_text: Footer text
+        expires_minutes: Payment expiration hint (display only)
     returns:
         success message or error description
     """
@@ -518,18 +526,18 @@ async def send_payment_button(
             "type": "cta_url",
             "header": {
                 "type": "text",
-                "text": "Pagamento PIX"
+                "text": header_text
             },
             "body": {
                 "text": (
                     f"*{product_name}*\n\n"
                     f"Valor: *{amount_formatted}*\n\n"
-                    "Clique no botão abaixo para abrir a página de pagamento PIX.\n\n"
-                    "O pagamento expira em 30 minutos."
+                    f"{body_suffix}\n\n"
+                    f"O pagamento expira em {expires_minutes} minutos."
                 )
             },
             "footer": {
-                "text": "Pagamento seguro via PagSeguro"
+                "text": footer_text
             },
             "action": {
                 "name": "cta_url",

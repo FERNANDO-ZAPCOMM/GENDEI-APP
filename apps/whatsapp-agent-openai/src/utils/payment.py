@@ -9,7 +9,7 @@ import requests  # type: ignore
 import hashlib
 import hmac
 import json
-from typing import Optional, Dict, Any, Tuple
+from typing import Optional, Dict, Any, Tuple, List
 from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
@@ -94,7 +94,8 @@ async def create_pagseguro_checkout(
     amount: int,
     customer_name: str,
     customer_phone: str,
-    product_name: str = "Produto Digital"
+    product_name: str = "Produto Digital",
+    payment_methods: Optional[List[str]] = None,
 ) -> Optional[Dict[str, Any]]:
     """
     create a PagSeguro Checkout using Checkout API - returns a checkout URL (payment page).
@@ -135,6 +136,9 @@ async def create_pagseguro_checkout(
         clinic_id = os.getenv("CLINIC_ID", "default")
         reference_id = f"GD-{clinic_id[:8]}-{order_id[:12]}"
 
+        if payment_methods is None:
+            payment_methods = ["CREDIT_CARD", "PIX"]
+
         # Checkout API payload with pre-filled customer data
         payload = {
             "reference_id": reference_id,
@@ -155,7 +159,7 @@ async def create_pagseguro_checkout(
                 "quantity": 1,
                 "unit_amount": amount
             }],
-            "payment_methods": [{"type": "PIX"}],  # PIX only
+            "payment_methods": [{"type": method} for method in payment_methods],
             "notification_urls": [f"{DOMAIN}/pagseguro-webhook"],
             "metadata": {
                 "whatsapp_phone": customer_phone,
@@ -441,7 +445,11 @@ async def send_pix_payment_to_customer(
                 payment_url=pix_page_url,
                 amount_cents=amount,
                 product_name=product_name,
-                button_text="Pagar com PIX"
+                button_text="Pagar com PIX",
+                header_text="Pagamento PIX",
+                body_suffix="Clique no botão abaixo para abrir a página de pagamento PIX.",
+                footer_text="Pagamento seguro via PagSeguro",
+                expires_minutes=15,
             )
 
             if "successfully" in result.lower() or "✅" in result:
@@ -472,9 +480,47 @@ async def send_pix_payment_to_customer(
 
         logger.error(f"❌ No PIX payment method available for {phone}")
         return False
-
     except Exception as e:
         logger.error(f"Error sending PIX payment info: {e}")
+        return False
+
+
+async def send_card_payment_to_customer(
+    phone: str,
+    payment_info: Dict[str, Any],
+    amount: int,
+    product_name: str = "sua consulta",
+) -> bool:
+    """
+    Send card checkout link to customer via WhatsApp CTA button.
+    """
+    try:
+        from src.utils.messaging import send_payment_button
+
+        payment_url = payment_info.get("payment_link")
+        if not payment_url:
+            logger.error("❌ No card checkout URL found in payment info")
+            return False
+
+        result = await send_payment_button(
+            phone=phone,
+            payment_url=payment_url,
+            amount_cents=amount,
+            product_name=product_name,
+            button_text="Pagar com cartão",
+            header_text="Pagamento com cartão",
+            body_suffix="Clique no botão abaixo para abrir a página de pagamento com cartão.",
+            footer_text="Pagamento seguro via PagSeguro",
+            expires_minutes=15,
+        )
+        if "successfully" in result.lower() or "✅" in result:
+            logger.info(f"✅ Card checkout sent to {phone}")
+            return True
+
+        logger.warning(f"⚠️ Card checkout send returned: {result}")
+        return False
+    except Exception as e:
+        logger.error(f"Error sending card payment info: {e}")
         return False
 
 

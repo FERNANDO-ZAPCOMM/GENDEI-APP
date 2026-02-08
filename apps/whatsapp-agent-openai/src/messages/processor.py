@@ -22,6 +22,7 @@ class MessageProcessorDeps:
     handle_appointment_cancel_request: Callable[..., Awaitable[Any]]
     handle_appointment_question: Callable[..., Awaitable[Any]]
     handle_pending_payment_followup: Callable[..., Awaitable[Any]]
+    handle_payment_method_selection: Callable[..., Awaitable[Any]]
     handle_scheduling_intent: Callable[..., Awaitable[Any]]
     handle_greeting_response_duvida: Callable[..., Awaitable[Any]]
     handle_payment_type_selection: Callable[..., Awaitable[Any]]
@@ -171,6 +172,18 @@ async def process_incoming_message(
         )
         return
 
+    if button_payload in ("payment_method_card", "payment_method_pix"):
+        method = "card" if button_payload == "payment_method_card" else "pix"
+        await deps.handle_payment_method_selection(
+            clinic_id,
+            phone,
+            method,
+            phone_number_id,
+            access_token,
+            state,
+        )
+        return
+
     if button_payload in ("payment_convenio", "payment_particular"):
         logger.info(f"💳 User {phone} selected payment type (button): {button_payload}")
         await deps.handle_payment_type_selection(
@@ -193,6 +206,28 @@ async def process_incoming_message(
                 state,
                 phone_number_id,
                 access_token,
+            )
+            return
+
+    if current_state == "awaiting_payment_method" and not button_payload:
+        if "cart" in msg_lower or "credito" in msg_lower or "crédito" in msg_lower:
+            await deps.handle_payment_method_selection(
+                clinic_id,
+                phone,
+                "card",
+                phone_number_id,
+                access_token,
+                state,
+            )
+            return
+        if "pix" in msg_lower:
+            await deps.handle_payment_method_selection(
+                clinic_id,
+                phone,
+                "pix",
+                phone_number_id,
+                access_token,
+                state,
             )
             return
         if "convenio" in msg_lower or "convênio" in msg_lower:

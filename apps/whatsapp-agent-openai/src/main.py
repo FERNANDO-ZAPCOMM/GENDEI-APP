@@ -1028,6 +1028,7 @@ def _get_message_processor_deps() -> MessageProcessorDeps:
         handle_appointment_cancel_request=handle_appointment_cancel_request,
         handle_appointment_question=handle_appointment_question,
         handle_pending_payment_followup=handle_pending_payment_followup,
+        handle_payment_method_selection=handle_payment_method_selection,
         handle_scheduling_intent=handle_scheduling_intent,
         handle_greeting_response_duvida=handle_greeting_response_duvida,
         handle_payment_type_selection=handle_payment_type_selection,
@@ -2301,12 +2302,15 @@ async def _send_payment_link_for_appointment(
     phone_number_id: str,
     access_token: str,
     appointment: Appointment,
+    payment_method: str = "card",
 ) -> bool:
-    """Generate and send a PIX payment link for an existing appointment."""
+    """Generate and send a payment link/code for an existing appointment."""
     from src.utils.payment import (
         PAGSEGURO_MIN_PIX_AMOUNT_CENTS,
+        create_pagseguro_checkout,
         create_pagseguro_pix_order,
         is_pagseguro_configured,
+        send_card_payment_to_customer,
         send_pix_payment_to_customer,
     )
 
@@ -2323,13 +2327,28 @@ async def _send_payment_link_for_appointment(
         )
         return False
 
-    payment_info = await create_pagseguro_pix_order(
-        order_id=appointment.id,
-        amount=appointment.signal_cents,
-        customer_name=appointment.patient_name or "Paciente",
-        customer_phone=phone,
-        product_name=f"Sinal - Consulta {appointment.professional_name}",
-    )
+    payment_method = (payment_method or "card").lower()
+    if payment_method not in {"card", "pix"}:
+        payment_method = "card"
+
+    if payment_method == "card":
+        payment_info = await create_pagseguro_checkout(
+            order_id=appointment.id,
+            amount=appointment.signal_cents,
+            customer_name=appointment.patient_name or "Paciente",
+            customer_phone=phone,
+            product_name=f"Sinal - Consulta {appointment.professional_name}",
+            payment_methods=["CREDIT_CARD"],
+        )
+    else:
+        payment_info = await create_pagseguro_pix_order(
+            order_id=appointment.id,
+            amount=appointment.signal_cents,
+            customer_name=appointment.patient_name or "Paciente",
+            customer_phone=phone,
+            product_name=f"Sinal - Consulta {appointment.professional_name}",
+        )
+
     if not payment_info:
         return False
 
@@ -2346,11 +2365,16 @@ async def _send_payment_link_for_appointment(
                 "clinicId": clinic_id,
                 "appointmentId": appointment.id,
                 "patientPhone": phone,
+                "patientName": appointment.patient_name or "",
                 "paymentId": payment_info.get("payment_id"),
                 "paymentStatus": "pending",
                 "status": "pending",
                 "amountCents": appointment.signal_cents,
                 "description": "Sinal de consulta",
+                "paymentMethod": payment_method,
+                "paymentSource": payment_info.get("provider") or "pagseguro",
+                "transferMode": "automatic" if payment_method == "card" else "manual",
+                "checkoutUrl": payment_info.get("payment_link"),
                 "pixCopiaCola": payment_info.get("qr_code_text"),
                 "qrCodeUrl": payment_info.get("qr_code"),
                 "expiresAt": payment_info.get("expires_at"),
@@ -2369,6 +2393,13 @@ async def _send_payment_link_for_appointment(
         )
     )
     try:
+        if payment_method == "card":
+            return await send_card_payment_to_customer(
+                phone=phone,
+                payment_info=payment_info,
+                amount=appointment.signal_cents,
+                product_name="Confirmação da sua consulta",
+            )
         return await send_pix_payment_to_customer(
             phone=phone,
             payment_info=payment_info,
@@ -2378,6 +2409,94 @@ async def _send_payment_link_for_appointment(
         )
     finally:
         reset_runtime(runtime_token)
+
+
+async def send_payment_method_options(
+    clinic_id: str,
+    phone: str,
+    phone_number_id: str,
+    access_token: str,
+    appointment: Appointment,
+) -> None:
+    if db:
+        state = db.load_conversation_state(clinic_id, phone)
+        state["state"] = "awaiting_payment_method"
+        state["clinic_id"] = clinic_id
+        state["current_appointment_id"] = appointment.id
+        state["current_appointment_date"] = appointment.date
+        state["current_appointment_time"] = appointment.time
+        state["current_appointment_professional"] = appointment.professional_name
+        state["current_appointment_professional_id"] = appointment.professional_id
+        db.save_conversation_state(clinic_id, phone, state)
+
+    await send_whatsapp_buttons(
+        phone_number_id,
+        phone,
+        "Escolha o método para pagar o sinal:",
+        [
+            {"id": "payment_method_card", "title": "Pagar com cartão"},
+            {"id": "payment_method_pix", "title": "Pagar com PIX"},
+        ],
+        access_token,
+    )
+
+
+async def handle_payment_method_selection(
+    clinic_id: str,
+    phone: str,
+    payment_method: str,
+    phone_number_id: str,
+    access_token: str,
+    state: Dict[str, Any],
+) -> None:
+    appointment = None
+    apt_id = state.get("current_appointment_id")
+
+    if db and apt_id:
+        appointment = db.get_appointment(apt_id, clinic_id=clinic_id)
+
+    if not appointment and db:
+        appointments = get_appointments_by_phone(db, phone, clinic_id, include_past=False)
+        appointment = next(
+            (
+                a
+                for a in appointments
+                if a.status == AppointmentStatus.PENDING and not a.signal_paid and a.signal_cents > 0
+            ),
+            None,
+        )
+
+    if not appointment:
+        await send_whatsapp_message(
+            phone_number_id,
+            phone,
+            "Não encontrei uma reserva pendente. Vou abrir o agendamento novamente.",
+            access_token,
+        )
+        await handle_scheduling_intent(clinic_id, phone, "quero agendar", phone_number_id, access_token)
+        return
+
+    sent = await _send_payment_link_for_appointment(
+        clinic_id=clinic_id,
+        phone=phone,
+        phone_number_id=phone_number_id,
+        access_token=access_token,
+        appointment=appointment,
+        payment_method=payment_method,
+    )
+    if not sent:
+        await send_whatsapp_message(
+            phone_number_id,
+            phone,
+            "Não consegui gerar o link agora. Posso abrir novos horários ou chamar um atendente.",
+            access_token,
+        )
+        return
+
+    if db:
+        updated_state = db.load_conversation_state(clinic_id, phone)
+        updated_state["state"] = "awaiting_appointment_action"
+        db.save_conversation_state(clinic_id, phone, updated_state)
 
 
 async def handle_pending_payment_followup(
@@ -2438,7 +2557,7 @@ async def handle_pending_payment_followup(
             await send_whatsapp_message(
                 phone_number_id,
                 phone,
-                "O prazo de pagamento anterior expirou. Reativei a reserva e vou te enviar um novo link PIX.",
+                "O prazo de pagamento anterior expirou. Reativei a reserva para você.",
                 access_token,
             )
             recreated = create_appointment(
@@ -2463,12 +2582,14 @@ async def handle_pending_payment_followup(
                 convenio_number=appointment.convenio_number,
                 duration_minutes=appointment.duration_minutes,
             )
-            if recreated and await _send_payment_link_for_appointment(
-                clinic_id, phone, phone_number_id, access_token, recreated
-            ):
-                if db:
-                    state["current_appointment_id"] = recreated.id
-                    db.save_conversation_state(clinic_id, phone, state)
+            if recreated:
+                await send_payment_method_options(
+                    clinic_id=clinic_id,
+                    phone=phone,
+                    phone_number_id=phone_number_id,
+                    access_token=access_token,
+                    appointment=recreated,
+                )
                 return
 
         await send_whatsapp_message(
@@ -2483,19 +2604,16 @@ async def handle_pending_payment_followup(
     await send_whatsapp_message(
         phone_number_id,
         phone,
-        "Seu agendamento ainda está pendente de pagamento do sinal. Vou enviar o link novamente.",
+        "Seu agendamento ainda está pendente de pagamento do sinal.",
         access_token,
     )
-    sent = await _send_payment_link_for_appointment(
-        clinic_id, phone, phone_number_id, access_token, appointment
+    await send_payment_method_options(
+        clinic_id=clinic_id,
+        phone=phone,
+        phone_number_id=phone_number_id,
+        access_token=access_token,
+        appointment=appointment,
     )
-    if not sent:
-        await send_whatsapp_message(
-            phone_number_id,
-            phone,
-            "Não consegui gerar o link agora. Posso abrir novos horários ou chamar um atendente para te ajudar.",
-            access_token,
-        )
 
 
 def _get_flow_orchestration_deps() -> FlowOrchestrationDeps:
