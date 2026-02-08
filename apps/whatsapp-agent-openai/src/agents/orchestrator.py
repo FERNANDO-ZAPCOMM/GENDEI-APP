@@ -56,6 +56,10 @@ class AgentOrchestrator:
                     "payment_settings": getattr(clinic, 'payment_settings', {}),
                     "greeting_summary": getattr(clinic, 'greeting_summary', ''),
                     "description": getattr(clinic, 'description', ''),
+                    "workflow_mode": getattr(clinic, 'workflow_mode', 'booking'),
+                    "workflow_welcome_message": getattr(clinic, 'workflow_welcome_message', ''),
+                    "workflow_cta": getattr(clinic, 'workflow_cta', ''),
+                    "workflow_faqs": getattr(clinic, 'workflow_faqs', []) or [],
                 }
 
                 # Load vertical config

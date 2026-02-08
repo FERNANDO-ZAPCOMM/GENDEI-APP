@@ -37,6 +37,9 @@ export interface Clinic {
   whatsappBusinessAccountId?: string;
   depositPercentage?: number; // 0-100, percentage required as deposit
   workflowMode?: WorkflowMode;      // WhatsApp bot behavior mode
+  workflowWelcomeMessage?: string;
+  workflowCta?: string;
+  workflowFaqs?: Array<{ question: string; answer: string }>;
   paymentSettings?: PaymentSettings; // Payment settings including convenio, particular, etc.
   createdAt?: string;
   updatedAt?: string;

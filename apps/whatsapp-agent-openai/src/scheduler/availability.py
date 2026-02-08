@@ -3,10 +3,61 @@
 
 import logging
 from datetime import datetime, timedelta, date
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 from .models import TimeSlot, Professional, Service
 
 logger = logging.getLogger(__name__)
+
+
+def _parse_time_components(raw_time: Any) -> Optional[Tuple[int, int]]:
+    """Parse time strings in multiple formats and return (hour, minute)."""
+    if raw_time is None:
+        return None
+
+    raw = str(raw_time).strip()
+    if not raw:
+        return None
+
+    formats = ("%H:%M", "%H:%M:%S", "%I:%M %p", "%I:%M%p")
+    for fmt in formats:
+        try:
+            parsed = datetime.strptime(raw, fmt)
+            return parsed.hour, parsed.minute
+        except ValueError:
+            continue
+    return None
+
+
+def _coerce_periods_for_day(working_hours: Dict[Any, Any], day_of_week: int) -> List[Dict[str, str]]:
+    """Accept different workingHours key/value shapes and normalize to list of periods."""
+    if not isinstance(working_hours, dict):
+        return []
+
+    # Support numeric/string/legacy weekday keys.
+    weekday_aliases = {
+        0: ["0", 0, "monday", "segunda", "seg"],
+        1: ["1", 1, "tuesday", "terca", "terça", "ter"],
+        2: ["2", 2, "wednesday", "quarta", "qua"],
+        3: ["3", 3, "thursday", "quinta", "qui"],
+        4: ["4", 4, "friday", "sexta", "sex"],
+        5: ["5", 5, "saturday", "sabado", "sábado", "sab", "sáb"],
+        6: ["6", 6, "sunday", "domingo", "dom"],
+    }
+
+    raw_value = None
+    for key in weekday_aliases.get(day_of_week, [str(day_of_week), day_of_week]):
+        if key in working_hours:
+            raw_value = working_hours.get(key)
+            break
+
+    if raw_value is None:
+        return []
+
+    if isinstance(raw_value, dict):
+        return [raw_value]
+    if isinstance(raw_value, list):
+        return [p for p in raw_value if isinstance(p, dict)]
+    return []
 
 
 def get_available_slots(
@@ -76,7 +127,10 @@ def get_available_slots(
 
             for professional in professionals:
                 # Get working hours for this day
-                working_hours = professional.working_hours.get(str(day_of_week), [])
+                working_hours = _coerce_periods_for_day(
+                    getattr(professional, "working_hours", {}) or {},
+                    day_of_week
+                )
 
                 for period in working_hours:
                     start_time = period.get("start", "09:00")
@@ -120,13 +174,28 @@ def _generate_slots_for_period(
     slots = []
 
     try:
-        start_hour, start_min = map(int, start_time.split(":"))
-        end_hour, end_min = map(int, end_time.split(":"))
+        parsed_start = _parse_time_components(start_time)
+        parsed_end = _parse_time_components(end_time)
+        if not parsed_start or not parsed_end:
+            logger.warning(
+                "Invalid working-hours period for professional %s: start=%r end=%r",
+                professional.id,
+                start_time,
+                end_time,
+            )
+            return []
+
+        start_hour, start_min = parsed_start
+        end_hour, end_min = parsed_end
 
         current_hour = start_hour
         current_min = start_min
-        duration = professional.appointment_duration
-        buffer = professional.buffer_time
+        duration = int(getattr(professional, "appointment_duration", 30) or 30)
+        buffer = int(getattr(professional, "buffer_time", 0) or 0)
+        if duration <= 0:
+            duration = 30
+        if buffer < 0:
+            buffer = 0
 
         while True:
             time_str = f"{current_hour:02d}:{current_min:02d}"

@@ -56,6 +56,9 @@ class Clinic:
 
     # Workflow mode: 'booking' (full scheduling) or 'info' (information only)
     workflow_mode: str = "booking"
+    workflow_welcome_message: str = ""  # Custom welcome text for info mode
+    workflow_cta: str = ""              # Custom CTA text for info mode
+    workflow_faqs: List[Dict[str, str]] = field(default_factory=list)  # FAQ Q&A pairs
 
     # Payment settings
     payment_gateway: str = "pagseguro"
@@ -93,6 +96,9 @@ class Clinic:
             "whatsappWabaId": self.whatsapp_waba_id,
             "whatsappConnected": self.whatsapp_connected,
             "workflowMode": self.workflow_mode,
+            "workflowWelcomeMessage": self.workflow_welcome_message,
+            "workflowCta": self.workflow_cta,
+            "workflowFaqs": self.workflow_faqs,
             "paymentGateway": self.payment_gateway,
             "signalPercentage": self.signal_percentage,
             "pixKey": self.pix_key,
@@ -126,6 +132,9 @@ class Clinic:
             whatsapp_access_token=data.get("whatsappAccessToken"),
             whatsapp_connected=data.get("whatsappConnected", False),
             workflow_mode=data.get("workflowMode", "booking"),
+            workflow_welcome_message=data.get("workflowWelcomeMessage", ""),
+            workflow_cta=data.get("workflowCta", ""),
+            workflow_faqs=data.get("workflowFaqs", []) or [],
             payment_gateway=data.get("paymentGateway", "pagseguro"),
             pagseguro_token=data.get("pagseguroToken"),
             signal_percentage=data.get("signalPercentage", 15),

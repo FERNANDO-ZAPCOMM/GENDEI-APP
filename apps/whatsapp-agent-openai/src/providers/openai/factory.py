@@ -172,6 +172,20 @@ class OpenAIAgentFactory(BaseAgentFactory):
             services_str = self._format_services(context["services"])
             prompt = prompt.replace("{services}", services_str)
 
+        # If clinic has FAQ items without answers, guide agent behavior explicitly.
+        clinic_ctx = context.get("clinic", {})
+        workflow_faqs = clinic_ctx.get("workflow_faqs") or []
+        has_pending_faq = any(
+            isinstance(item, dict) and (item.get("question") or "").strip() and not (item.get("answer") or "").strip()
+            for item in workflow_faqs
+        )
+        if has_pending_faq:
+            prompt += (
+                "\n\nREGRA DE FAQ PENDENTE:\n"
+                "- Se a FAQ existir, mas estiver sem resposta cadastrada, informe isso com clareza.\n"
+                "- Não invente resposta; ofereça contato telefônico para confirmação."
+            )
+
         return prompt
 
     def _format_clinic_context(self, clinic: Dict) -> str:
@@ -201,6 +215,31 @@ class OpenAIAgentFactory(BaseAgentFactory):
                     greeting_summary = summary
         if greeting_summary:
             lines.append(f"Resumo saudação: {greeting_summary}")
+
+        workflow_welcome = (clinic.get("workflow_welcome_message") or "").strip()
+        if workflow_welcome:
+            lines.append(f"Boas-vindas modo info: {workflow_welcome}")
+
+        workflow_cta = (clinic.get("workflow_cta") or "").strip()
+        if workflow_cta:
+            lines.append(f"CTA modo info: {workflow_cta}")
+
+        workflow_faqs = clinic.get("workflow_faqs") or []
+        if workflow_faqs:
+            lines.append("FAQ da clínica:")
+            for item in workflow_faqs[:12]:
+                if not isinstance(item, dict):
+                    continue
+                question = (item.get("question") or "").strip()
+                answer = (item.get("answer") or "").strip()
+                if not question:
+                    continue
+                if answer:
+                    lines.append(f"- P: {question}")
+                    lines.append(f"  R: {answer}")
+                else:
+                    lines.append(f"- P: {question}")
+                    lines.append("  R: [sem resposta cadastrada]")
 
         # Payment settings
         payment = clinic.get("payment_settings", {})

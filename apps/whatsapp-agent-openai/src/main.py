@@ -7,6 +7,7 @@ import os
 import logging
 import json
 import asyncio
+import re
 from typing import Any, Dict, Optional, List
 from datetime import datetime, timedelta
 from contextlib import asynccontextmanager
@@ -206,20 +207,62 @@ def build_deterministic_greeting(clinic_id: str) -> str:
 
     if summary and clinic_name:
         return (
-            f"Olá! Tudo bem?\n\n"
+            f"👋 Olá! Tudo bem?\n\n"
             f"{summary}\n\n"
             "O que você deseja?"
         )
 
     if clinic_name:
         return (
-            f"Olá! Tudo bem?\n\n"
+            f"👋 Olá! Tudo bem?\n\n"
             f"Seja bem-vindo(a) à {clinic_name}. "
             f"Estou aqui para ajudá-lo(a) com informações e agendamentos.\n\n"
             "O que você deseja?"
         )
 
-    return "Olá! Tudo bem?\n\nO que você deseja?"
+    return "👋 Olá! Tudo bem?\n\nO que você deseja?"
+
+
+def _clinic_greeting_blurb(clinic: Any) -> str:
+    """Build a short, natural greeting context prioritizing clinic description."""
+    if not clinic:
+        return ""
+
+    description = (getattr(clinic, "description", "") or "").strip()
+    if description:
+        compact = " ".join(description.split())
+        first_sentence = re.split(r"(?<=[.!?])\s+", compact)[0].strip()
+        if first_sentence:
+            return first_sentence[:220].rstrip()
+        return compact[:220].rstrip()
+
+    summary = (getattr(clinic, "greeting_summary", "") or "").strip()
+    if summary:
+        return summary[:220].rstrip()
+
+    return ""
+
+
+def _format_faq_topics_for_greeting(clinic: Any, limit: int = 3) -> str:
+    """Return short FAQ topics text for greeting."""
+    if not clinic:
+        return ""
+
+    workflow_faqs = getattr(clinic, "workflow_faqs", []) or []
+    topics: List[str] = []
+    for item in workflow_faqs:
+        if not isinstance(item, dict):
+            continue
+        question = (item.get("question") or "").strip()
+        if question:
+            topics.append(question)
+        if len(topics) >= limit:
+            break
+
+    if not topics:
+        return ""
+
+    return "Posso te ajudar com: " + "; ".join(topics) + "."
 
 
 def _adaptive_buffer_seconds(first_message_text: str) -> float:
@@ -421,6 +464,10 @@ def load_clinic_context(clinic_id: str) -> Dict[str, Any]:
                 "description": getattr(clinic, 'description', ''),
                 "greeting_summary": getattr(clinic, 'greeting_summary', ''),
                 "vertical": vertical_slug,
+                "workflow_mode": getattr(clinic, 'workflow_mode', 'booking'),
+                "workflow_welcome_message": getattr(clinic, 'workflow_welcome_message', ''),
+                "workflow_cta": getattr(clinic, 'workflow_cta', ''),
+                "workflow_faqs": getattr(clinic, 'workflow_faqs', []) or [],
             }
             # Add vertical config for prompt formatting
             vc = get_vertical_config(vertical_slug)
@@ -2455,11 +2502,43 @@ async def send_initial_greeting(
     """Send smart greeting - checks for existing appointments first."""
     clinic = db.get_clinic(clinic_id) if db else None
     clinic_name = clinic.name if clinic else "nossa clínica"
+    workflow_mode = getattr(clinic, 'workflow_mode', 'booking') if clinic else 'booking'
 
     # Get vertical config for terminology
     vertical_slug = getattr(clinic, 'vertical', '') if clinic else ''
     vc = get_vertical_config(vertical_slug)
     term = vc.terminology
+
+    # INFO mode: no interactive buttons, direct Q&A only.
+    if workflow_mode == 'info':
+        custom_welcome = (getattr(clinic, "workflow_welcome_message", "") or "").strip() if clinic else ""
+        if custom_welcome:
+            greeting_message = f"👋 {custom_welcome}"
+        else:
+            greeting_message = f"👋 Bem-vindo(a) a *{clinic_name}*!\n\n"
+            blurb = _clinic_greeting_blurb(clinic)
+            if blurb:
+                greeting_message += f"{blurb}\n\n"
+            faq_topics = _format_faq_topics_for_greeting(clinic)
+            if faq_topics:
+                greeting_message += f"{faq_topics}\n\n"
+            greeting_message += "Pode me perguntar qualquer dúvida sobre a clínica."
+
+        if db:
+            state = db.load_conversation_state(clinic_id, phone)
+            state["clinic_id"] = clinic_id
+            state["buttons_sent"] = True
+            state["state"] = "general_chat"
+            db.save_conversation_state(clinic_id, phone, state)
+
+        await send_whatsapp_message(
+            phone_number_id,
+            phone,
+            greeting_message,
+            access_token
+        )
+        logger.info(f"👋 Sent info-mode greeting without buttons to {phone}")
+        return
 
     # Check for upcoming appointments
     upcoming_appointments = get_patient_upcoming_appointments(clinic_id, phone)
@@ -2487,9 +2566,10 @@ async def send_initial_greeting(
 
         # Build personalized greeting with vertical-aware terminology
         greeting = f"👋 *Olá{', ' + greeting_name if greeting_name else ''}!*\n\n"
-        greeting += f"Vi que você tem uma {term.appointment_term} agendada:\n\n"
-        greeting += f"📅 *{apt_date_formatted}*\n"
-        greeting += f"{term.professional_emoji} *{apt.professional_name}*\n\n"
+        greeting += (
+            f"Vi que você tem uma {term.appointment_term} agendada para "
+            f"*{apt_date_formatted}* com *{apt.professional_name}*.\n\n"
+        )
         greeting += f"O que você deseja?"
 
         buttons = [
@@ -2508,19 +2588,15 @@ async def send_initial_greeting(
 
     else:
         # No upcoming appointments - send greeting with action buttons
-        # Check workflow mode (default to 'booking' for backward compatibility)
-        workflow_mode = getattr(clinic, 'workflow_mode', 'booking') if clinic else 'booking'
-
         # Build personalized greeting with clinic context
         greeting_message = f"👋 Bem-vindo(a) a *{clinic_name}*!\n\n"
 
-        # Add greeting summary if available
-        greeting_summary = getattr(clinic, 'greeting_summary', '') if clinic else ''
-        if greeting_summary:
-            greeting_message += f"{greeting_summary}\n\n"
+        blurb = _clinic_greeting_blurb(clinic)
+        if blurb:
+            greeting_message += f"{blurb}\n\n"
 
         # Add professionals/specialties if available
-        if db:
+        if db and not blurb:
             professionals = db.get_clinic_professionals(clinic_id)
             if professionals:
                 # Group by specialty (handles both old and new format)
@@ -2542,9 +2618,9 @@ async def send_initial_greeting(
                     # Show specialties available
                     spec_list = list(specialties.keys())[:3]  # Max 3 specialties
                     if len(spec_list) == 1:
-                        greeting_message += f"🏥 Atendemos em *{spec_list[0]}*\n\n"
+                        greeting_message += f"Atendemos em *{spec_list[0]}*.\n\n"
                     else:
-                        greeting_message += f"🏥 Atendemos em *{', '.join(spec_list)}*\n\n"
+                        greeting_message += f"Atendemos em *{', '.join(spec_list)}*.\n\n"
 
         greeting_message += "O que você deseja?"
 
@@ -2594,6 +2670,11 @@ async def send_followup_buttons_if_no_response(
     if not db:
         return
 
+    # Info mode does not use greeting buttons.
+    clinic = db.get_clinic(clinic_id)
+    if clinic and getattr(clinic, "workflow_mode", "booking") == "info":
+        return
+
     # Check current state
     state = db.load_conversation_state(clinic_id, phone)
     current_state = state.get("state", "")
@@ -2623,7 +2704,7 @@ async def send_followup_buttons_if_no_response(
             ]
 
         # Send gentle follow-up with buttons
-        followup_message = "Posso te ajudar com algo? 🙂"
+        followup_message = "👋 Posso te ajudar com algo?"
 
         await send_whatsapp_buttons(
             phone_number_id, phone,

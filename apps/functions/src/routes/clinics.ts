@@ -621,14 +621,50 @@ router.post('/me/generate-faqs', verifyAuth, async (req: Request, res: Response)
       return res.status(500).json({ message: 'AI service not configured' });
     }
 
+    // Load related data for richer FAQs
+    const [professionalsSnap, servicesSnap] = await Promise.all([
+      db.collection(CLINICS).doc(clinicId).collection('professionals')
+        .where('active', '==', true)
+        .limit(20)
+        .get(),
+      db.collection(CLINICS).doc(clinicId).collection('services')
+        .where('active', '==', true)
+        .limit(30)
+        .get(),
+    ]);
+
+    const specialties = new Set<string>();
+    professionalsSnap.docs.forEach((doc) => {
+      const data = doc.data() as any;
+      const specialtiesList = Array.isArray(data.specialties) ? data.specialties : [];
+      if (specialtiesList.length > 0) {
+        specialtiesList.forEach((s: string) => {
+          if (s && typeof s === 'string') specialties.add(s);
+        });
+      } else if (data.specialty && typeof data.specialty === 'string') {
+        specialties.add(data.specialty);
+      }
+    });
+
+    const paymentSettings = (clinic.paymentSettings || {}) as any;
+    const convenios = Array.isArray(paymentSettings.convenioList) ? paymentSettings.convenioList : [];
+
     // Build context from clinic profile
     const context = [
       `Nome: ${clinic.name || 'Clínica'}`,
       clinic.description ? `Descrição: ${clinic.description}` : '',
       clinic.phone ? `Telefone: ${clinic.phone}` : '',
       clinic.address ? `Endereço: ${clinic.address}` : '',
+      clinic.addressData?.formatted ? `Endereço estruturado: ${clinic.addressData.formatted}` : '',
+      clinic.addressData?.city ? `Cidade: ${clinic.addressData.city}` : '',
+      clinic.addressData?.state ? `Estado: ${clinic.addressData.state}` : '',
       clinic.openingHours ? `Horários: ${clinic.openingHours}` : '',
       clinic.vertical ? `Vertical: ${clinic.vertical}` : '',
+      specialties.size > 0 ? `Especialidades: ${Array.from(specialties).join(', ')}` : '',
+      servicesSnap.size > 0 ? `Serviços ativos: ${servicesSnap.size}` : '',
+      paymentSettings.acceptsConvenio ? 'Aceita convênio: sim' : 'Aceita convênio: não',
+      convenios.length > 0 ? `Convênios aceitos: ${convenios.join(', ')}` : '',
+      paymentSettings.acceptsParticular ? 'Aceita particular: sim' : 'Aceita particular: não',
     ].filter(Boolean).join('\n');
 
     const completion = await getOpenAI().chat.completions.create({
@@ -642,7 +678,7 @@ router.post('/me/generate-faqs', verifyAuth, async (req: Request, res: Response)
         },
         {
           role: 'user',
-          content: `Gere 5 perguntas frequentes (FAQ) para esta clínica, com base nas informações disponíveis:
+          content: `Gere 8 perguntas frequentes (FAQ) para esta clínica, com base nas informações disponíveis:
 
 ${context}
 
@@ -650,7 +686,8 @@ Regras:
 - Gere perguntas que pacientes realmente fariam pelo WhatsApp
 - Respostas curtas e objetivas (máximo 2 frases cada)
 - Use informações reais do perfil quando disponíveis
-- Para informações não disponíveis, dê respostas genéricas úteis
+- Priorize cobrir: horário, especialidades, convênios/particular, localização/como chegar
+- Se faltar informação (ex.: estacionamento, atendimento após horário), responda que ainda não foi informado e oriente contato
 - Não use emojis
 - Responda APENAS com JSON no formato: [{"question": "...", "answer": "..."}]`
         }

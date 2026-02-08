@@ -286,25 +286,42 @@ class FlowsHandler:
 
         # Get working hours and generate time slots (professional is a dataclass)
         working_hours = getattr(professional, 'working_hours', {}) or {}
-        duration = getattr(professional, 'appointment_duration', 30) or 30
+        duration = int(getattr(professional, 'appointment_duration', 30) or 30)
+        if duration <= 0:
+            duration = 30
+
+        def _parse_time(raw: Any) -> Optional[datetime]:
+            if raw is None:
+                return None
+            value = str(raw).strip()
+            if not value:
+                return None
+            for fmt in ("%H:%M", "%H:%M:%S", "%I:%M %p", "%I:%M%p"):
+                try:
+                    return datetime.strptime(value, fmt)
+                except ValueError:
+                    continue
+            return None
 
         # Generate slots based on working hours
         time_slots = set()
         for day_key, day_hours in working_hours.items():
-            for period in day_hours:
+            periods = day_hours if isinstance(day_hours, list) else [day_hours] if isinstance(day_hours, dict) else []
+            for period in periods:
+                if not isinstance(period, dict):
+                    continue
                 start_str = period.get("start", "09:00")
                 end_str = period.get("end", "18:00")
 
-                try:
-                    start_time = datetime.strptime(start_str, "%H:%M")
-                    end_time = datetime.strptime(end_str, "%H:%M")
-
-                    current = start_time
-                    while current < end_time:
-                        time_slots.add(current.strftime("%H:%M"))
-                        current += timedelta(minutes=duration)
-                except ValueError:
+                start_time = _parse_time(start_str)
+                end_time = _parse_time(end_str)
+                if not start_time or not end_time:
                     continue
+
+                current = start_time
+                while current < end_time:
+                    time_slots.add(current.strftime("%H:%M"))
+                    current += timedelta(minutes=duration)
 
         # Sort and format
         sorted_times = sorted(list(time_slots))
