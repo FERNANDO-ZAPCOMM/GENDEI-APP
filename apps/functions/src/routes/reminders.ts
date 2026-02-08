@@ -3,6 +3,7 @@
 
 import { Router, Request, Response } from 'express';
 import { sendScheduledReminders, sendSingleReminder } from '../services/reminders';
+import { cleanupExpiredPaymentHolds } from '../services/payment-holds';
 
 const router = Router();
 
@@ -65,6 +66,28 @@ router.post('/send/:appointmentId', async (req: Request, res: Response): Promise
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to send reminder'
+    });
+  }
+});
+
+/**
+ * POST /reminders/cleanup-payment-holds
+ * Manual trigger to release unpaid pending holds
+ */
+router.post('/cleanup-payment-holds', async (req: Request, res: Response): Promise<void> => {
+  try {
+    console.log('Manual payment-hold cleanup trigger received from:', req.body?.source || 'unknown');
+    const result = await cleanupExpiredPaymentHolds();
+    res.json({
+      success: true,
+      result,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error: any) {
+    console.error('Error cleaning payment holds:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to cleanup payment holds',
     });
   }
 });

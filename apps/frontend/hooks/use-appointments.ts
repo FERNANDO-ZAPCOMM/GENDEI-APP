@@ -19,6 +19,19 @@ function normalizeAppointment(raw: any): Appointment {
   return {
     ...raw,
     duration: raw.duration ?? raw.durationMinutes ?? 30,
+    paymentType: raw.paymentType ?? raw.payment_type,
+    totalCents: raw.totalCents ?? raw.total_cents,
+    signalCents: raw.signalCents ?? raw.signal_cents ?? 0,
+    signalPaid: raw.signalPaid ?? raw.signal_paid ?? false,
+    signalPaidAt: raw.signalPaidAt ?? raw.signal_paid_at,
+    signalPaymentId: raw.signalPaymentId ?? raw.signal_payment_id,
+    cancellationReason: raw.cancellationReason ?? raw.cancellation_reason,
+    depositAmount:
+      raw.depositAmount ??
+      (typeof (raw.signalCents ?? raw.signal_cents) === 'number'
+        ? (raw.signalCents ?? raw.signal_cents) / 100
+        : undefined),
+    depositPaid: raw.depositPaid ?? raw.signalPaid ?? raw.signal_paid ?? false,
   };
 }
 

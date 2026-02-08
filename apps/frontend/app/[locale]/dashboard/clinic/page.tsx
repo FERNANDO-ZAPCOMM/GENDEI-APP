@@ -36,13 +36,13 @@ import { Badge } from '@/components/ui/badge';
 
 // Days of the week - label/full are for parsing saved data, UI uses translations
 const DAYS = [
-  { key: 'seg', label: 'Seg', full: 'Segunda' },
-  { key: 'ter', label: 'Ter', full: 'Terça' },
-  { key: 'qua', label: 'Qua', full: 'Quarta' },
-  { key: 'qui', label: 'Qui', full: 'Quinta' },
-  { key: 'sex', label: 'Sex', full: 'Sexta' },
-  { key: 'sab', label: 'Sáb', full: 'Sábado' },
-  { key: 'dom', label: 'Dom', full: 'Domingo' },
+  { key: 'seg', label: 'Seg', full: 'Segunda', uiLabel: 'SEG.' },
+  { key: 'ter', label: 'Ter', full: 'Terça', uiLabel: 'TER.' },
+  { key: 'qua', label: 'Qua', full: 'Quarta', uiLabel: 'QUA.' },
+  { key: 'qui', label: 'Qui', full: 'Quinta', uiLabel: 'QUI.' },
+  { key: 'sex', label: 'Sex', full: 'Sexta', uiLabel: 'SEX.' },
+  { key: 'sab', label: 'Sáb', full: 'Sábado', uiLabel: 'SAB.' },
+  { key: 'dom', label: 'Dom', full: 'Domingo', uiLabel: 'DOM.' },
 ] as const;
 
 type DayKey = typeof DAYS[number]['key'];
@@ -580,7 +580,7 @@ export default function ClinicSettingsPage() {
                               onCheckedChange={() => handleDayToggle(day.key)}
                             />
                             <Label className={`text-sm ${dayHours[day.key].enabled ? 'font-medium' : 'text-muted-foreground'}`}>
-                              {t(`clinicPage.days.${day.key}Full`)}
+                              {day.uiLabel}
                             </Label>
                           </div>
                         </div>

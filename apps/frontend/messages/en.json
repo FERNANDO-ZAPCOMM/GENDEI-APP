@@ -1451,6 +1451,7 @@
     "service": "Service",
     "date": "Date",
     "time": "Time",
+    "paymentStatus": "Payment",
     "notes": "Notes",
     "confirm": "Confirm",
     "markCompleted": "Mark Completed",
@@ -1467,13 +1468,18 @@
     "unblockError": "Error removing block",
     "status": {
       "pending": "Pending",
+      "pendingPayment": "Pending payment",
+      "pendingExpired": "Pending expired",
       "confirmed": "Confirmed",
       "awaiting": "Awaiting",
       "confirmedPresence": "Presence Confirmed",
       "completed": "Completed",
       "cancelled": "Cancelled",
       "noShow": "No Show"
-    }
+    },
+    "pendingPaymentHelp": "Deposit pending. Reservation remains active for {minutes} more minute(s).",
+    "pendingPaymentHelpNoTimer": "Deposit pending. Reservation is waiting for payment.",
+    "pendingExpiredHelp": "Reservation expired due to missing payment. Create a new booking to reserve a slot again."
   },
   "patientsPage": {
     "title": "Patients",

@@ -672,10 +672,10 @@ async def process_payment_confirmation(
                     "signalPaid": True,
                     "signalPaidAt": datetime.now().isoformat(),
                     "status": "confirmed"
-                })
+                }, clinic_id=clinic_id)
 
             # Get appointment details for confirmation message
-            appointment = db.get_appointment(appointment_id) if appointment_id else None
+            appointment = db.get_appointment(appointment_id, clinic_id=clinic_id) if appointment_id else None
 
             if appointment:
                 # Format date for display
@@ -683,20 +683,20 @@ async def process_payment_confirmation(
                 formatted_date = apt_date.strftime("%d/%m/%Y")
 
                 confirmation_message = (
-                    "✅ *Sinal Confirmado!*\n\n"
-                    "Seu pagamento PIX foi aprovado com sucesso!\n\n"
-                    f"📅 *{formatted_date}*\n"
-                    f"🕐 *{appointment.time}*\n"
-                    f"👨‍⚕️ *{appointment.professional_name}*\n\n"
-                    "Sua consulta está *confirmada*!\n"
-                    "Lembre-se de chegar 15 minutos antes. 💚"
+                    "*Sinal confirmado*\n\n"
+                    "Seu pagamento PIX foi aprovado.\n\n"
+                    f"Data: *{formatted_date}*\n"
+                    f"Hora: *{appointment.time}*\n"
+                    f"Profissional: *{appointment.professional_name}*\n\n"
+                    "Sua consulta está *confirmada*.\n"
+                    "Chegue com 15 minutos de antecedência."
                 )
             else:
                 confirmation_message = (
-                    "✅ *Sinal Confirmado!*\n\n"
-                    "Seu pagamento PIX foi aprovado com sucesso!\n\n"
-                    "Sua consulta está *confirmada*!\n"
-                    "Lembre-se de chegar 15 minutos antes. 💚"
+                    "*Sinal confirmado*\n\n"
+                    "Seu pagamento PIX foi aprovado.\n\n"
+                    "Sua consulta está *confirmada*.\n"
+                    "Chegue com 15 minutos de antecedência."
                 )
 
             # Send confirmation to patient via WhatsApp
@@ -738,11 +738,10 @@ async def process_payment_confirmation(
             # Notify patient
             if patient_phone and clinic_id:
                 cancel_message = (
-                    "❌ *Pagamento não confirmado*\n\n"
+                    "*Pagamento não confirmado*\n\n"
                     "Infelizmente seu pagamento PIX não foi concluído.\n\n"
                     "Sua consulta ainda não está confirmada.\n"
-                    "Se ainda deseja confirmar, posso gerar um novo código PIX. "
-                    "Basta me avisar! 😊"
+                    "Se ainda deseja confirmar, posso gerar um novo código PIX."
                 )
 
                 clinic = db.get_clinic(clinic_id)

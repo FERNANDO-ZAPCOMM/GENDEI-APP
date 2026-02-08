@@ -44,17 +44,42 @@ try:
         get_professional_availability,
         format_slots_for_display,
     )
+    from src.scheduler.payment_holds import (
+        DEFAULT_PAYMENT_HOLD_MINUTES,
+        is_unpaid_hold_expired,
+        release_expired_unpaid_holds,
+    )
     from src.scheduler.reminders import (
         format_reminder_message,
         mark_reminder_sent,
     )
     from src.flows.handler import FlowsHandler
+    from src.flows.orchestrator import (
+        FlowOrchestrationDeps,
+        handle_flow_completion as orchestrated_handle_flow_completion,
+        handle_payment_type_selection as orchestrated_handle_payment_type_selection,
+        handle_scheduling_intent as orchestrated_handle_scheduling_intent,
+    )
     from src.vertical_config import get_vertical_config, ALL_SPECIALTIES
     from src.flows.manager import send_whatsapp_flow, send_booking_flow, generate_flow_token
     from src.flows.crypto import handle_encrypted_flow_request, prepare_flow_response, is_encryption_configured
     from src.agents.orchestrator import get_orchestrator
     from src.runtime.context import Runtime, set_runtime, reset_runtime
+    from src.payments.pricing import resolve_consultation_pricing
     from src.providers.tools.base import register_tool_implementations
+    from src.webhook.processor import (
+        WebhookProcessorDeps,
+        process_webhook_body as orchestrated_process_webhook_body,
+    )
+    from src.messages.processor import (
+        MessageProcessorDeps,
+        process_incoming_message as orchestrated_process_incoming_message,
+    )
+    from src.messages.pipeline import (
+        MessagePipelineDeps,
+        process_buffered_messages as orchestrated_process_buffered_messages,
+        handle_voice_message as orchestrated_handle_voice_message,
+    )
     logger.info("✅ Gendei modules imported successfully")
     if is_encryption_configured():
         logger.info("🔐 WhatsApp Flows encryption is configured")
@@ -77,6 +102,7 @@ DOMAIN = os.getenv("GENDEI_DOMAIN", "https://gendei.com")
 # Booking settings
 DEFAULT_MIN_BOOKING_LEAD_TIME_HOURS = 2  # Minimum hours before a slot can be booked
 UPCOMING_APPOINTMENT_CHECK_DAYS = 14  # Days ahead to check for existing appointments
+PAYMENT_HOLD_MINUTES = int(os.getenv("PAYMENT_HOLD_MINUTES", str(DEFAULT_PAYMENT_HOLD_MINUTES)))
 
 # Database instance
 db: Optional[GendeiDatabase] = None
@@ -561,6 +587,7 @@ def get_patient_upcoming_appointments(clinic_id: str, phone: str) -> List[Appoin
 
     try:
         appointments = get_appointments_by_phone(db, phone, clinic_id, include_past=False)
+        release_expired_unpaid_holds(db, appointments, hold_minutes=PAYMENT_HOLD_MINUTES)
 
         # Filter to appointments within the check window
         today = datetime.now().date()
@@ -569,6 +596,8 @@ def get_patient_upcoming_appointments(clinic_id: str, phone: str) -> List[Appoin
         upcoming = [
             apt for apt in appointments
             if datetime.strptime(apt.date, "%Y-%m-%d").date() <= max_date
+            and not is_unpaid_hold_expired(apt, hold_minutes=PAYMENT_HOLD_MINUTES)
+            and apt.status.value not in ["cancelled", "completed", "no_show"]
         ]
 
         return upcoming
@@ -847,85 +876,6 @@ def get_clinic_payment_options(clinic, service=None) -> Dict[str, Any]:
     }
 
 
-def _normalize_price_to_cents(value: Any) -> int:
-    """
-    Normalize price values that may come in BRL or cents.
-    Heuristics:
-    - float -> BRL (e.g. 300.0 => 30000)
-    - int >= 1000 -> cents (e.g. 30000 => 30000)
-    - int < 1000 -> BRL (e.g. 300 => 30000)
-    """
-    if value is None:
-        return 0
-    try:
-        if isinstance(value, float):
-            return int(round(value * 100))
-        if isinstance(value, int):
-            return value if value >= 1000 else value * 100
-        if isinstance(value, str):
-            cleaned = value.strip().replace("R$", "").replace(".", "").replace(",", ".")
-            if not cleaned:
-                return 0
-            parsed = float(cleaned)
-            return int(round(parsed * 100))
-    except Exception:
-        return 0
-    return 0
-
-
-def resolve_consultation_pricing(
-    clinic_id: str,
-    clinic: Any,
-    professional_id: str = ""
-) -> Dict[str, int]:
-    """
-    Resolve deposit percentage and consultation price with robust fallbacks.
-    Priority for price:
-    1) Professional-linked services (first active with price)
-    2) Any clinic service with price
-    3) paymentSettings.defaultConsultationPrice
-    4) system default R$ 200,00
-    """
-    signal_percentage = 15
-    default_price_cents = 20000
-
-    payment_settings = getattr(clinic, "payment_settings", {}) or {}
-    clinic_signal_percentage = getattr(clinic, "signal_percentage", 15) or 15
-    signal_percentage = int(payment_settings.get("depositPercentage", clinic_signal_percentage) or 15)
-
-    # Try services first (more accurate than generic default consultation price).
-    chosen_price_cents = 0
-    services = db.get_clinic_services(clinic_id) if db else []
-    services_by_id = {s.id: s for s in services}
-
-    if professional_id and db:
-        professional = db.get_professional(clinic_id, professional_id)
-        if professional:
-            for sid in getattr(professional, "service_ids", []) or []:
-                service = services_by_id.get(sid) or db.get_service(clinic_id, sid)
-                if service and getattr(service, "price_cents", 0):
-                    chosen_price_cents = int(getattr(service, "price_cents", 0) or 0)
-                    break
-
-    if chosen_price_cents <= 0:
-        for service in services:
-            candidate = int(getattr(service, "price_cents", 0) or 0)
-            if candidate > 0:
-                chosen_price_cents = candidate
-                break
-
-    if chosen_price_cents <= 0:
-        chosen_price_cents = _normalize_price_to_cents(payment_settings.get("defaultConsultationPrice"))
-
-    if chosen_price_cents <= 0:
-        chosen_price_cents = default_price_cents
-
-    return {
-        "signal_percentage": signal_percentage,
-        "default_price_cents": chosen_price_cents
-    }
-
-
 def get_services_for_professional(services: List[Any], professional_id: Optional[str]) -> List[Any]:
     """Filter services by professional if possible."""
     if not professional_id:
@@ -1051,851 +1001,59 @@ def pick_best_slot(
     return None
 
 
-async def start_conversational_booking(
-    clinic_id: str,
-    phone: str,
-    phone_number_id: str,
-    access_token: str,
-    initial_message: Optional[str] = None
-) -> None:
-    """Start conversational booking flow (no buttons)."""
-    if not db:
-        return
-    state = db.load_conversation_state(clinic_id, phone)
-    date_range = parse_date_range_from_message(initial_message or "") or {}
-    requested_date = parse_requested_date(initial_message or "")
-
-    state["state"] = "conv_booking"
-    state["conv_booking"] = {
-        "step": "intro",
-        "clinic_id": clinic_id,
-        "start_date": date_range.get("start"),
-        "end_date": date_range.get("end"),
-        "requested_date": requested_date,
-        "initial_message": initial_message,
-    }
-    db.save_conversation_state(clinic_id, phone, state)
-
-    await send_whatsapp_message(
-        phone_number_id, phone,
-        "Perfeito! Vamos agendar sua consulta por aqui. 😊",
-        access_token
+def _get_webhook_processor_deps() -> WebhookProcessorDeps:
+    return WebhookProcessorDeps(
+        db=db,
+        whatsapp_token=WHATSAPP_TOKEN,
+        is_message_processed=is_message_processed,
+        ensure_phone_has_plus=ensure_phone_has_plus,
+        process_message=process_message,
+        process_buffered_messages=process_buffered_messages,
+        handle_voice_message=handle_voice_message,
+        handle_flow_completion=handle_flow_completion,
+        add_to_message_buffer=add_to_message_buffer,
     )
 
-    # Proactively send availability summary and ask for professional
-    professionals = db.get_clinic_professionals(clinic_id)
-    if professionals:
-        start_date = date_range.get("start") or (datetime.now().date() + timedelta(days=1)).isoformat()
-        end_date = date_range.get("end") or (datetime.now().date() + timedelta(days=7)).isoformat()
 
-        lines = ["Consultei a agenda para os próximos dias:"]
-        options = []
-        for idx, prof in enumerate(professionals, start=1):
-            summaries = summarize_availability_for_professional(
-                clinic_id, prof.id, start_date, end_date
-            )
-            prof_name = prof.full_name or prof.name
-            if summaries:
-                lines.append(f"{idx}. {prof_name}: {', '.join(summaries)}")
-            else:
-                lines.append(f"{idx}. {prof_name}: sem horários no período")
-            options.append(prof_name)
-
-        lines.append("\nCom qual profissional você deseja agendar?")
-        await send_whatsapp_message(
-            phone_number_id, phone,
-            "\n".join(lines),
-            access_token
-        )
-
-        state = db.load_conversation_state(clinic_id, phone)
-        state["conv_booking"]["step"] = "ask_professional"
-        state["conv_booking"]["professional_options"] = options
-        db.save_conversation_state(clinic_id, phone, state)
-
-
-async def handle_conversational_booking(
-    clinic_id: str,
-    phone: str,
-    message: str,
-    phone_number_id: str,
-    access_token: str,
-    state: Dict[str, Any]
-) -> bool:
-    """Handle conversational booking steps. Returns True if handled."""
-    if not db:
-        return False
-
-    clinic = db.get_clinic(clinic_id)
-    professionals = db.get_clinic_professionals(clinic_id)
-    services = db.get_clinic_services(clinic_id)
-
-    conv = state.get("conv_booking", {})
-    step = conv.get("step", "ask_period")
-    msg_lower = (message or "").lower()
-
-    # Step: intro with availability summary and professionals list
-    if step == "intro":
-        if not professionals:
-            await send_whatsapp_message(
-                phone_number_id, phone,
-                "Desculpe, não há profissionais disponíveis no momento.",
-                access_token
-            )
-            return True
-
-        start_date = conv.get("start_date") or (datetime.now().date() + timedelta(days=1)).isoformat()
-        end_date = conv.get("end_date") or (datetime.now().date() + timedelta(days=7)).isoformat()
-
-        lines = ["Consultei a agenda para os próximos dias:"]
-        options = []
-        for idx, prof in enumerate(professionals, start=1):
-            summaries = summarize_availability_for_professional(
-                clinic_id, prof.id, start_date, end_date
-            )
-            prof_name = prof.full_name or prof.name
-            if summaries:
-                lines.append(f"{idx}. {prof_name}: {', '.join(summaries)}")
-            else:
-                lines.append(f"{idx}. {prof_name}: sem horários no período")
-            options.append(prof_name)
-
-        lines.append("\nCom qual profissional você deseja agendar?")
-        await send_whatsapp_message(
-            phone_number_id, phone,
-            "\n".join(lines),
-            access_token
-        )
-
-        conv["step"] = "ask_professional"
-        conv["professional_options"] = options
-        state["conv_booking"] = conv
-        db.save_conversation_state(clinic_id, phone, state)
-        return True
-
-    # Step: ask preferred period
-    if step == "ask_period":
-        period = parse_period(message)
-        requested_date = parse_requested_date(message)
-        if period is None and requested_date is None:
-            await send_whatsapp_message(
-                phone_number_id, phone,
-                "Você prefere *manhã* ou *tarde*? Se não tiver preferência, responda *qualquer*.",
-                access_token
-            )
-            return True
-
-        conv["period"] = None if period == "any" else period
-        if requested_date:
-            conv["requested_date"] = requested_date
-            conv["step"] = "ask_professional"
-        else:
-            conv["step"] = "ask_weekday"
-
-        state["conv_booking"] = conv
-        db.save_conversation_state(clinic_id, phone, state)
-
-        if conv["step"] == "ask_weekday":
-            await send_whatsapp_message(
-                phone_number_id, phone,
-                "Qual o melhor *dia da semana*? (ex: segunda, terça...)\n"
-                "Se não tiver preferência, responda *qualquer*.",
-                access_token
-            )
-        else:
-            await send_whatsapp_message(
-                phone_number_id, phone,
-                "Você tem preferência por algum profissional? "
-                "Se sim, me diga o nome. Se não, responda *qualquer*.",
-                access_token
-            )
-        return True
-
-    # Step: ask weekday
-    if step == "ask_weekday":
-        requested_date = parse_requested_date(message)
-        weekday = parse_weekday(message)
-        if requested_date:
-            conv["requested_date"] = requested_date
-        else:
-            if "qualquer" in msg_lower or "tanto faz" in msg_lower:
-                conv["weekday"] = None
-            elif weekday is None:
-                await send_whatsapp_message(
-                    phone_number_id, phone,
-                    "Não entendi o dia. Pode responder com algo como *segunda*, *terça* ou *qualquer*?",
-                    access_token
-                )
-                return True
-            else:
-                conv["weekday"] = weekday
-
-        conv["step"] = "ask_professional"
-        state["conv_booking"] = conv
-        db.save_conversation_state(clinic_id, phone, state)
-
-        await send_whatsapp_message(
-            phone_number_id, phone,
-            "Você tem preferência por algum profissional? "
-            "Se sim, me diga o nome. Se não, responda *qualquer*.",
-            access_token
-        )
-        return True
-
-    # Step: ask professional
-    if step == "ask_professional":
-        if not professionals:
-            await send_whatsapp_message(
-                phone_number_id, phone,
-                "Desculpe, não há profissionais disponíveis no momento.",
-                access_token
-            )
-            return True
-
-        # Try match by name
-        if "qualquer" in msg_lower or "tanto faz" in msg_lower:
-            conv["professional_id"] = None
-            conv["professional_name"] = None
-        else:
-            prof = find_professional_in_message(message, professionals)
-            if not prof:
-                options = [p.full_name or p.name for p in professionals]
-                conv["professional_options"] = options
-                state["conv_booking"] = conv
-                db.save_conversation_state(clinic_id, phone, state)
-
-                lines = ["Qual profissional você prefere? Responda com o nome ou número:"]
-                for idx, name in enumerate(options, start=1):
-                    lines.append(f"{idx}. {name}")
-                await send_whatsapp_message(
-                    phone_number_id, phone,
-                    "\n".join(lines),
-                    access_token
-                )
-                return True
-
-            conv["professional_id"] = prof.id
-            conv["professional_name"] = prof.full_name or prof.name
-
-        # Show availability summary for the chosen professional
-        start_date = conv.get("start_date") or (datetime.now().date() + timedelta(days=1)).isoformat()
-        end_date = conv.get("end_date") or (datetime.now().date() + timedelta(days=7)).isoformat()
-        summaries = summarize_availability_for_professional(
-            clinic_id, conv.get("professional_id"), start_date, end_date
-        )
-        if summaries:
-            await send_whatsapp_message(
-                phone_number_id, phone,
-                f"Perfeito! Acabei de acessar a agenda e ele(a) tem disponibilidade: "
-                f"{', '.join(summaries)}.\n\n"
-                "Qual você prefere? (ex: 'sexta à tarde')",
-                access_token
-            )
-        else:
-            await send_whatsapp_message(
-                phone_number_id, phone,
-                "Perfeito! Vamos buscar o melhor horário disponível.\n"
-                "Você prefere *manhã* ou *tarde*?",
-                access_token
-            )
-            conv["step"] = "ask_period"
-            state["conv_booking"] = conv
-            db.save_conversation_state(clinic_id, phone, state)
-            return True
-
-        conv["step"] = "ask_preference"
-        state["conv_booking"] = conv
-        db.save_conversation_state(clinic_id, phone, state)
-        return True
-
-    # Step: ask preference (weekday/period/time)
-    if step == "ask_preference":
-        period = parse_period(message)
-        weekday = parse_weekday(message)
-        requested_date = parse_requested_date(message)
-        requested_time = parse_time_from_message(message, conv.get("period"))
-
-        if period == "any":
-            period = None
-        conv["period"] = period if period is not None else conv.get("period")
-        conv["weekday"] = weekday if weekday is not None else conv.get("weekday")
-        if requested_date:
-            conv["requested_date"] = requested_date
-
-        if requested_time and (requested_date or conv.get("requested_date")):
-            date_to_use = requested_date or conv.get("requested_date")
-            available = get_professional_availability(
-                db, clinic_id, conv.get("professional_id"), date_to_use
-            )
-            if requested_time in available:
-                conv["selected_date"] = date_to_use
-                conv["selected_time"] = requested_time
-                conv["step"] = "confirm_slot"
-                state["conv_booking"] = conv
-                db.save_conversation_state(clinic_id, phone, state)
-                await send_whatsapp_message(
-                    phone_number_id, phone,
-                    f"Ok, {format_date_short(date_to_use)} às {requested_time} pode ser?",
-                    access_token
-                )
-                return True
-            else:
-                # Propose closest available
-                slot = pick_best_slot(
-                    clinic_id=clinic_id,
-                    professional_id=conv.get("professional_id"),
-                    service_id=conv.get("service_id"),
-                    requested_date=date_to_use,
-                    weekday=None,
-                    period=conv.get("period"),
-                )
-                if slot:
-                    conv["selected_date"] = slot.date
-                    conv["selected_time"] = slot.time
-                    conv["step"] = "confirm_slot"
-                    state["conv_booking"] = conv
-                    db.save_conversation_state(clinic_id, phone, state)
-                    await send_whatsapp_message(
-                        phone_number_id, phone,
-                        f"Esse horário não está disponível. Ele consegue às {slot.time}. Pode ser?",
-                        access_token
-                    )
-                    return True
-
-        # If no direct time, try to find best slot for preferences
-        slot = pick_best_slot(
-            clinic_id=clinic_id,
-            professional_id=conv.get("professional_id"),
-            service_id=conv.get("service_id"),
-            requested_date=conv.get("requested_date"),
-            weekday=conv.get("weekday"),
-            period=conv.get("period"),
-        )
-        if slot:
-            conv["selected_date"] = slot.date
-            conv["selected_time"] = slot.time
-            conv["step"] = "confirm_slot"
-            state["conv_booking"] = conv
-            db.save_conversation_state(clinic_id, phone, state)
-            await send_whatsapp_message(
-                phone_number_id, phone,
-                f"Ok, {format_date_short(slot.date)} às {slot.time} pode ser?",
-                access_token
-            )
-            return True
-
-        await send_whatsapp_message(
-            phone_number_id, phone,
-            "Não encontrei horário com essa preferência. Você pode indicar outro dia ou período?",
-            access_token
-        )
-        return True
-        filtered_services = get_services_for_professional(services, conv.get("professional_id"))
-        if not filtered_services:
-            conv["service_id"] = None
-            conv["service_name"] = None
-            conv["step"] = "select_slot"
-        elif len(filtered_services) == 1:
-            s = filtered_services[0]
-            conv["service_id"] = s.id
-            conv["service_name"] = s.name
-            conv["step"] = "select_slot"
-        else:
-            conv["step"] = "ask_service"
-
-        state["conv_booking"] = conv
-        db.save_conversation_state(clinic_id, phone, state)
-
-        if conv["step"] == "ask_service":
-            await send_whatsapp_message(
-                phone_number_id, phone,
-                "Qual tipo de consulta você deseja? Vou listar as opções.",
-                access_token
-            )
-            return True
-
-    # Step: ask service
-    if step == "ask_service":
-        prof_id = conv.get("professional_id")
-        filtered_services = get_services_for_professional(services, prof_id)
-
-        if not filtered_services:
-            conv["service_id"] = None
-            conv["service_name"] = None
-            conv["step"] = "select_slot"
-            state["conv_booking"] = conv
-            db.save_conversation_state(clinic_id, phone, state)
-            # continue to select slot below
-        else:
-            if "qualquer" in msg_lower or "tanto faz" in msg_lower:
-                conv["service_id"] = None
-                conv["service_name"] = None
-                conv["step"] = "select_slot"
-                state["conv_booking"] = conv
-                db.save_conversation_state(clinic_id, phone, state)
-            else:
-                if len(filtered_services) == 1:
-                    s = filtered_services[0]
-                    conv["service_id"] = s.id
-                    conv["service_name"] = s.name
-                    conv["step"] = "select_slot"
-                    state["conv_booking"] = conv
-                    db.save_conversation_state(clinic_id, phone, state)
-                else:
-                    # Try match by name or number
-                    options = [s.name for s in filtered_services]
-                    choice_idx = parse_choice_number(message, len(options))
-                    if choice_idx is not None:
-                        s = filtered_services[choice_idx - 1]
-                        conv["service_id"] = s.id
-                        conv["service_name"] = s.name
-                        conv["step"] = "select_slot"
-                        state["conv_booking"] = conv
-                        db.save_conversation_state(clinic_id, phone, state)
-                    else:
-                        matched = None
-                        for s in filtered_services:
-                            if s.name.lower() in msg_lower:
-                                matched = s
-                                break
-                        if not matched:
-                            lines = ["Escolha o tipo de consulta (nome ou número):"]
-                            for idx, name in enumerate(options, start=1):
-                                lines.append(f"{idx}. {name}")
-                            await send_whatsapp_message(
-                                phone_number_id, phone,
-                                "\n".join(lines),
-                                access_token
-                            )
-                            return True
-                        conv["service_id"] = matched.id
-                        conv["service_name"] = matched.name
-                        conv["step"] = "select_slot"
-                        state["conv_booking"] = conv
-                        db.save_conversation_state(clinic_id, phone, state)
-
-    # Step: select slot
-    if conv.get("step") == "select_slot":
-        slot = pick_best_slot(
-            clinic_id=clinic_id,
-            professional_id=conv.get("professional_id"),
-            service_id=conv.get("service_id"),
-            requested_date=conv.get("requested_date"),
-            weekday=conv.get("weekday"),
-            period=conv.get("period"),
-        )
-
-        if not slot:
-            conv["step"] = "ask_period"
-            conv.pop("requested_date", None)
-            conv.pop("weekday", None)
-            conv.pop("period", None)
-            state["conv_booking"] = conv
-            db.save_conversation_state(clinic_id, phone, state)
-            await send_whatsapp_message(
-                phone_number_id, phone,
-                "Não encontrei horários com essas preferências. "
-                "Vamos tentar de novo: prefere *manhã* ou *tarde*? "
-                "Se tanto faz, responda *qualquer*.",
-                access_token
-            )
-            return True
-
-        conv["selected_date"] = slot.date
-        conv["selected_time"] = slot.time
-        conv["step"] = "confirm_slot"
-        state["conv_booking"] = conv
-        db.save_conversation_state(clinic_id, phone, state)
-
-        professional_name = conv.get("professional_name") or "Profissional disponível"
-        service_name = conv.get("service_name")
-        date_display = format_appointment_date(slot.date, slot.time)
-        service_text = f" para *{service_name}*" if service_name else ""
-
-        await send_whatsapp_message(
-            phone_number_id, phone,
-            f"Encontrei horário {date_display} com *{professional_name}*{service_text}. "
-            "Posso confirmar?",
-            access_token
-        )
-        return True
-
-    # Step: confirm slot
-    if step == "confirm_slot":
-        # Allow user to propose a different time
-        proposed_time = parse_time_from_message(message, conv.get("period"))
-        if proposed_time and conv.get("selected_date"):
-            date_to_use = conv.get("selected_date")
-            available = get_professional_availability(
-                db, clinic_id, conv.get("professional_id"), date_to_use
-            )
-            if proposed_time in available:
-                conv["selected_time"] = proposed_time
-                state["conv_booking"] = conv
-                db.save_conversation_state(clinic_id, phone, state)
-                await send_whatsapp_message(
-                    phone_number_id, phone,
-                    f"Perfeito, {format_date_short(date_to_use)} às {proposed_time}, correto?",
-                    access_token
-                )
-                return True
-            else:
-                slot = pick_best_slot(
-                    clinic_id=clinic_id,
-                    professional_id=conv.get("professional_id"),
-                    service_id=conv.get("service_id"),
-                    requested_date=date_to_use,
-                    weekday=None,
-                    period=conv.get("period"),
-                )
-                if slot:
-                    conv["selected_time"] = slot.time
-                    state["conv_booking"] = conv
-                    db.save_conversation_state(clinic_id, phone, state)
-                    await send_whatsapp_message(
-                        phone_number_id, phone,
-                        f"Ele só consegue às {slot.time}. Pode ser?",
-                        access_token
-                    )
-                    return True
-
-        yn = parse_yes_no(message)
-        if yn is None:
-            await send_whatsapp_message(
-                phone_number_id, phone,
-                "Você pode responder *sim* para confirmar ou *não* para buscar outro horário.",
-                access_token
-            )
-            return True
-        if yn is False:
-            conv["step"] = "ask_period"
-            conv.pop("requested_date", None)
-            conv.pop("weekday", None)
-            conv.pop("period", None)
-            conv.pop("selected_date", None)
-            conv.pop("selected_time", None)
-            state["conv_booking"] = conv
-            db.save_conversation_state(clinic_id, phone, state)
-            await send_whatsapp_message(
-                phone_number_id, phone,
-                "Certo! Prefere atendimento pela *manhã* ou *tarde*? "
-                "Se tanto faz, responda *qualquer*.",
-                access_token
-            )
-            return True
-
-        conv["step"] = "ask_patient_name"
-        state["conv_booking"] = conv
-        db.save_conversation_state(clinic_id, phone, state)
-        await send_whatsapp_message(
-            phone_number_id, phone,
-            "Perfeito! Qual seu *nome completo*?",
-            access_token
-        )
-        return True
-
-    # Step: patient name
-    if step == "ask_patient_name":
-        patient_name = message.strip()
-        if len(patient_name) < 3:
-            await send_whatsapp_message(
-                phone_number_id, phone,
-                "Por favor, informe seu *nome completo*.",
-                access_token
-            )
-            return True
-        conv["patient_name"] = patient_name
-        conv["step"] = "ask_patient_email"
-        state["conv_booking"] = conv
-        db.save_conversation_state(clinic_id, phone, state)
-        await send_whatsapp_message(
-            phone_number_id, phone,
-            "Qual seu *e-mail*? (se não tiver, responda *não tenho*)",
-            access_token
-        )
-        return True
-
-    # Step: patient email
-    if step == "ask_patient_email":
-        email = message.strip()
-        if "nao tenho" in msg_lower or "não tenho" in msg_lower:
-            email = None
-        elif "@" not in email:
-            await send_whatsapp_message(
-                phone_number_id, phone,
-                "Não consegui identificar um e-mail. Pode informar novamente ou responder *não tenho*?",
-                access_token
-            )
-            return True
-
-        conv["patient_email"] = email
-        # Determine payment type needs
-        service = None
-        if conv.get("service_id"):
-            service = next((s for s in services if s.id == conv["service_id"]), None)
-        pay_opts = get_clinic_payment_options(clinic, service)
-        accepts_particular = pay_opts["accepts_particular"]
-        accepts_convenio = pay_opts["accepts_convenio"]
-
-        if accepts_particular and accepts_convenio:
-            conv["step"] = "ask_payment_type"
-            state["conv_booking"] = conv
-            db.save_conversation_state(clinic_id, phone, state)
-            await send_whatsapp_message(
-                phone_number_id, phone,
-                "O agendamento será *particular* ou por *convênio*?",
-                access_token
-            )
-            return True
-
-        if accepts_convenio and not accepts_particular:
-            conv["payment_type"] = "convenio"
-            conv["step"] = "ask_convenio_name"
-        else:
-            conv["payment_type"] = "particular"
-            conv["step"] = "create_appointment"
-
-        state["conv_booking"] = conv
-        db.save_conversation_state(clinic_id, phone, state)
-        # fall through to next steps below
-
-    # Step: ask payment type
-    if step == "ask_payment_type":
-        if "convenio" in msg_lower or "convênio" in msg_lower or "plano" in msg_lower:
-            conv["payment_type"] = "convenio"
-            conv["step"] = "ask_convenio_name"
-        elif "particular" in msg_lower or "dinheiro" in msg_lower or "cartao" in msg_lower or "cartão" in msg_lower:
-            conv["payment_type"] = "particular"
-            conv["step"] = "create_appointment"
-        else:
-            await send_whatsapp_message(
-                phone_number_id, phone,
-                "Você pode responder *particular* ou *convênio*.",
-                access_token
-            )
-            return True
-
-        state["conv_booking"] = conv
-        db.save_conversation_state(clinic_id, phone, state)
-        # fall through
-
-    # Step: convenio name
-    if conv.get("step") == "ask_convenio_name":
-        service = None
-        if conv.get("service_id"):
-            service = next((s for s in services if s.id == conv["service_id"]), None)
-        pay_opts = get_clinic_payment_options(clinic, service)
-        convenios = pay_opts.get("convenios", [])
-
-        if convenios:
-            choice_idx = parse_choice_number(message, len(convenios))
-            if choice_idx is None:
-                lines = ["Qual convênio você usa? Responda com o nome ou número:"]
-                for idx, name in enumerate(convenios, start=1):
-                    lines.append(f"{idx}. {name}")
-                await send_whatsapp_message(
-                    phone_number_id, phone,
-                    "\n".join(lines),
-                    access_token
-                )
-                return True
-            convenio_name = convenios[choice_idx - 1]
-        else:
-            convenio_name = message.strip()
-            if len(convenio_name) < 2:
-                await send_whatsapp_message(
-                    phone_number_id, phone,
-                    "Por favor, informe o nome do convênio.",
-                    access_token
-                )
-                return True
-
-        conv["convenio_name"] = convenio_name
-        conv["step"] = "ask_convenio_number"
-        state["conv_booking"] = conv
-        db.save_conversation_state(clinic_id, phone, state)
-        await send_whatsapp_message(
-            phone_number_id, phone,
-            "Qual o *número da carteirinha* do convênio?",
-            access_token
-        )
-        return True
-
-    # Step: convenio number
-    if conv.get("step") == "ask_convenio_number":
-        convenio_number = message.strip()
-        if len(convenio_number) < 3:
-            await send_whatsapp_message(
-                phone_number_id, phone,
-                "Por favor, informe o número da carteirinha.",
-                access_token
-            )
-            return True
-        conv["convenio_number"] = convenio_number
-        conv["step"] = "create_appointment"
-        state["conv_booking"] = conv
-        db.save_conversation_state(clinic_id, phone, state)
-        # fall through
-
-    # Step: create appointment
-    if conv.get("step") == "create_appointment":
-        professional_id = conv.get("professional_id")
-        professional_name = conv.get("professional_name")
-        service_id = conv.get("service_id")
-        service = next((s for s in services if s.id == service_id), None) if service_id else None
-        patient_name = conv.get("patient_name")
-        patient_email = conv.get("patient_email")
-        date_str = conv.get("selected_date")
-        time_str = conv.get("selected_time")
-        payment_type = conv.get("payment_type", "particular")
-        convenio_name = conv.get("convenio_name")
-        convenio_number = conv.get("convenio_number")
-
-        if not professional_id:
-            # fallback: pick professional from slot search by reselecting
-            await send_whatsapp_message(
-                phone_number_id, phone,
-                "Desculpe, preciso do profissional escolhido para finalizar o agendamento.",
-                access_token
-            )
-            return True
-
-        # Determine pricing and signal settings
-        total_cents = getattr(service, "price_cents", 0) if service else 0
-        duration_minutes = getattr(service, "duration_minutes", 30) if service else 30
-        signal_percentage = (
-            getattr(service, "signal_percentage", None)
-            if service and getattr(service, "signal_percentage", None) is not None
-            else getattr(clinic, "signal_percentage", 15)
-        )
-
-        payment_settings = getattr(clinic, 'payment_settings', None) or {}
-        requires_deposit = payment_settings.get('requiresDeposit', False)
-        if "depositPercentage" in payment_settings:
-            signal_percentage = payment_settings.get('depositPercentage', signal_percentage)
-        if not total_cents:
-            total_cents = payment_settings.get('defaultConsultationPrice', 20000)
-
-        appointment = create_appointment(
-            db=db,
-            clinic_id=clinic_id,
-            patient_phone=phone,
-            professional_id=professional_id,
-            date_str=date_str,
-            time_str=time_str,
-            patient_name=patient_name,
-            patient_email=patient_email,
-            professional_name=professional_name or "Profissional",
-            service_id=service_id,
-            payment_type=payment_type,
-            total_cents=total_cents if payment_type == "particular" else 0,
-            signal_percentage=signal_percentage,
-            convenio_name=convenio_name if payment_type == "convenio" else None,
-            convenio_number=convenio_number if payment_type == "convenio" else None,
-            duration_minutes=duration_minutes,
-        )
-
-        if not appointment:
-            conv["step"] = "ask_period"
-            state["conv_booking"] = conv
-            db.save_conversation_state(clinic_id, phone, state)
-            await send_whatsapp_message(
-                phone_number_id, phone,
-                "Desculpe, esse horário ficou indisponível. Vamos tentar outro? "
-                "Prefere *manhã* ou *tarde*?",
-                access_token
-            )
-            return True
-
-        # Confirmation message
-        dt = datetime.strptime(date_str, "%Y-%m-%d")
-        day_names = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"]
-        day_name = day_names[dt.weekday()]
-        formatted_date = dt.strftime("%d/%m/%Y")
-
-        confirmation_msg = (
-            f"✅ *Agendamento Confirmado!*\n\n"
-            f"📅 *{day_name}, {formatted_date}*\n"
-            f"🕐 *{time_str}*\n"
-            f"👨‍⚕️ *{professional_name or 'Profissional'}*\n"
-            f"👤 *{patient_name}*\n"
-        )
-        if payment_type == "convenio" and convenio_name:
-            confirmation_msg += f"📋 Convênio: {convenio_name}\n"
-
-        await send_whatsapp_message(
-            phone_number_id, phone,
-            confirmation_msg,
-            access_token
-        )
-
-        # Send payment link if required
-        if payment_type == "particular" and requires_deposit:
-            signal_cents = int(total_cents * signal_percentage / 100)
-            if signal_cents >= 100:
-                from src.utils.payment import (
-                    create_pagseguro_pix_order,
-                    send_pix_payment_to_customer,
-                    format_payment_amount,
-                    is_pagseguro_configured,
-                    PAGSEGURO_MIN_PIX_AMOUNT_CENTS
-                )
-
-                if signal_cents >= PAGSEGURO_MIN_PIX_AMOUNT_CENTS and is_pagseguro_configured():
-                    payment_info = await create_pagseguro_pix_order(
-                        order_id=appointment.id,
-                        amount=signal_cents,
-                        customer_name=patient_name,
-                        customer_phone=phone,
-                        product_name=f"Sinal - Consulta {professional_name or 'Profissional'}"
-                    )
-                    if payment_info:
-                        if db:
-                            db.update_appointment(appointment.id, {
-                                "signalPaymentId": payment_info.get("payment_id")
-                            }, clinic_id=clinic_id)
-                        await send_whatsapp_message(
-                            phone_number_id, phone,
-                            f"*Sinal necessário:* {format_payment_amount(signal_cents)}\n\n"
-                            "Vou enviar o PIX agora.",
-                            access_token
-                        )
-                        # Set runtime context for messaging functions
-                        _cli = db.get_clinic(clinic_id) if db else None
-                        runtime_token = set_runtime(Runtime(
-                            clinic_id=clinic_id,
-                            db=db,
-                            phone_number_id=phone_number_id,
-                            access_token=access_token,
-                            vertical_slug=getattr(_cli, 'vertical', '') or None,
-                        ))
-                        try:
-                            await send_pix_payment_to_customer(
-                                phone=phone,
-                                payment_info=payment_info,
-                                amount=signal_cents,
-                                product_name="a confirmação da sua consulta",
-                                order_id=appointment.id
-                            )
-                        finally:
-                            reset_runtime(runtime_token)
-                else:
-                    pix_key = payment_settings.get('pixKey') or getattr(clinic, 'pix_key', None)
-                    if pix_key:
-                        from src.utils.payment import format_payment_amount
-                        await send_whatsapp_message(
-                            phone_number_id, phone,
-                            f"💳 *Sinal necessário:* {format_payment_amount(signal_cents)}\n"
-                            f"Chave PIX: `{pix_key}`\n\n"
-                            "Envie o comprovante aqui após o pagamento.",
-                            access_token
-                        )
-
-        # Clear conversation state
-        db.save_conversation_state(clinic_id, phone, {"state": "new", "context": {}})
-        return True
-
-    return False
+def _get_message_processor_deps() -> MessageProcessorDeps:
+    return MessageProcessorDeps(
+        db=db,
+        ensure_phone_has_plus=ensure_phone_has_plus,
+        set_current_clinic_id=_current_clinic_id.set,
+        set_current_phone_number_id=_current_phone_number_id.set,
+        mark_message_as_read=mark_message_as_read,
+        get_appointments_by_phone=get_appointments_by_phone,
+        handle_reminder_response=handle_reminder_response,
+        handle_appointment_reschedule=handle_appointment_reschedule,
+        handle_appointment_cancel_request=handle_appointment_cancel_request,
+        handle_appointment_question=handle_appointment_question,
+        handle_pending_payment_followup=handle_pending_payment_followup,
+        handle_scheduling_intent=handle_scheduling_intent,
+        handle_greeting_response_duvida=handle_greeting_response_duvida,
+        handle_payment_type_selection=handle_payment_type_selection,
+        escalate_to_human=escalate_to_human,
+        detect_frustrated_sentiment=detect_frustrated_sentiment,
+        detect_human_escalation_request=detect_human_escalation_request,
+        send_whatsapp_location_request=send_whatsapp_location_request,
+        send_whatsapp_message=send_whatsapp_message,
+        is_simple_greeting=is_simple_greeting,
+        send_initial_greeting=send_initial_greeting,
+        run_agent_response=run_agent_response,
+    )
+
+
+def _get_message_pipeline_deps() -> MessagePipelineDeps:
+    return MessagePipelineDeps(
+        message_buffer_deadlines=message_buffer_deadlines,
+        default_message_buffer_seconds=DEFAULT_MESSAGE_BUFFER_SECONDS,
+        is_buffer_locked=is_buffer_locked,
+        lock_buffer=lock_buffer,
+        unlock_buffer=unlock_buffer,
+        get_buffered_messages=get_buffered_messages,
+        combine_messages=combine_messages,
+        process_message=process_message,
+        send_whatsapp_message=send_whatsapp_message,
+    )
 
 
 def format_date_short(date_str: str) -> str:
@@ -2350,10 +1508,10 @@ async def send_pix_payment_cta(
             "type": "cta_url",
             "header": {
                 "type": "text",
-                "text": "💳 Pagamento PIX"
+                "text": "Pagamento PIX"
             },
             "body": {
-                "text": f"*{description}*\n\nValor: *{amount_formatted}*\n\nClique no botão abaixo para abrir a página de pagamento PIX.\n\n⏰ O pagamento expira em 24 horas."
+                "text": f"*{description}*\n\nValor: *{amount_formatted}*\n\nClique no botão abaixo para abrir a página de pagamento PIX.\n\nO pagamento expira em 24 horas."
             },
             "footer": {
                 "text": "Pagamento seguro via PagSeguro"
@@ -2619,6 +1777,95 @@ async def send_initial_greeting(
         logger.info(f"👋 Sent info-mode greeting without buttons to {phone}")
         return
 
+    # If an unpaid hold already expired, try to recover automatically:
+    # reissue payment when the same slot is still free; otherwise restart scheduling.
+    recent_appointments = get_appointments_by_phone(db, phone, clinic_id, include_past=False) if db else []
+    expired_unpaid = next(
+        (
+            apt for apt in recent_appointments
+            if is_unpaid_hold_expired(apt, hold_minutes=PAYMENT_HOLD_MINUTES)
+        ),
+        None,
+    )
+    if expired_unpaid:
+        if db:
+            db.update_appointment(
+                expired_unpaid.id,
+                {
+                    "status": AppointmentStatus.CANCELLED.value,
+                    "cancellationReason": (
+                        f"Reserva expirada por falta de pagamento do sinal ({PAYMENT_HOLD_MINUTES} min)"
+                    ),
+                    "cancelledAt": datetime.now().isoformat(),
+                },
+                clinic_id=clinic_id,
+            )
+
+        available_times = get_professional_availability(
+            db=db,
+            clinic_id=clinic_id,
+            professional_id=expired_unpaid.professional_id,
+            date_str=expired_unpaid.date,
+        ) if db else []
+        if expired_unpaid.time in available_times:
+            recreated = create_appointment(
+                db=db,
+                clinic_id=clinic_id,
+                patient_phone=phone,
+                professional_id=expired_unpaid.professional_id,
+                date_str=expired_unpaid.date,
+                time_str=expired_unpaid.time,
+                patient_name=expired_unpaid.patient_name or contact_name or "Paciente",
+                professional_name=expired_unpaid.professional_name,
+                patient_email=None,
+                payment_type=expired_unpaid.payment_type.value,
+                total_cents=expired_unpaid.total_cents,
+                signal_percentage=max(
+                    1,
+                    int(round((expired_unpaid.signal_cents * 100) / expired_unpaid.total_cents))
+                    if expired_unpaid.total_cents
+                    else 15,
+                ),
+                convenio_name=expired_unpaid.convenio_name,
+                convenio_number=expired_unpaid.convenio_number,
+                duration_minutes=expired_unpaid.duration_minutes,
+            )
+            if recreated:
+                await send_whatsapp_message(
+                    phone_number_id,
+                    phone,
+                    (
+                        "Seu link de pagamento anterior expirou. "
+                        "Como este horário ainda está disponível, reativei a reserva e vou enviar um novo PIX."
+                    ),
+                    access_token,
+                )
+                sent = await _send_payment_link_for_appointment(
+                    clinic_id, phone, phone_number_id, access_token, recreated
+                )
+                if sent and db:
+                    state = db.load_conversation_state(clinic_id, phone)
+                    state["state"] = "awaiting_appointment_action"
+                    state["clinic_id"] = clinic_id
+                    state["current_appointment_id"] = recreated.id
+                    state["current_appointment_date"] = recreated.date
+                    state["current_appointment_time"] = recreated.time
+                    state["current_appointment_professional"] = recreated.professional_name
+                    state["current_appointment_professional_id"] = recreated.professional_id
+                    db.save_conversation_state(clinic_id, phone, state)
+                    return
+        await send_whatsapp_message(
+            phone_number_id,
+            phone,
+            (
+                "Seu prazo de pagamento anterior expirou e o horário escolhido não está mais disponível. "
+                "Vou abrir novamente o agendamento para você escolher nova data e horário."
+            ),
+            access_token,
+        )
+        await handle_scheduling_intent(clinic_id, phone, "quero agendar", phone_number_id, access_token)
+        return
+
     # Check for upcoming appointments
     upcoming_appointments = get_patient_upcoming_appointments(clinic_id, phone)
 
@@ -2643,19 +1890,39 @@ async def send_initial_greeting(
             state["current_appointment_professional_id"] = apt.professional_id
             db.save_conversation_state(clinic_id, phone, state)
 
+        has_pending_payment = (
+            apt.status == AppointmentStatus.PENDING
+            and not apt.signal_paid
+            and apt.signal_cents > 0
+            and not is_unpaid_hold_expired(apt, hold_minutes=PAYMENT_HOLD_MINUTES)
+        )
+
         # Build personalized greeting with vertical-aware terminology
         greeting = f"👋 *Olá{', ' + greeting_name if greeting_name else ''}!*\n\n"
-        greeting += (
-            f"Vi que você tem uma {term.appointment_term} agendada para "
-            f"*{apt_date_formatted}* com *{apt.professional_name}*.\n\n"
-        )
-        greeting += f"O que você deseja?"
+        if has_pending_payment:
+            greeting += (
+                f"Vi que sua {term.appointment_term} para *{apt_date_formatted}* com "
+                f"*{apt.professional_name}* ainda está aguardando o pagamento do sinal.\n\n"
+                f"A reserva fica disponível por {PAYMENT_HOLD_MINUTES} minutos. "
+                "Deseja que eu envie o link de pagamento novamente?"
+            )
+            buttons = [
+                {"id": "apt_pagar_sinal", "title": "Pagar sinal"},
+                {"id": "apt_reagendar", "title": "Reagendar"},
+                {"id": "apt_cancelar", "title": "Cancelar"},
+            ]
+        else:
+            greeting += (
+                f"Vi que você tem uma {term.appointment_term} agendada para "
+                f"*{apt_date_formatted}* com *{apt.professional_name}*.\n\n"
+            )
+            greeting += f"O que você deseja?"
 
-        buttons = [
-            {"id": "apt_reagendar", "title": "Reagendar"},
-            {"id": "apt_cancelar", "title": "Cancelar"},
-            {"id": "apt_duvida", "title": "Outra dúvida"},
-        ]
+            buttons = [
+                {"id": "apt_reagendar", "title": "Reagendar"},
+                {"id": "apt_cancelar", "title": "Cancelar"},
+                {"id": "apt_duvida", "title": "Outra dúvida"},
+            ]
 
         await send_whatsapp_buttons(
             phone_number_id, phone,
@@ -3028,6 +2295,232 @@ async def handle_appointment_question(
     )
 
 
+async def _send_payment_link_for_appointment(
+    clinic_id: str,
+    phone: str,
+    phone_number_id: str,
+    access_token: str,
+    appointment: Appointment,
+) -> bool:
+    """Generate and send a PIX payment link for an existing appointment."""
+    from src.utils.payment import (
+        PAGSEGURO_MIN_PIX_AMOUNT_CENTS,
+        create_pagseguro_pix_order,
+        is_pagseguro_configured,
+        send_pix_payment_to_customer,
+    )
+
+    if appointment.signal_paid or appointment.signal_cents <= 0:
+        return False
+
+    if appointment.signal_cents < PAGSEGURO_MIN_PIX_AMOUNT_CENTS or not is_pagseguro_configured():
+        await send_whatsapp_message(
+            phone_number_id,
+            phone,
+            "No momento, não foi possível gerar o pagamento automático. "
+            "Nossa equipe pode te ajudar com o pagamento do sinal.",
+            access_token,
+        )
+        return False
+
+    payment_info = await create_pagseguro_pix_order(
+        order_id=appointment.id,
+        amount=appointment.signal_cents,
+        customer_name=appointment.patient_name or "Paciente",
+        customer_phone=phone,
+        product_name=f"Sinal - Consulta {appointment.professional_name}",
+    )
+    if not payment_info:
+        return False
+
+    if db:
+        db.update_appointment(
+            appointment.id,
+            {"signalPaymentId": payment_info.get("payment_id")},
+            clinic_id=clinic_id,
+        )
+        db.create_order(
+            appointment.id,
+            {
+                "id": appointment.id,
+                "clinicId": clinic_id,
+                "appointmentId": appointment.id,
+                "patientPhone": phone,
+                "paymentId": payment_info.get("payment_id"),
+                "paymentStatus": "pending",
+                "status": "pending",
+                "amountCents": appointment.signal_cents,
+                "description": "Sinal de consulta",
+                "pixCopiaCola": payment_info.get("qr_code_text"),
+                "qrCodeUrl": payment_info.get("qr_code"),
+                "expiresAt": payment_info.get("expires_at"),
+            },
+            clinic_id=clinic_id,
+        )
+
+    clinic_obj = db.get_clinic(clinic_id) if db else None
+    runtime_token = set_runtime(
+        Runtime(
+            clinic_id=clinic_id,
+            db=db,
+            phone_number_id=phone_number_id,
+            access_token=access_token,
+            vertical_slug=getattr(clinic_obj, "vertical", "") or None,
+        )
+    )
+    try:
+        return await send_pix_payment_to_customer(
+            phone=phone,
+            payment_info=payment_info,
+            amount=appointment.signal_cents,
+            product_name="a confirmação da sua consulta",
+            order_id=appointment.id,
+        )
+    finally:
+        reset_runtime(runtime_token)
+
+
+async def handle_pending_payment_followup(
+    clinic_id: str,
+    phone: str,
+    phone_number_id: str,
+    access_token: str,
+    state: Dict[str, Any],
+) -> None:
+    """Handle user request to continue payment for a pending appointment."""
+    appointment = None
+    apt_id = state.get("current_appointment_id")
+    if db and apt_id:
+        appointment = db.get_appointment(apt_id, clinic_id=clinic_id)
+
+    if not appointment and db:
+        appointments = get_appointments_by_phone(db, phone, clinic_id, include_past=False)
+        appointment = next(
+            (
+                a
+                for a in appointments
+                if a.status == AppointmentStatus.PENDING and not a.signal_paid and a.signal_cents > 0
+            ),
+            None,
+        )
+
+    if not appointment:
+        await send_whatsapp_message(
+            phone_number_id,
+            phone,
+            "Não encontrei uma reserva pendente de pagamento. Vou abrir as opções de agendamento novamente.",
+            access_token,
+        )
+        await handle_scheduling_intent(clinic_id, phone, "quero agendar", phone_number_id, access_token)
+        return
+
+    if is_unpaid_hold_expired(appointment, hold_minutes=PAYMENT_HOLD_MINUTES):
+        if db:
+            db.update_appointment(
+                appointment.id,
+                {
+                    "status": AppointmentStatus.CANCELLED.value,
+                    "cancellationReason": (
+                        f"Reserva expirada por falta de pagamento do sinal ({PAYMENT_HOLD_MINUTES} min)"
+                    ),
+                    "cancelledAt": datetime.now().isoformat(),
+                },
+                clinic_id=clinic_id,
+            )
+
+        available_times = get_professional_availability(
+            db=db,
+            clinic_id=clinic_id,
+            professional_id=appointment.professional_id,
+            date_str=appointment.date,
+        )
+        if appointment.time in available_times:
+            await send_whatsapp_message(
+                phone_number_id,
+                phone,
+                "O prazo de pagamento anterior expirou. Reativei a reserva e vou te enviar um novo link PIX.",
+                access_token,
+            )
+            recreated = create_appointment(
+                db=db,
+                clinic_id=clinic_id,
+                patient_phone=phone,
+                professional_id=appointment.professional_id,
+                date_str=appointment.date,
+                time_str=appointment.time,
+                patient_name=appointment.patient_name or state.get("waUserName") or "Paciente",
+                professional_name=appointment.professional_name,
+                patient_email=state.get("patient_email") or None,
+                payment_type=appointment.payment_type.value,
+                total_cents=appointment.total_cents,
+                signal_percentage=max(
+                    1,
+                    int(round((appointment.signal_cents * 100) / appointment.total_cents))
+                    if appointment.total_cents
+                    else 15,
+                ),
+                convenio_name=appointment.convenio_name,
+                convenio_number=appointment.convenio_number,
+                duration_minutes=appointment.duration_minutes,
+            )
+            if recreated and await _send_payment_link_for_appointment(
+                clinic_id, phone, phone_number_id, access_token, recreated
+            ):
+                if db:
+                    state["current_appointment_id"] = recreated.id
+                    db.save_conversation_state(clinic_id, phone, state)
+                return
+
+        await send_whatsapp_message(
+            phone_number_id,
+            phone,
+            "Esse horário não está mais disponível. Por favor, escolha uma nova data e horário.",
+            access_token,
+        )
+        await handle_scheduling_intent(clinic_id, phone, "quero agendar", phone_number_id, access_token)
+        return
+
+    await send_whatsapp_message(
+        phone_number_id,
+        phone,
+        "Seu agendamento ainda está pendente de pagamento do sinal. Vou enviar o link novamente.",
+        access_token,
+    )
+    sent = await _send_payment_link_for_appointment(
+        clinic_id, phone, phone_number_id, access_token, appointment
+    )
+    if not sent:
+        await send_whatsapp_message(
+            phone_number_id,
+            phone,
+            "Não consegui gerar o link agora. Posso abrir novos horários ou chamar um atendente para te ajudar.",
+            access_token,
+        )
+
+
+def _get_flow_orchestration_deps() -> FlowOrchestrationDeps:
+    return FlowOrchestrationDeps(
+        db=db,
+        send_whatsapp_message=send_whatsapp_message,
+        send_whatsapp_buttons=send_whatsapp_buttons,
+        send_whatsapp_flow=send_whatsapp_flow,
+        send_booking_flow=send_booking_flow,
+        generate_flow_token=generate_flow_token,
+        send_whatsapp_contact_card=send_whatsapp_contact_card,
+        run_agent_response=run_agent_response,
+        get_available_slots=get_available_slots,
+        get_clinic_min_lead_time=get_clinic_min_lead_time,
+        filter_slots_by_lead_time=filter_slots_by_lead_time,
+        create_appointment=create_appointment,
+        set_runtime=set_runtime,
+        reset_runtime=reset_runtime,
+        runtime_cls=Runtime,
+        resolve_consultation_pricing=lambda clinic_id, clinic, professional_id="": resolve_consultation_pricing(
+            db, clinic_id, clinic, professional_id
+        ),
+    )
+
+
 async def handle_flow_completion(
     clinic_id: str,
     phone: str,
@@ -3036,361 +2529,15 @@ async def handle_flow_completion(
     access_token: str,
     contact_name: str = ""
 ) -> None:
-    """
-    Handle WhatsApp Flow completion response.
-
-    Flow 1 completion (Patient Info) → Send Flow 2 (Booking)
-    Flow 2 completion (Booking) → Create appointment
-    """
-    logger.info(f"🔄 Processing flow completion for {phone}: {flow_response}")
-
-    # Check if this is Flow 1 completion (has patient info, no date/time)
-    # Flow 1 returns: professional_id, professional_name, specialty_name, tipo_pagamento,
-    #                 convenio_nome, nome, email
-    has_patient_info = "nome" in flow_response and "email" in flow_response
-    has_booking = "date" in flow_response and "time" in flow_response
-
-    if has_patient_info and not has_booking:
-        # Flow 1 completed - send Flow 2 (Booking)
-        logger.info(f"📋 Flow 1 completed, sending Booking flow...")
-
-        # Get clinic-specific booking flow ID from Firestore
-        booking_flow_id = None
-        if db:
-            clinic = db.get_clinic(clinic_id)
-            if clinic:
-                whatsapp_config = getattr(clinic, 'whatsapp_config', {}) or {}
-                booking_flow_id = whatsapp_config.get('bookingFlowId', '')
-                logger.info(f"📱 Using clinic-specific booking flow ID: {booking_flow_id}")
-
-        if not booking_flow_id:
-            # Fallback: create appointment with just the collected info
-            logger.warning("⚠️ No booking flow ID configured (not in clinic config or env var)")
-            await send_whatsapp_message(
-                phone_number_id, phone,
-                f"Obrigado {flow_response.get('nome', '')}! 📋\n\n"
-                "Seus dados foram recebidos. Um atendente entrará em contato para "
-                "confirmar data e horário da sua consulta.\n\n"
-                f"Profissional: {flow_response.get('professional_name', '')}\n"
-                f"Especialidade: {flow_response.get('specialty_name', '')}",
-                access_token
-            )
-            return
-
-        # Get professional info and available times
-        professional_id = flow_response.get("professional_id", "")
-        professional_name = flow_response.get("professional_name", "")
-        specialty_name = flow_response.get("specialty_name", "")
-        patient_name = flow_response.get("nome", "")
-        patient_email = flow_response.get("email", "")
-
-        # Get available times for the professional based on real availability
-        available_times = []
-        if db and professional_id:
-            # Calculate date range
-            today = datetime.now()
-            min_date = (today + timedelta(days=1)).strftime("%Y-%m-%d")
-            max_date = (today + timedelta(days=30)).strftime("%Y-%m-%d")
-
-            slots = get_available_slots(
-                db,
-                clinic_id,
-                professional_id=professional_id,
-                start_date=min_date,
-                end_date=max_date
-            )
-
-            # Filter by minimum booking lead time
-            min_lead_hours = get_clinic_min_lead_time(clinic_id)
-            if slots and min_lead_hours > 0:
-                slots = filter_slots_by_lead_time(slots, min_lead_hours)
-
-            # Build unique times from available slots
-            time_set = set()
-            for slot in slots:
-                time_str = slot.time if hasattr(slot, 'time') else slot.get('time', '')
-                if time_str:
-                    time_set.add(time_str)
-
-            available_times = [{"id": t, "title": t} for t in sorted(time_set)][:20]
-
-        if not available_times:
-            if db and professional_id:
-                await send_whatsapp_message(
-                    phone_number_id, phone,
-                    "No momento não há horários disponíveis para esse profissional. "
-                    "Posso verificar outra data ou outro profissional?",
-                    access_token
-                )
-                return
-            available_times = [
-                {"id": "08:00", "title": "08:00"},
-                {"id": "09:00", "title": "09:00"},
-                {"id": "10:00", "title": "10:00"},
-                {"id": "11:00", "title": "11:00"},
-                {"id": "14:00", "title": "14:00"},
-                {"id": "15:00", "title": "15:00"},
-                {"id": "16:00", "title": "16:00"},
-                {"id": "17:00", "title": "17:00"},
-            ]
-
-        # Calculate date range
-        today = datetime.now()
-        min_date = (today + timedelta(days=1)).strftime("%Y-%m-%d")
-        max_date = (today + timedelta(days=30)).strftime("%Y-%m-%d")
-
-        # Generate new flow token with patient data
-        flow_token = generate_flow_token(clinic_id, phone)
-
-        # Guidance before opening booking flow.
-        await send_whatsapp_message(
-            phone_number_id, phone,
-            "Agora escolha o melhor dia e horário para sua consulta.",
-            access_token
-        )
-
-        # Send Booking Flow (Flow 2)
-        success = await send_booking_flow(
-            phone_number_id=phone_number_id,
-            to=phone,
-            flow_id=booking_flow_id,
-            flow_token=flow_token,
-            access_token=access_token,
-            professional_id=professional_id,
-            professional_name=professional_name,
-            specialty_name=specialty_name,
-            patient_name=patient_name,
-            patient_email=patient_email,
-            available_times=available_times,
-            min_date=min_date,
-            max_date=max_date,
-        )
-
-        if success:
-            logger.info(f"✅ Booking flow sent to {phone}")
-            # Update conversation state - include payment info from Flow 1
-            tipo_pagamento = flow_response.get("tipo_pagamento", "particular")
-            convenio_nome = flow_response.get("convenio_nome", "")
-            if db:
-                db.save_conversation_state(clinic_id, phone, {
-                    "state": "in_booking_flow",
-                    "professional_id": professional_id,
-                    "professional_name": professional_name,
-                    "patient_name": patient_name,
-                    "patient_email": patient_email,
-                    "tipo_pagamento": tipo_pagamento,
-                    "convenio_nome": convenio_nome,
-                })
-        else:
-            logger.error(f"❌ Failed to send booking flow to {phone}")
-            await send_whatsapp_message(
-                phone_number_id, phone,
-                "Desculpe, ocorreu um erro ao carregar os horários. "
-                "Por favor, tente novamente.",
-                access_token
-            )
-
-    elif has_booking:
-        # Flow 2 completed - create appointment
-        logger.info(f"📅 Flow 2 completed, creating appointment...")
-
-        professional_id = flow_response.get("professional_id", "")
-        professional_name = flow_response.get("doctor_name", "")
-        patient_name = flow_response.get("patient_name", "")
-        patient_email = flow_response.get("patient_email", "")
-        selected_date = flow_response.get("date", "")
-        selected_time = flow_response.get("time", "")
-
-        # Retrieve payment info from conversation state (saved in Flow 1)
-        tipo_pagamento = "particular"
-        convenio_nome = ""
-        if db:
-            conv_state = db.get_conversation_state(clinic_id, phone)
-            if conv_state:
-                tipo_pagamento = conv_state.get("tipo_pagamento", "particular")
-                convenio_nome = conv_state.get("convenio_nome", "")
-
-        logger.info(f"💳 Payment type: {tipo_pagamento}, Convenio: {convenio_nome}")
-
-        # Get clinic settings for signal percentage and default price
-        clinic = db.get_clinic(clinic_id) if db else None
-        signal_percentage = 15  # fallback
-        default_price_cents = 20000  # fallback
-        if clinic:
-            pricing = resolve_consultation_pricing(clinic_id, clinic, professional_id=professional_id)
-            signal_percentage = pricing["signal_percentage"]
-            default_price_cents = pricing["default_price_cents"]
-            logger.info(
-                f"💰 Pricing resolved: price={default_price_cents} cents, "
-                f"signal={signal_percentage}%"
-            )
-
-        # Format date for display
-        try:
-            dt = datetime.strptime(selected_date, "%Y-%m-%d")
-            formatted_date = dt.strftime("%d/%m/%Y")
-            weekday_names = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"]
-            weekday = weekday_names[dt.weekday()]
-        except ValueError:
-            formatted_date = selected_date
-            weekday = ""
-
-        # Create the appointment
-        try:
-            appointment = create_appointment(
-                db=db,
-                clinic_id=clinic_id,
-                patient_phone=phone,
-                professional_id=professional_id,
-                date_str=selected_date,
-                time_str=selected_time,
-                patient_name=patient_name,
-                patient_email=patient_email,
-                professional_name=professional_name,
-                duration_minutes=30,
-                payment_type=tipo_pagamento,
-                total_cents=default_price_cents if tipo_pagamento == "particular" else 0,
-                signal_percentage=signal_percentage,
-                convenio_name=convenio_nome if tipo_pagamento == "convenio" else None,
-            )
-
-            if not appointment:
-                await send_whatsapp_message(
-                    phone_number_id, phone,
-                    "Desculpe, esse horário acabou de ficar indisponível. "
-                    "Posso verificar outro horário para você?",
-                    access_token
-                )
-                return
-
-            logger.info(f"✅ Appointment created: {appointment.id}")
-
-            # Check if payment signal is required (particular with signal > 0)
-            needs_payment = (
-                tipo_pagamento == "particular" and
-                appointment and
-                appointment.signal_cents > 0
-            )
-
-            if needs_payment:
-                # Import payment utilities
-                from src.utils.payment import (
-                    create_pagseguro_pix_order,
-                    send_pix_payment_to_customer,
-                    format_payment_amount,
-                    is_pagseguro_configured,
-                    PAGSEGURO_MIN_PIX_AMOUNT_CENTS
-                )
-
-                logger.info(f"💰 Signal required: {format_payment_amount(appointment.signal_cents)}")
-
-                # Check if signal meets minimum PIX amount
-                if appointment.signal_cents >= PAGSEGURO_MIN_PIX_AMOUNT_CENTS and is_pagseguro_configured():
-                    # Create PIX payment order
-                    payment_info = await create_pagseguro_pix_order(
-                        order_id=appointment.id,
-                        amount=appointment.signal_cents,
-                        customer_name=patient_name,
-                        customer_phone=phone,
-                        product_name=f"Sinal - Consulta {professional_name}"
-                    )
-
-                    if payment_info:
-                        # Save payment ID to appointment
-                        if db:
-                            db.update_appointment(appointment.id, {
-                                "signalPaymentId": payment_info.get("payment_id")
-                            }, clinic_id=clinic_id)
-
-                        # Send confirmation message with payment pending
-                        confirmation_msg = (
-                            f"*Agendamento registrado*\n\n"
-                            f"{weekday}, {formatted_date} às {selected_time}\n"
-                            f"{professional_name}\n"
-                            f"Paciente: {patient_name}\n\n"
-                            f"*Sinal necessário:* {format_payment_amount(appointment.signal_cents)}\n\n"
-                            "Seu agendamento será confirmado após o pagamento do sinal. "
-                            "Vou enviar o PIX em seguida."
-                        )
-                        await send_whatsapp_message(phone_number_id, phone, confirmation_msg, access_token)
-
-                        # Send PIX payment (set runtime context for messaging functions)
-                        _cli2 = db.get_clinic(clinic_id) if db else None
-                        runtime_token = set_runtime(Runtime(
-                            clinic_id=clinic_id,
-                            db=db,
-                            phone_number_id=phone_number_id,
-                            access_token=access_token,
-                            vertical_slug=getattr(_cli2, 'vertical', '') or None,
-                        ))
-                        try:
-                            await send_pix_payment_to_customer(
-                                phone=phone,
-                                payment_info=payment_info,
-                                amount=appointment.signal_cents,
-                                product_name="a confirmação da sua consulta",
-                                order_id=appointment.id
-                            )
-                        finally:
-                            reset_runtime(runtime_token)
-
-                        logger.info(f"💳 PIX payment sent to {phone}")
-                    else:
-                        # PagSeguro failed - send manual instructions
-                        logger.warning("⚠️ PagSeguro failed, sending confirmation without payment")
-                        confirmation_msg = (
-                            f"*Agendamento registrado*\n\n"
-                            f"{weekday}, {formatted_date} às {selected_time}\n"
-                            f"{professional_name}\n"
-                            f"Paciente: {patient_name}\n\n"
-                            f"*Sinal:* {format_payment_amount(appointment.signal_cents)}\n\n"
-                            "Entre em contato com a clínica para efetuar o pagamento do sinal e confirmar sua consulta."
-                        )
-                        await send_whatsapp_message(phone_number_id, phone, confirmation_msg, access_token)
-                else:
-                    # Signal too low or PagSeguro not configured
-                    logger.info(f"⚠️ Signal {appointment.signal_cents} cents below minimum or PagSeguro not configured")
-                    confirmation_msg = (
-                        f"*Agendamento confirmado*\n\n"
-                        f"{weekday}, {formatted_date} às {selected_time}\n"
-                        f"{professional_name}\n"
-                        f"Paciente: {patient_name}\n\n"
-                        "Você receberá um lembrete 24h antes da consulta.\n\n"
-                        "Para cancelar ou reagendar, basta enviar uma mensagem!"
-                    )
-                    await send_whatsapp_message(phone_number_id, phone, confirmation_msg, access_token)
-            else:
-                # Convenio or no signal required - appointment confirmed directly
-                confirmation_msg = (
-                    f"*Agendamento confirmado*\n\n"
-                    f"{weekday}, {formatted_date} às {selected_time}\n"
-                    f"{professional_name}\n"
-                    f"Paciente: {patient_name}\n"
-                )
-                if tipo_pagamento == "convenio" and convenio_nome:
-                    confirmation_msg += f"Convênio: {convenio_nome}\n"
-                confirmation_msg += (
-                    "\nVocê receberá um lembrete 24h antes da consulta.\n\n"
-                    "Para cancelar ou reagendar, basta enviar uma mensagem!"
-                )
-                await send_whatsapp_message(phone_number_id, phone, confirmation_msg, access_token)
-
-            # Reset conversation state
-            if db:
-                db.save_conversation_state(clinic_id, phone, {"state": "idle"})
-
-        except Exception as e:
-            logger.error(f"❌ Failed to create appointment: {e}")
-            await send_whatsapp_message(
-                phone_number_id, phone,
-                "Desculpe, ocorreu um erro ao confirmar o agendamento. "
-                "Por favor, tente novamente ou entre em contato conosco.",
-                access_token
-            )
-
-    else:
-        # Unknown flow response
-        logger.warning(f"⚠️ Unknown flow response format: {flow_response}")
+    await orchestrated_handle_flow_completion(
+        _get_flow_orchestration_deps(),
+        clinic_id,
+        phone,
+        flow_response,
+        phone_number_id,
+        access_token,
+        contact_name=contact_name,
+    )
 
 
 async def handle_payment_type_selection(
@@ -3401,95 +2548,15 @@ async def handle_payment_type_selection(
     phone_number_id: str,
     access_token: str
 ) -> None:
-    """Handle payment type selection and send the appropriate WhatsApp Flow."""
-
-    # Check if we're in the right state
-    if state.get("state") != "awaiting_payment_type":
-        logger.warning(f"⚠️ Unexpected payment type selection, state: {state.get('state')}")
-        await send_whatsapp_message(
-            phone_number_id, phone,
-            "Por favor, inicie o agendamento novamente.",
-            access_token
-        )
-        return
-
-    # Get flow IDs and especialidades from state
-    convenio_flow_id = state.get("convenio_flow_id", "")
-    particular_flow_id = state.get("particular_flow_id", "")
-    especialidades = state.get("especialidades", [])
-
-    # Determine which flow to use based on selection
-    if button_payload == "payment_convenio":
-        flow_id_to_use = convenio_flow_id
-        payment_type = "convenio"
-    else:  # payment_particular
-        flow_id_to_use = particular_flow_id
-        payment_type = "particular"
-
-    if not flow_id_to_use:
-        logger.error(f"❌ No flow ID configured for {payment_type}")
-        await send_whatsapp_message(
-            phone_number_id, phone,
-            "Desculpe, o sistema de agendamento não está configurado corretamente. Por favor, entre em contato conosco.",
-            access_token
-        )
-        return
-
-    logger.info(f"📱 Sending {payment_type} flow (ID: {flow_id_to_use}) to {phone}")
-
-    # Generate flow token
-    flow_token = generate_flow_token(clinic_id, phone)
-
-    # Initial data for the ESPECIALIDADE screen
-    initial_data = {
-        "especialidades": especialidades,
-        "error_message": "",
-    }
-
-    # Get clinic name for the message
-    clinic = db.get_clinic(clinic_id) if db else None
-    clinic_name = clinic.name if clinic else "a clínica"
-
-    # Guidance before opening the first flow.
-    await send_whatsapp_message(
-        phone_number_id, phone,
-        "Vamos iniciar seu agendamento.\nEscolha o profissional e, quando aplicável, o tipo de atendimento.",
-        access_token
+    await orchestrated_handle_payment_type_selection(
+        _get_flow_orchestration_deps(),
+        clinic_id,
+        phone,
+        button_payload,
+        state,
+        phone_number_id,
+        access_token,
     )
-
-    # Send the appropriate flow
-    success = await send_whatsapp_flow(
-        phone_number_id=phone_number_id,
-        to=phone,
-        flow_id=flow_id_to_use,
-        flow_token=flow_token,
-        flow_cta="Agendar Consulta",
-        header_text="Seus Dados",
-        body_text=f"Preencha seus dados para agendar sua consulta na *{clinic_name}*",
-        access_token=access_token,
-        flow_action="navigate",
-        initial_screen="ESPECIALIDADE",
-        initial_data=initial_data,
-    )
-
-    if success:
-        # Update state to track flow
-        new_state = {
-            "state": "in_patient_info_flow",
-            "flow_token": flow_token,
-            "clinic_id": clinic_id,
-            "payment_type": payment_type,
-        }
-        if db:
-            db.save_conversation_state(clinic_id, phone, new_state)
-        logger.info(f"✅ {payment_type.capitalize()} flow sent to {phone}")
-    else:
-        logger.error(f"❌ Failed to send {payment_type} flow to {phone}")
-        await send_whatsapp_message(
-            phone_number_id, phone,
-            "Desculpe, ocorreu um erro ao iniciar o agendamento. Por favor, tente novamente.",
-            access_token
-        )
 
 
 async def handle_scheduling_intent(
@@ -3500,223 +2567,15 @@ async def handle_scheduling_intent(
     access_token: str,
     contact_name: Optional[str] = None
 ) -> None:
-    """Handle appointment scheduling intent with interactive WhatsApp flows."""
-    clinic = db.get_clinic(clinic_id)
-    if not clinic:
-        await send_whatsapp_message(
-            phone_number_id, phone,
-            "Desculpe, não consegui encontrar as informações da clínica.",
-            access_token
-        )
-        return
-
-    # Check workflow mode - if info mode, redirect to contact
-    workflow_mode = getattr(clinic, 'workflow_mode', 'booking')
-    if workflow_mode == 'info':
-        logger.info(f"📋 Clinic {clinic_id} is in INFO mode - redirecting scheduling request")
-        clinic_name = clinic.name or "a clínica"
-        clinic_phone = clinic.phone or ""
-
-        info_message = (
-            f"Para agendar uma consulta na *{clinic_name}*, "
-            "entre em contato diretamente com nossa equipe.\n\n"
-        )
-
-        if clinic_phone:
-            info_message += f"📞 *Telefone:* {clinic_phone}\n\n"
-
-        info_message += "Posso ajudar com alguma informação sobre a clínica?"
-
-        await send_whatsapp_message(
-            phone_number_id, phone,
-            info_message,
-            access_token
-        )
-
-        # Send contact card if clinic has phone
-        if clinic_phone:
-            await send_whatsapp_contact_card(
-                phone_number_id, phone,
-                contact_name=clinic_name,
-                contact_phone=clinic_phone,
-                contact_email=getattr(clinic, 'email', None),
-                organization=clinic_name,
-                access_token=access_token
-            )
-        return
-
-    # Get professionals
-    professionals = db.get_clinic_professionals(clinic_id)
-
-    # =============================================
-    # USE WHATSAPP FLOWS IF CONFIGURED
-    # Flow Convenio: Patient Info for insurance patients (ESPECIALIDADE → INFO_CONVENIO → DADOS_PACIENTE)
-    # Flow Particular: Patient Info for cash patients (ESPECIALIDADE → DADOS_PACIENTE)
-    # Flow Booking: Date/time selection (BOOKING)
-    # =============================================
-    # Get clinic-specific flow IDs from Firestore (created during Embedded Signup)
-    whatsapp_config = clinic.whatsapp_config or {}
-    convenio_flow_id = whatsapp_config.get('patientInfoConvenioFlowId', '')
-    particular_flow_id = whatsapp_config.get('patientInfoParticularFlowId', '')
-    legacy_patient_info_flow_id = whatsapp_config.get('patientInfoFlowId', '')
-    booking_flow_id = whatsapp_config.get('bookingFlowId', '')
-
-    has_legacy_flow = bool(legacy_patient_info_flow_id)
-
-    # Payment settings determine which flow IDs are actually required.
-    payment_settings = getattr(clinic, 'payment_settings', {}) or {}
-    accepts_particular = bool(payment_settings.get("acceptsParticular", True))
-    accepts_convenio = bool(payment_settings.get("acceptsConvenio", False))
-
-    requires_particular_flow = accepts_particular
-    requires_convenio_flow = accepts_convenio
-    has_required_new_flows = (
-        (not requires_particular_flow or bool(particular_flow_id)) and
-        (not requires_convenio_flow or bool(convenio_flow_id))
+    await orchestrated_handle_scheduling_intent(
+        _get_flow_orchestration_deps(),
+        clinic_id,
+        phone,
+        message,
+        phone_number_id,
+        access_token,
+        contact_name=contact_name,
     )
-
-    # Keep previous variable name to minimize downstream changes.
-    has_new_flows = has_required_new_flows
-
-    logger.info(
-        f"🔍 Flow IDs for clinic {clinic_id}: "
-        f"convenio={convenio_flow_id or 'N/A'}, "
-        f"particular={particular_flow_id or 'N/A'}, "
-        f"legacy={legacy_patient_info_flow_id or 'N/A'}, "
-        f"booking={booking_flow_id or 'N/A'}"
-    )
-    logger.info(
-        f"🔍 Payment settings: acceptsParticular={accepts_particular}, "
-        f"acceptsConvenio={accepts_convenio}, has_required_new_flows={has_required_new_flows}"
-    )
-    logger.info(f"🔍 Clinic whatsapp_config: {whatsapp_config}")
-
-    if has_new_flows and professionals:
-        logger.info("📱 Using WhatsApp Flows for scheduling")
-
-        # Build especialidades list for later use (each professional = one specialty option)
-        especialidades = []
-        for prof in professionals:
-            # Use primary (first) specialty for display, or fallback to old format
-            specialties = getattr(prof, 'specialties', []) or []
-            specialty = specialties[0] if specialties else (getattr(prof, 'specialty', '') or '')
-            specialty_name = ALL_SPECIALTIES.get(specialty, specialty) if specialty else "Especialista"
-            prof_name = (prof.full_name or prof.name or "")[:72]
-            especialidades.append({
-                "id": prof.id,
-                "title": specialty_name[:24],
-                "description": prof_name
-            })
-
-        # Save state with especialidades for when user selects payment type
-        new_state = {
-            "state": "awaiting_payment_type",
-            "clinic_id": clinic_id,
-            "especialidades": especialidades[:10],  # Max 10 for RadioButtonsGroup
-            "convenio_flow_id": convenio_flow_id,
-            "particular_flow_id": particular_flow_id,
-        }
-        if db:
-            db.save_conversation_state(clinic_id, phone, new_state)
-
-        # If only one payment mode is enabled, skip payment-type selection buttons.
-        if accepts_particular and not accepts_convenio:
-            logger.info("💳 Clinic is PARTICULAR-only. Sending particular flow directly.")
-            await handle_payment_type_selection(
-                clinic_id, phone, "payment_particular", new_state,
-                phone_number_id, access_token
-            )
-            return
-
-        if accepts_convenio and not accepts_particular:
-            logger.info("💳 Clinic is CONVENIO-only. Sending convenio flow directly.")
-            await handle_payment_type_selection(
-                clinic_id, phone, "payment_convenio", new_state,
-                phone_number_id, access_token
-            )
-            return
-
-        if not accepts_particular and not accepts_convenio:
-            logger.warning("⚠️ No payment mode enabled in clinic settings; asking user payment type as fallback.")
-
-        # Ask user for payment type via buttons
-        buttons = [
-            {"id": "payment_convenio", "title": "Convênio"},
-            {"id": "payment_particular", "title": "Particular"},
-        ]
-
-        await send_whatsapp_buttons(
-            phone_number_id, phone,
-            f"Como você prefere pagar sua consulta na *{clinic.name}*?",
-            buttons,
-            access_token
-        )
-        logger.info(f"✅ Payment type buttons sent to {phone}")
-        return
-
-    # Backward-compatible fallback:
-    # if clinic has only legacy patient info flow, send it directly.
-    if has_legacy_flow and professionals:
-        logger.info(f"📱 Using legacy patient info flow for scheduling (ID: {legacy_patient_info_flow_id})")
-
-        especialidades = []
-        for prof in professionals:
-            specialties = getattr(prof, 'specialties', []) or []
-            specialty = specialties[0] if specialties else (getattr(prof, 'specialty', '') or '')
-            specialty_name = ALL_SPECIALTIES.get(specialty, specialty) if specialty else "Especialista"
-            prof_name = (prof.full_name or prof.name or "")[:72]
-            especialidades.append({
-                "id": prof.id,
-                "title": specialty_name[:24],
-                "description": prof_name
-            })
-
-        flow_token = generate_flow_token(clinic_id, phone)
-        initial_data = {
-            "especialidades": especialidades[:10],
-            "error_message": "",
-        }
-
-        success = await send_whatsapp_flow(
-            phone_number_id=phone_number_id,
-            to=phone,
-            flow_id=legacy_patient_info_flow_id,
-            flow_token=flow_token,
-            flow_cta="Agendar Consulta",
-            header_text="Seus Dados",
-            body_text=f"Preencha seus dados para agendar sua consulta na *{clinic.name}*",
-            access_token=access_token,
-            flow_action="navigate",
-            initial_screen="ESPECIALIDADE",
-            initial_data=initial_data,
-        )
-
-        if success and db:
-            db.save_conversation_state(clinic_id, phone, {
-                "state": "in_patient_info_flow",
-                "flow_token": flow_token,
-                "clinic_id": clinic_id,
-            })
-            logger.info(f"✅ Legacy patient info flow sent to {phone}")
-            return
-
-        logger.warning("⚠️ Legacy flow send failed, falling back to agent scheduling")
-
-    if not professionals:
-        await send_whatsapp_message(
-            phone_number_id, phone,
-            "Desculpe, não há profissionais disponíveis no momento.",
-            access_token
-        )
-        return
-
-    # Fallback to Agents SDK scheduling flow (no buttons/list)
-    await run_agent_response(
-        clinic_id, phone, message,
-        phone_number_id, access_token,
-        contact_name=contact_name
-    )
-    return
 
 
 async def show_professional_slots(
@@ -3830,954 +2689,16 @@ async def process_message(
     button_payload: Optional[str] = None,
     contact_name: Optional[str] = None
 ) -> None:
-    """Process incoming WhatsApp message."""
-    phone = ensure_phone_has_plus(phone)
-
-    # Set context variables for message logging
-    _current_clinic_id.set(clinic_id)
-    _current_phone_number_id.set(phone_number_id)
-
-    # Mark as read
-    await mark_message_as_read(phone_number_id, message_id, access_token)
-
-    # Upsert contact (like Zapcomm)
-    if db:
-        db.upsert_contact(clinic_id, phone, name=contact_name)
-
-    # Log incoming message (always log for conversation history)
-    if db:
-        db.log_conversation_message(
-            clinic_id, phone, "text", message,
-            source="patient", phone_number_id=phone_number_id
-        )
-
-    # Check human takeover - skip AI processing if human has taken over
-    if db and db.is_human_takeover_enabled(clinic_id, phone):
-        logger.info(f"🙋 Human takeover active for {phone}, skipping AI processing")
-        # Message already logged above, just skip AI processing
-        return
-
-    # Check for button response (reminder confirmation)
-    if button_payload:
-        # Find pending appointment for this patient
-        appointments = get_appointments_by_phone(db, phone, clinic_id, include_past=False)
-        pending_apt = next(
-            (a for a in appointments if a.status.value in ['confirmed', 'awaiting_confirmation']),
-            None
-        )
-
-        if pending_apt:
-            await handle_reminder_response(
-                clinic_id, phone, button_payload, pending_apt,
-                phone_number_id, access_token
-            )
-            return
-
-    # Check conversation state (Firestore-backed)
-    state = db.load_conversation_state(clinic_id, phone) if db else {}
-    current_state = state.get("state")
-
-    # Update conversation with contact info if available (like Zapcomm)
-    if db and contact_name and contact_name != state.get("waUserName"):
-        state["waUserName"] = contact_name
-        state["waUserPhone"] = phone
-        state["waUserId"] = phone  # For frontend compatibility
-        db.save_conversation_state(clinic_id, phone, state)
-        logger.info(f"👤 Updated conversation with contact name: {contact_name}")
-
-    msg_lower = message.lower().strip()
-
-    # Greeting and appointment action buttons must be handled on the active path.
-    # (The legacy branch below has an early return and is unreachable.)
-    if button_payload in ("greeting_sim", "greeting_nao", "greeting_contato"):
-        if button_payload == "greeting_sim":
-            logger.info(f"📅 User {phone} wants to schedule (greeting button)")
-            await handle_scheduling_intent(
-                clinic_id, phone, "quero agendar",
-                phone_number_id, access_token, contact_name
-            )
-            return
-
-        if button_payload == "greeting_nao":
-            logger.info(f"❓ User {phone} has a question (greeting button)")
-            await handle_greeting_response_duvida(
-                clinic_id, phone, phone_number_id, access_token
-            )
-            return
-
-        logger.info(f"📞 User {phone} wants human support (greeting button)")
-        await escalate_to_human(
-            clinic_id, phone,
-            phone_number_id, access_token,
-            reason="user_requested_contact_info_mode",
-            auto_takeover=True
-        )
-        return
-
-    # Payment selection buttons need handling on active path as well.
-    if button_payload in ("payment_convenio", "payment_particular"):
-        logger.info(f"💳 User {phone} selected payment type (button): {button_payload}")
-        await handle_payment_type_selection(
-            clinic_id, phone, button_payload, state,
-            phone_number_id, access_token
-        )
-        return
-
-    # User may type "Particular" / "Convênio" instead of tapping button.
-    if current_state == "awaiting_payment_type" and not button_payload:
-        if "particular" in msg_lower:
-            logger.info(f"💳 User {phone} typed payment type: particular")
-            await handle_payment_type_selection(
-                clinic_id, phone, "payment_particular", state,
-                phone_number_id, access_token
-            )
-            return
-        if "convenio" in msg_lower or "convênio" in msg_lower:
-            logger.info(f"💳 User {phone} typed payment type: convenio")
-            await handle_payment_type_selection(
-                clinic_id, phone, "payment_convenio", state,
-                phone_number_id, access_token
-            )
-            return
-
-    # =============================================
-    # SENTIMENT / HUMAN ESCALATION (PRIORITY)
-    # =============================================
-    if detect_frustrated_sentiment(message):
-        logger.warning(f"😤 Frustrated sentiment detected from {phone}: {message[:50]}...")
-        await escalate_to_human(
-            clinic_id, phone,
-            phone_number_id, access_token,
-            reason=f"Usuário frustrado/irritado - Mensagem: {message[:100]}",
-            auto_takeover=True
-        )
-        return
-
-    if detect_human_escalation_request(message):
-        logger.info(f"🙋 User {phone} requested human escalation: {message[:50]}...")
-        await escalate_to_human(
-            clinic_id, phone,
-            phone_number_id, access_token,
-            reason=f"Solicitação de atendimento humano - Mensagem: {message[:100]}",
-            auto_takeover=True
-        )
-        return
-
-    location_keywords = [
-        "compartilhar localização",
-        "compartilhar localizacao",
-        "enviar localização",
-        "enviar localizacao",
-        "mandar localização",
-        "mandar localizacao",
-    ]
-    if any(kw in msg_lower for kw in location_keywords):
-        sent = await send_whatsapp_location_request(
-            phone_number_id,
-            phone,
-            "Perfeito. Toque no botão abaixo para compartilhar sua localização atual.",
-            access_token
-        )
-        if not sent:
-            await send_whatsapp_message(
-                phone_number_id,
-                phone,
-                "Não consegui abrir o pedido automático de localização agora. "
-                "Você pode compartilhar manualmente pelo clipe 📎 > Localização.",
-                access_token
-            )
-        return
-
-    # =============================================
-    # GREETING - ROUTE TO AGENT
-    # =============================================
-    if is_simple_greeting(message):
-        logger.info(f"Greeting detected, sending greeting buttons for {phone}")
-        await send_initial_greeting(
-            clinic_id, phone, phone_number_id, access_token,
-            contact_name=contact_name
-        )
-        return
-
-    # =============================================
-    # AGENTS SDK HANDLER (PRIMARY NON-FLOW PATH)
-    # =============================================
-    appointment_keywords = [
-        "minha consulta", "minhas consultas", "meu agendamento",
-        "cancelar", "desmarcar", "remarcar", "reagendar",
-    ]
-
-    if any(kw in msg_lower for kw in appointment_keywords):
-        await run_agent_response(
-            clinic_id, phone, message,
-            phone_number_id, access_token,
-            contact_name=contact_name
-        )
-        return
-
-    scheduling_keywords = [
-        "agendar", "marcar", "agendamento",
-        "quero agendar", "preciso agendar", "quero marcar",
-        "horário", "horarios", "disponibilidade",
-        "tem horario", "tem horário",
-        "qual profissional", "quais profissionais",
-        "quais opções", "quais opcoes", "qual opção",
-    ]
-
-    # If scheduling intent detected, try Flow first (inside handler), otherwise use Agents SDK
-    if any(kw in msg_lower for kw in scheduling_keywords):
-        logger.info(f"📅 Scheduling intent detected: {message[:50]}...")
-        await handle_scheduling_intent(
-            clinic_id, phone, message,
-            phone_number_id, access_token, contact_name
-        )
-        return
-
-    # For all other messages, route to Agents SDK
-    await run_agent_response(
-        clinic_id, phone, message,
-        phone_number_id, access_token,
-        contact_name=contact_name
-    )
-    return
-
-    # =============================================
-    # DETECT GREETING AND RESET STATE IF NEEDED
-    # If user sends a greeting while in middle of flow, reset and start fresh
-    # =============================================
-    greeting_patterns = [
-        "oi", "olá", "ola", "oie", "oii", "oiii",
-        "bom dia", "boa tarde", "boa noite",
-        "tudo bem", "td bem", "tudo bom", "td bom",
-        "e ai", "e aí", "eai", "eaí",
-        "hey", "hello", "hi",
-        "opa", "fala", "salve",
-    ]
-
-    # Check if message is primarily a greeting (not button, short message)
-    if not button_payload and len(msg_lower) < 30:
-        is_greeting = any(
-            msg_lower == g or
-            msg_lower.startswith(g + " ") or
-            msg_lower.startswith(g + ",") or
-            msg_lower.startswith(g + "!") or
-            msg_lower.startswith(g + "?")
-            for g in greeting_patterns
-        )
-
-        # If it's a greeting and user is in a mid-flow state, reset and greet
-        if is_greeting and current_state not in (None, "new", "novo", "", "awaiting_greeting_response", "awaiting_initial_response", "general_chat"):
-            logger.info(f"👋 Greeting detected while in state '{current_state}', resetting conversation for {phone}")
-            # Clear the old state
-            if db:
-                db.save_conversation_state(clinic_id, phone, {"state": None, "waUserName": contact_name, "waUserPhone": phone})
-            # Send fresh greeting
-            await send_initial_greeting(
-                clinic_id, phone, phone_number_id, access_token,
-                contact_name=contact_name
-            )
-            return
-
-    # =============================================
-    # HANDLE INTERACTIVE BUTTON/LIST RESPONSES
-    # =============================================
-    if button_payload:
-        # Handle greeting response buttons
-        if button_payload == "greeting_sim":
-            logger.info(f"📅 User {phone} wants to schedule (greeting button)")
-            await handle_scheduling_intent(
-                clinic_id, phone, "quero agendar",
-                phone_number_id, access_token
-            )
-            return
-
-        if button_payload == "greeting_nao":
-            logger.info(f"❓ User {phone} has a question (greeting button)")
-            await handle_greeting_response_duvida(
-                clinic_id, phone,
-                phone_number_id, access_token
-            )
-            return
-
-        if button_payload == "greeting_contato":
-            logger.info(f"📞 User {phone} wants to talk to attendant (info mode)")
-            await escalate_to_human(
-                clinic_id, phone,
-                phone_number_id, access_token,
-                reason="user_requested_contact_info_mode",
-                auto_takeover=True
-            )
-            return
-
-        # Handle payment type selection for WhatsApp Flows
-        if button_payload in ("payment_convenio", "payment_particular"):
-            logger.info(f"💳 User {phone} selected payment type: {button_payload}")
-            await handle_payment_type_selection(
-                clinic_id, phone, button_payload, state,
-                phone_number_id, access_token
-            )
-            return
-
-        # Handle appointment action buttons (when user has existing appointment)
-        if button_payload == "apt_reagendar":
-            logger.info(f"📅 User {phone} wants to reschedule appointment")
-            await handle_appointment_reschedule(
-                clinic_id, phone,
-                phone_number_id, access_token, state
-            )
-            return
-
-        if button_payload == "apt_cancelar":
-            logger.info(f"❌ User {phone} wants to cancel appointment - escalating")
-            await handle_appointment_cancel_request(
-                clinic_id, phone,
-                phone_number_id, access_token, state
-            )
-            return
-
-        if button_payload == "apt_duvida":
-            logger.info(f"❓ User {phone} has other question about appointment")
-            await handle_appointment_question(
-                clinic_id, phone,
-                phone_number_id, access_token, state
-            )
-            return
-
-        # Professional selection from buttons/list
-        if button_payload.startswith("prof_"):
-            prof_map = state.get("professionals_map", {})
-            prof_data = prof_map.get(button_payload)
-            if prof_data:
-                requested_date = state.get("requested_date")
-                if requested_date:
-                    await show_professional_slots_for_date(
-                        clinic_id, phone,
-                        prof_data["id"],
-                        prof_data["name"],
-                        prof_data.get("specialty", ""),
-                        requested_date,
-                        phone_number_id, access_token
-                    )
-                else:
-                    await show_professional_slots(
-                        clinic_id, phone,
-                        prof_data["id"],
-                        prof_data["name"],
-                        prof_data.get("specialty", ""),
-                        phone_number_id, access_token
-                    )
-                return
-
-        # Slot selection from list
-        if button_payload.startswith("slot_"):
-            slot_map = state.get("slot_map", {})
-            slot_data = slot_map.get(button_payload)
-            if slot_data:
-                # Move to collecting name
-                new_state = {
-                    "state": "collecting_name",
-                    "clinic_id": clinic_id,
-                    "professional_id": state.get("professional_id"),
-                    "professional_name": state.get("professional_name"),
-                    "date": slot_data["date"],
-                    "time": slot_data["time"],
-                }
-                if db:
-                    db.save_conversation_state(clinic_id, phone, new_state)
-
-                # Parse date for display
-                try:
-                    dt = datetime.strptime(slot_data["date"], "%Y-%m-%d")
-                    day_names = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"]
-                    day_name = day_names[dt.weekday()]
-                    formatted_date = dt.strftime("%d/%m")
-                except ValueError:
-                    day_name = ""
-                    formatted_date = slot_data["date"]
-
-                await send_whatsapp_message(
-                    phone_number_id, phone,
-                    f"✅ Horário selecionado!\n\n"
-                    f"📅 *{day_name}, {formatted_date}*\n"
-                    f"🕐 *{slot_data['time']}*\n"
-                    f"👨‍⚕️ *{state.get('professional_name')}*\n\n"
-                    f"Por favor, me diga seu *nome completo* para finalizar o agendamento:",
-                    access_token
-                )
-                return
-
-    # =============================================
-    # DETECT SCHEDULING INTENT (before AI chat)
-    # =============================================
-    scheduling_keywords = [
-        "agendar", "marcar", "consulta", "agendamento",
-        "quero agendar", "preciso agendar", "quero marcar",
-        "horário", "horarios", "disponibilidade",
-        "qual profissional", "quais profissionais",
-        "quais opções", "quais opcoes", "qual opção",
-    ]
-
-    # Check if this is a NEW conversation (first message)
-    # Send initial greeting with scheduling option
-    if current_state in (None, "new", "novo") or not current_state:
-        # If they explicitly mention scheduling, skip greeting and go straight to flow
-        if any(kw in msg_lower for kw in scheduling_keywords):
-            logger.info(f"📅 Scheduling intent detected: {message[:50]}...")
-            await handle_scheduling_intent(
-                clinic_id, phone, message,
-                phone_number_id, access_token
-            )
-            return
-
-        # Otherwise, send the welcome greeting with buttons
-        logger.info(f"👋 New conversation from {phone}, sending initial greeting")
-        await send_initial_greeting(
-            clinic_id, phone, phone_number_id, access_token,
-            contact_name=contact_name
-        )
-        return
-
-    # Handle natural response after simple text greeting (more human-like flow)
-    if current_state == "awaiting_initial_response":
-        # User responded naturally to our text greeting - analyze their intent
-        scheduling_words = ["agendar", "marcar", "consulta", "horário", "horario", "atendimento", "quero", "preciso", "reservar"]
-        question_words = ["duvida", "dúvida", "pergunta", "endereço", "endereco", "horário de funcionamento", "informação", "informacao", "preço", "preco", "valor", "convênio", "convenio"]
-
-        # Clear the buttons_sent flag since user responded
-        if db:
-            state["buttons_sent"] = True  # Prevent follow-up buttons
-            db.save_conversation_state(clinic_id, phone, state)
-
-        # Check for booking intent
-        if any(word in msg_lower for word in scheduling_words):
-            logger.info(f"📅 User {phone} wants to schedule (natural response)")
-            await handle_scheduling_intent(
-                clinic_id, phone, message,
-                phone_number_id, access_token
-            )
-            return
-
-        # Check for question/info intent
-        if any(word in msg_lower for word in question_words):
-            logger.info(f"❓ User {phone} has a question (natural response)")
-            # Update state and let AI handle it
-            if db:
-                state["state"] = "general_chat"
-                db.save_conversation_state(clinic_id, phone, state)
-            # Continue to AI chat below (don't return)
-
-        else:
-            # Unclear intent - let AI analyze and respond naturally
-            logger.info(f"🤔 User {phone} - unclear intent, letting AI analyze: {message[:50]}...")
-            if db:
-                state["state"] = "general_chat"
-                db.save_conversation_state(clinic_id, phone, state)
-            # Continue to AI chat below (don't return)
-
-    # Handle user waiting for greeting response who types text instead of clicking button
-    if current_state == "awaiting_greeting_response":
-        # Check if they want to schedule based on text
-        positive_responses = ["sim", "quero", "yes", "agendar", "marcar", "consulta"]
-        question_responses = ["duvida", "dúvida", "pergunta", "informação", "informacao", "nao", "não", "no", "depois", "agora não", "obrigado"]
-
-        if any(resp in msg_lower for resp in positive_responses):
-            logger.info(f"📅 User {phone} wants to schedule (text response)")
-            await handle_scheduling_intent(
-                clinic_id, phone, message,
-                phone_number_id, access_token
-            )
-            return
-
-        if any(resp in msg_lower for resp in question_responses):
-            logger.info(f"❓ User {phone} has a question (text response)")
-            await handle_greeting_response_duvida(
-                clinic_id, phone, phone_number_id, access_token
-            )
-            return
-
-        # If unclear response, let AI handle it naturally instead of re-sending buttons
-        logger.info(f"🤔 User {phone} - unclear response after buttons, letting AI handle")
-        if db:
-            state["state"] = "general_chat"
-            db.save_conversation_state(clinic_id, phone, state)
-        # Continue to AI chat below (don't return)
-
-    # Handle general chat state - user previously declined but might want to schedule now
-    if current_state == "general_chat":
-        # Check if they now want to schedule
-        if any(kw in msg_lower for kw in scheduling_keywords):
-            logger.info(f"📅 User {phone} now wants to schedule from general chat")
-            await handle_scheduling_intent(
-                clinic_id, phone, message,
-                phone_number_id, access_token
-            )
-            return
-        # Otherwise, continue to AI chat below
-
-    # Conversational booking flow (no buttons)
-    if current_state == "conv_booking":
-        handled = await handle_conversational_booking(
-            clinic_id, phone, message,
-            phone_number_id, access_token,
-            state
-        )
-        if handled:
-            return
-
-    # Handle state after availability summary (waiting for professional choice)
-    if current_state == "awaiting_professional_after_availability":
-        professionals = db.get_clinic_professionals(clinic_id) if db else []
-        requested_date = state.get("requested_date")
-        matched_prof = find_professional_in_message(message, professionals) if professionals else None
-
-        if matched_prof and requested_date:
-            await show_professional_slots_for_date(
-                clinic_id, phone,
-                matched_prof.id,
-                matched_prof.full_name or matched_prof.name,
-                ", ".join(getattr(matched_prof, 'specialties', []) or []) or getattr(matched_prof, 'specialty', ''),
-                requested_date,
-                phone_number_id, access_token
-            )
-            return
-
-        # If no match, present buttons/list to choose
-        if professionals:
-            def get_prof_specialty_display(p):
-                specialties = getattr(p, 'specialties', []) or []
-                return ", ".join(specialties) if specialties else getattr(p, 'specialty', '')
-
-            if len(professionals) <= 3:
-                buttons = [
-                    {"id": f"prof_{p.id}", "title": (p.full_name or p.name)[:20]}
-                    for p in professionals[:3]
-                ]
-                prof_map = {f"prof_{p.id}": {"id": p.id, "name": p.full_name or p.name, "specialty": get_prof_specialty_display(p)} for p in professionals}
-                new_state = {
-                    "state": "selecting_professional",
-                    "clinic_id": clinic_id,
-                    "professionals_map": prof_map,
-                    "requested_date": requested_date,
-                }
-                if db:
-                    db.save_conversation_state(clinic_id, phone, new_state)
-
-                await send_whatsapp_buttons(
-                    phone_number_id, phone,
-                    "Selecione o profissional:",
-                    buttons,
-                    access_token
-                )
-            else:
-                rows = [
-                    {
-                        "id": f"prof_{p.id}",
-                        "title": (p.full_name or p.name)[:24],
-                        "description": get_prof_specialty_display(p)[:72] or "Profissional"
-                    }
-                    for p in professionals[:10]
-                ]
-                sections = [{"title": "Profissionais", "rows": rows}]
-
-                prof_map = {f"prof_{p.id}": {"id": p.id, "name": p.full_name or p.name, "specialty": get_prof_specialty_display(p)} for p in professionals}
-                new_state = {
-                    "state": "selecting_professional",
-                    "clinic_id": clinic_id,
-                    "professionals_map": prof_map,
-                    "requested_date": requested_date,
-                }
-                if db:
-                    db.save_conversation_state(clinic_id, phone, new_state)
-
-                await send_whatsapp_list(
-                    phone_number_id, phone,
-                    "Profissionais",
-                    "Selecione o profissional desejado:",
-                    "Ver profissionais",
-                    sections,
-                    access_token
-                )
-            return
-
-    # Handle ongoing conversation flows
-    if current_state == "selecting_professional":
-        # User is selecting a professional (text fallback - buttons handled above)
-        prof_map = state.get("professionals_map", {})
-        requested_date = state.get("requested_date")
-
-        # Try to match by name in text
-        selected = None
-        for prof_data in prof_map.values():
-            prof_name_lower = prof_data.get("name", "").lower()
-            if prof_name_lower and prof_name_lower in msg_lower:
-                selected = prof_data
-                break
-
-        if selected:
-            if requested_date:
-                await show_professional_slots_for_date(
-                    clinic_id, phone,
-                    selected["id"],
-                    selected["name"],
-                    selected.get("specialty", ""),
-                    requested_date,
-                    phone_number_id, access_token
-                )
-            else:
-                await show_professional_slots(
-                    clinic_id, phone,
-                    selected["id"],
-                    selected["name"],
-                    selected.get("specialty", ""),
-                    phone_number_id, access_token
-                )
-        else:
-            # Re-show the professional selection
-            await send_whatsapp_message(
-                phone_number_id, phone,
-                "Por favor, selecione um profissional usando os botões acima ☝️",
-                access_token
-            )
-        return
-
-    elif current_state == "selecting_slot":
-        # User should select from the list (button handled above)
-        # If they type text, guide them to use the list
-        await send_whatsapp_message(
-            phone_number_id, phone,
-            "Por favor, selecione um horário usando a lista acima ☝️\n\nClique em *'Ver horários'* para ver as opções disponíveis.",
-            access_token
-        )
-        return
-
-    elif current_state == "rescheduling":
-        # Rescheduling flow - parse date/time from message
-        import re
-
-        # Try to find date pattern
-        date_match = re.search(r'(\d{1,2})/(\d{1,2})', message)
-        time_match = re.search(r'(\d{1,2}):(\d{2})', message)
-
-        if date_match and time_match:
-            day = int(date_match.group(1))
-            month = int(date_match.group(2))
-            hour = int(time_match.group(1))
-            minute = int(time_match.group(2))
-
-            year = datetime.now().year
-            if month < datetime.now().month:
-                year += 1
-
-            try:
-                date_str = f"{year}-{month:02d}-{day:02d}"
-                time_str = f"{hour:02d}:{minute:02d}"
-
-                # Check if slot is available
-                available = get_professional_availability(
-                    db, clinic_id, state["professional_id"], date_str
-                )
-
-                if time_str in available:
-                    # Reschedule existing appointment
-                    reschedule_appointment(db, state["appointment_id"], date_str, time_str)
-                    await send_whatsapp_message(
-                        phone_number_id, phone,
-                        f"✅ Consulta reagendada com sucesso!\n\n📅 {day:02d}/{month:02d} às {time_str}\n👨‍⚕️ {state['professional_name']}\n\nTe esperamos!",
-                        access_token
-                    )
-                    # Clear conversation state
-                    if db:
-                        db.save_conversation_state(clinic_id, phone, {"state": "new", "context": {}})
-                else:
-                    await send_whatsapp_message(
-                        phone_number_id, phone,
-                        f"Desculpe, o horário {time_str} não está disponível em {day:02d}/{month:02d}. Por favor, escolha outro horário.",
-                        access_token
-                    )
-            except ValueError:
-                await send_whatsapp_message(
-                    phone_number_id, phone,
-                    "Data inválida. Por favor, informe no formato DD/MM às HH:MM (ex: 15/01 às 14:00)",
-                    access_token
-                )
-        else:
-            await send_whatsapp_message(
-                phone_number_id, phone,
-                "Por favor, informe a data e horário no formato: DD/MM às HH:MM (ex: 15/01 às 14:00)",
-                access_token
-            )
-        return
-
-    elif current_state == "collecting_name":
-        # User is providing their name
-        patient_name = message.strip()
-        if len(patient_name) < 3:
-            await send_whatsapp_message(
-                phone_number_id, phone,
-                "Por favor, informe seu nome completo.",
-                access_token
-            )
-            return
-
-        # Get clinic and professional info
-        clinic = db.get_clinic(clinic_id)
-
-        # Get service price if available (for signal calculation)
-        professional = db.get_professional(clinic_id, state["professional_id"])
-        service_price_cents = 0
-        if professional and hasattr(professional, 'default_price_cents'):
-            service_price_cents = professional.default_price_cents or 0
-
-        # Get deposit percentage from clinic payment settings
-        deposit_percentage = clinic.signal_percentage if clinic else 0
-
-        # Check if clinic requires deposit via payment settings
-        requires_deposit = False
-        if clinic:
-            # Check paymentSettings if available
-            payment_settings = getattr(clinic, 'payment_settings', None)
-            if payment_settings:
-                requires_deposit = payment_settings.get('requiresDeposit', False)
-                deposit_percentage = payment_settings.get('depositPercentage', deposit_percentage)
-            elif deposit_percentage > 0:
-                requires_deposit = True
-
-        # Calculate signal amount
-        signal_cents = int(service_price_cents * deposit_percentage / 100) if requires_deposit else 0
-
-        # Create the appointment
-        appointment = create_appointment(
-            db,
-            clinic_id=clinic_id,
-            patient_phone=phone,
-            professional_id=state["professional_id"],
-            date_str=state["date"],
-            time_str=state["time"],
-            patient_name=patient_name,
-            patient_email=state.get("patient_email"),
-            professional_name=state["professional_name"],
-            payment_type="particular",
-            total_cents=service_price_cents,
-            signal_percentage=deposit_percentage,
-        )
-
-        if appointment:
-            # Parse date for display
-            dt = datetime.strptime(state["date"], "%Y-%m-%d")
-            day_names = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"]
-            day_name = day_names[dt.weekday()]
-            formatted_date = dt.strftime("%d/%m/%Y")
-
-            # Check if we need to send PIX payment
-            if requires_deposit and signal_cents >= 100:  # Minimum R$ 1.00
-                # Generate PIX payment
-                import uuid
-                import urllib.parse
-                from src.utils.payment import (
-                    create_pagseguro_pix_order,
-                    format_payment_amount,
-                    is_pagseguro_configured,
-                    DOMAIN
-                )
-
-                if is_pagseguro_configured():
-                    order_id = str(uuid.uuid4())[:12]
-
-                    # Create PIX order
-                    payment_info = await create_pagseguro_pix_order(
-                        order_id=order_id,
-                        amount=signal_cents,
-                        customer_name=patient_name,
-                        customer_phone=phone,
-                        product_name=f"Sinal - Consulta {state['professional_name']}"
-                    )
-
-                    if payment_info:
-                        # Save order to database
-                        db.create_order(order_id, {
-                            "clinicId": clinic_id,
-                            "appointmentId": appointment.id,
-                            "patientPhone": phone,
-                            "patientName": patient_name,
-                            "description": f"Sinal - Consulta {state['professional_name']}",
-                            "amountCents": signal_cents,
-                            "paymentStatus": "pending",
-                            "status": "pending",
-                            "paymentId": payment_info.get("payment_id"),
-                            "pixCopiaCola": payment_info.get("qr_code_text"),
-                            "qrCodeUrl": payment_info.get("qr_code"),
-                            "professionalId": state["professional_id"],
-                            "professionalName": state["professional_name"],
-                            "appointmentDate": state["date"],
-                            "appointmentTime": state["time"],
-                        })
-
-                        # Send appointment info first
-                        await send_whatsapp_message(
-                            phone_number_id, phone,
-                            f"📋 *Consulta pré-agendada!*\n\n"
-                            f"📅 *{day_name}, {formatted_date}*\n"
-                            f"🕐 *{state['time']}*\n"
-                            f"👨‍⚕️ *{state['professional_name']}*\n"
-                            f"📍 *{clinic.address if clinic else ''}*\n\n"
-                            f"⚠️ Para confirmar, é necessário pagar o *sinal* de *{format_payment_amount(signal_cents)}*.",
-                            access_token
-                        )
-
-                        # Send PIX payment button
-                        phone_encoded = urllib.parse.quote(phone, safe='')
-                        pix_page_url = f"{DOMAIN}/pix/{phone_encoded}/{order_id}"
-
-                        await send_pix_payment_cta(
-                            phone_number_id,
-                            phone.replace("+", ""),
-                            pix_page_url,
-                            format_payment_amount(signal_cents),
-                            f"Sinal - Consulta {state['professional_name']}",
-                            access_token
-                        )
-
-                        logger.info(f"✅ PIX payment sent for appointment {appointment.id}")
-                    else:
-                        # PIX creation failed, but appointment is created
-                        logger.error("Failed to create PIX payment")
-                        await send_whatsapp_message(
-                            phone_number_id, phone,
-                            f"✅ *Consulta agendada!*\n\n"
-                            f"📅 *{day_name}, {formatted_date}*\n"
-                            f"🕐 *{state['time']}*\n"
-                            f"👨‍⚕️ *{state['professional_name']}*\n\n"
-                            f"⚠️ O pagamento do sinal será solicitado em breve.",
-                            access_token
-                        )
-                else:
-                    # PagSeguro not configured - check if clinic has PIX key for manual payment
-                    pix_key = None
-                    if clinic:
-                        payment_settings = getattr(clinic, 'payment_settings', None)
-                        if payment_settings:
-                            pix_key = payment_settings.get('pixKey')
-                        if not pix_key:
-                            pix_key = getattr(clinic, 'pix_key', None)
-
-                    if pix_key:
-                        from src.utils.payment import format_payment_amount
-                        await send_whatsapp_message(
-                            phone_number_id, phone,
-                            f"📋 *Consulta pré-agendada!*\n\n"
-                            f"📅 *{day_name}, {formatted_date}*\n"
-                            f"🕐 *{state['time']}*\n"
-                            f"👨‍⚕️ *{state['professional_name']}*\n\n"
-                            f"💳 *Para confirmar, pague o sinal via PIX:*\n"
-                            f"Valor: *{format_payment_amount(signal_cents)}*\n"
-                            f"Chave PIX: `{pix_key}`\n\n"
-                            f"Envie o comprovante aqui após o pagamento!",
-                            access_token
-                        )
-                    else:
-                        # No PIX key configured - just confirm
-                        await send_whatsapp_message(
-                            phone_number_id, phone,
-                            f"✅ *Consulta agendada com sucesso!*\n\n"
-                            f"📅 *{day_name}, {formatted_date}*\n"
-                            f"🕐 *{state['time']}*\n"
-                            f"👨‍⚕️ *{state['professional_name']}*\n"
-                            f"📍 *{clinic.address if clinic else ''}*\n\n"
-                            f"Você receberá um lembrete 24h e 2h antes da consulta.\n"
-                            f"Chegue 15 minutos antes do horário marcado!",
-                            access_token
-                        )
-            else:
-                # No deposit required or amount too low - just confirm
-                await send_whatsapp_message(
-                    phone_number_id, phone,
-                    f"✅ *Consulta agendada com sucesso!*\n\n"
-                    f"📅 *{day_name}, {formatted_date}*\n"
-                    f"🕐 *{state['time']}*\n"
-                    f"👨‍⚕️ *{state['professional_name']}*\n"
-                    f"📍 *{clinic.address if clinic else ''}*\n\n"
-                    f"Você receberá um lembrete 24h e 2h antes da consulta.\n"
-                    f"Chegue 15 minutos antes do horário marcado!",
-                    access_token
-                )
-
-            # Clear conversation state
-            if db:
-                db.save_conversation_state(clinic_id, phone, {"state": "new", "context": {}})
-        else:
-            await send_whatsapp_message(
-                phone_number_id, phone,
-                "Desculpe, ocorreu um erro ao agendar. Por favor, tente novamente.",
-                access_token
-            )
-        return
-
-    # ===========================================
-    # SENTIMENT DETECTION - Auto-escalate frustrated users
-    # ===========================================
-    if detect_frustrated_sentiment(message):
-        logger.warning(f"😤 Frustrated sentiment detected from {phone}: {message[:50]}...")
-        await escalate_to_human(
-            clinic_id, phone,
-            phone_number_id, access_token,
-            reason=f"Usuário frustrado/irritado - Mensagem: {message[:100]}",
-            auto_takeover=True
-        )
-        return
-
-    # ===========================================
-    # EXPLICIT HUMAN ESCALATION REQUEST
-    # ===========================================
-    # Detect when user explicitly asks to speak with a human, reception, etc.
-    if detect_human_escalation_request(message):
-        logger.info(f"🙋 User {phone} requested human escalation: {message[:50]}...")
-        await escalate_to_human(
-            clinic_id, phone,
-            phone_number_id, access_token,
-            reason=f"Solicitação de atendimento humano - Mensagem: {message[:100]}",
-            auto_takeover=True
-        )
-        return
-
-    # ===========================================
-    # AI CHAT PROCESSING (Simple OpenAI Integration)
-    # ===========================================
-    try:
-        # Load clinic context for AI
-        clinic_context = load_clinic_context(clinic_id)
-
-        # Get AI response
-        ai_response = await get_ai_response(
-            clinic_id=clinic_id,
-            phone=phone,
-            message=message,
-            clinic_context=clinic_context
-        )
-
-        if ai_response:
-            await send_whatsapp_message(
-                phone_number_id, phone,
-                ai_response,
-                access_token
-            )
-            logger.info(f"✅ AI responded successfully")
-            return
-
-    except Exception as e:
-        logger.error(f"❌ AI error: {e}")
-
-    # Default fallback response (vertical-aware)
-    fallback_vc = get_vertical_config(
-        getattr(db.get_clinic(clinic_id), 'vertical', '') if db else ''
-    )
-    fallback_term = fallback_vc.terminology
-    await send_whatsapp_message(
-        phone_number_id, phone,
-        f"Olá! 👋\n\nSou o assistente virtual da clínica.\n\nPosso ajudar você a:\n"
-        f"• *Agendar* uma {fallback_term.appointment_term}\n"
-        f"• Ver *suas {fallback_term.appointment_term_plural}* agendadas\n\n"
-        f"Como posso ajudar?",
-        access_token
+    await orchestrated_process_incoming_message(
+        _get_message_processor_deps(),
+        clinic_id=clinic_id,
+        phone=phone,
+        message=message,
+        message_id=message_id,
+        phone_number_id=phone_number_id,
+        access_token=access_token,
+        button_payload=button_payload,
+        contact_name=contact_name,
     )
 
 
@@ -4835,52 +2756,15 @@ async def process_buffered_messages(
     access_token: str,
     buffer_key: str
 ):
-    """Process buffered messages after wait period."""
-    try:
-        # Wait for buffer deadline
-        deadline = message_buffer_deadlines.get(buffer_key)
-        wait_seconds = max(0.0, (deadline - datetime.now()).total_seconds()) if deadline else DEFAULT_MESSAGE_BUFFER_SECONDS
-        await asyncio.sleep(wait_seconds)
-
-        # Check if another handler is already processing
-        if is_buffer_locked(buffer_key):
-            logger.info(f"🔒 Buffer already being processed for {phone}, skipping")
-            return
-
-        # Lock and process
-        lock_buffer(buffer_key)
-        try:
-            buffered_messages = get_buffered_messages(buffer_key)
-            if not buffered_messages:
-                logger.info(f"📭 No buffered messages for {phone}")
-                return
-
-            # Combine all messages
-            combined_text = combine_messages(buffered_messages)
-            first_msg = buffered_messages[0]
-            message_id = first_msg.get('message_id', '')
-            contact_name = first_msg.get('contact_name')
-            button_payload = first_msg.get('button_payload')
-
-            logger.info(f"📬 Processing {len(buffered_messages)} buffered message(s) for {phone}: {combined_text[:50]}...")
-
-            # Process combined message
-            await process_message(
-                clinic_id,
-                phone,
-                combined_text,
-                message_id,
-                phone_number_id,
-                access_token,
-                button_payload,
-                contact_name
-            )
-        finally:
-            unlock_buffer(buffer_key)
-
-    except Exception as e:
-        logger.error(f"❌ Error processing buffered messages: {e}")
-        unlock_buffer(buffer_key)
+    await orchestrated_process_buffered_messages(
+        _get_message_pipeline_deps(),
+        clinic_id,
+        phone,
+        phone_number_id,
+        access_token,
+        buffer_key,
+        sleep_func=asyncio.sleep,
+    )
 
 
 async def handle_voice_message(
@@ -4892,64 +2776,16 @@ async def handle_voice_message(
     access_token: str,
     contact_name: Optional[str] = None
 ):
-    """Handle voice message: download, transcribe, and process."""
-    try:
-        from src.utils.transcription import transcribe_audio
-        from src.utils.messaging import download_whatsapp_media
-
-        logger.info(f"🎤 Processing voice message from {phone}")
-
-        # Download audio
-        download_result = await download_whatsapp_media(media_id)
-        if not download_result:
-            await send_whatsapp_message(
-                phone_number_id, phone,
-                "Desculpe, não consegui processar seu áudio. Pode tentar enviar novamente ou digitar sua mensagem? 🙏",
-                access_token
-            )
-            return
-
-        file_path, mime_type = download_result
-        logger.info(f"📥 Audio downloaded: {file_path}")
-
-        # Transcribe
-        transcription = await transcribe_audio(file_path, mime_type)
-
-        # Clean up temp file
-        try:
-            import os as os_module
-            os_module.remove(file_path)
-        except Exception:
-            pass
-
-        if transcription:
-            logger.info(f"📝 Transcription: {transcription[:100]}...")
-
-            # Process transcribed text like a regular message
-            await process_message(
-                clinic_id,
-                phone,
-                transcription,
-                message_id,
-                phone_number_id,
-                access_token,
-                None,
-                contact_name
-            )
-        else:
-            await send_whatsapp_message(
-                phone_number_id, phone,
-                "Desculpe, não consegui entender seu áudio. Pode tentar enviar novamente ou digitar sua mensagem? 🙏",
-                access_token
-            )
-
-    except Exception as e:
-        logger.error(f"❌ Voice message error: {e}")
-        await send_whatsapp_message(
-            phone_number_id, phone,
-            "Desculpe, ocorreu um erro ao processar seu áudio. Pode digitar sua mensagem?",
-            access_token
-        )
+    await orchestrated_handle_voice_message(
+        _get_message_pipeline_deps(),
+        clinic_id,
+        phone,
+        media_id,
+        message_id,
+        phone_number_id,
+        access_token,
+        contact_name=contact_name,
+    )
 
 
 @app.post("/webhook")
@@ -4957,173 +2793,11 @@ async def receive_webhook(request: Request, background_tasks: BackgroundTasks):
     """Receive WhatsApp webhook events."""
     try:
         body = await request.json()
-        logger.info(f"📨 Webhook received: {json.dumps(body)[:500]}")
-
-        # Extract entry
-        entry = body.get("entry", [])
-        if not entry:
-            return {"status": "ok"}
-
-        for e in entry:
-            changes = e.get("changes", [])
-            for change in changes:
-                value = change.get("value", {})
-
-                # Get phone number ID
-                metadata = value.get("metadata", {})
-                phone_number_id = metadata.get("phone_number_id")
-
-                if not phone_number_id:
-                    continue
-
-                # Look up clinic
-                clinic = db.get_clinic_by_phone_number_id(phone_number_id) if db else None
-                if not clinic:
-                    logger.warning(f"No clinic found for phone_number_id: {phone_number_id}")
-                    continue
-
-                clinic_id = clinic.id
-                access_token = db.get_clinic_access_token(clinic_id) if db else WHATSAPP_TOKEN
-                if not access_token:
-                    access_token = WHATSAPP_TOKEN
-
-                # Get contact info
-                contacts = value.get("contacts", [])
-                contact_name = None
-                if contacts:
-                    contact_name = contacts[0].get("profile", {}).get("name")
-
-                # Process messages
-                messages = value.get("messages", [])
-                for msg in messages:
-                    message_id = msg.get("id")
-
-                    # Deduplicate
-                    if is_message_processed(message_id):
-                        logger.info(f"⚠️ Message {message_id} already processed, skipping")
-                        continue
-
-                    sender = msg.get("from")
-                    msg_type = msg.get("type")
-
-                    # Handle voice/audio messages
-                    if msg_type == "audio":
-                        audio_data = msg.get("audio", {})
-                        media_id = audio_data.get("id")
-                        if media_id:
-                            background_tasks.add_task(
-                                handle_voice_message,
-                                clinic_id,
-                                ensure_phone_has_plus(sender),
-                                media_id,
-                                message_id,
-                                phone_number_id,
-                                access_token,
-                                contact_name
-                            )
-                        continue
-
-                    # Extract text message content
-                    text = ""
-                    button_payload = None
-
-                    if msg_type == "text":
-                        text = msg.get("text", {}).get("body", "")
-                    elif msg_type == "interactive":
-                        interactive = msg.get("interactive", {})
-                        interactive_type = interactive.get("type", "")
-
-                        if interactive_type == "button_reply":
-                            button_payload = interactive.get("button_reply", {}).get("id")
-                            text = interactive.get("button_reply", {}).get("title", "")
-
-                        elif interactive_type == "nfm_reply":
-                            # WhatsApp Flow completion response
-                            nfm_reply = interactive.get("nfm_reply", {})
-                            response_json_str = nfm_reply.get("response_json", "{}")
-
-                            try:
-                                flow_response = json.loads(response_json_str)
-                                logger.info(f"📱 Flow completed: {flow_response}")
-
-                                phone = ensure_phone_has_plus(sender)
-
-                                # Handle flow completion in background
-                                background_tasks.add_task(
-                                    handle_flow_completion,
-                                    clinic_id,
-                                    phone,
-                                    flow_response,
-                                    phone_number_id,
-                                    access_token,
-                                    contact_name
-                                )
-                            except json.JSONDecodeError as e:
-                                logger.error(f"❌ Failed to parse flow response: {e}")
-
-                            continue  # Skip normal message processing
-
-                    elif msg_type == "location":
-                        location = msg.get("location", {})
-                        lat = location.get("latitude")
-                        lng = location.get("longitude")
-                        location_name = location.get("name")
-                        address = location.get("address")
-                        parts = []
-                        if location_name:
-                            parts.append(f"nome: {location_name}")
-                        if address:
-                            parts.append(f"endereço: {address}")
-                        if lat is not None and lng is not None:
-                            parts.append(f"lat: {lat}, lng: {lng}")
-                        text = "Localização compartilhada"
-                        if parts:
-                            text += " (" + " | ".join(parts) + ")"
-
-                    elif msg_type == "button":
-                        button_payload = msg.get("button", {}).get("payload")
-                        text = msg.get("button", {}).get("text", "")
-
-                    if text or button_payload:
-                        phone = ensure_phone_has_plus(sender)
-                        buffer_key = f"{clinic_id}:{phone}"
-
-                        # For button responses, process immediately (no buffering)
-                        if button_payload:
-                            background_tasks.add_task(
-                                process_message,
-                                clinic_id,
-                                phone,
-                                text,
-                                message_id,
-                                phone_number_id,
-                                access_token,
-                                button_payload,
-                                contact_name
-                            )
-                        else:
-                            # Add to buffer and start timer if first message
-                            message_data = {
-                                'text': text,
-                                'message_id': message_id,
-                                'contact_name': contact_name,
-                                'button_payload': button_payload
-                            }
-                            is_first = add_to_message_buffer(buffer_key, message_data)
-
-                            if is_first:
-                                # Start buffer processing task
-                                logger.info(f"⏳ Starting message buffer for {phone}")
-                                background_tasks.add_task(
-                                    process_buffered_messages,
-                                    clinic_id,
-                                    phone,
-                                    phone_number_id,
-                                    access_token,
-                                    buffer_key
-                                )
-
-        return {"status": "ok"}
+        return await orchestrated_process_webhook_body(
+            _get_webhook_processor_deps(),
+            body,
+            background_tasks,
+        )
 
     except Exception as e:
         logger.error(f"❌ Error processing webhook: {e}")

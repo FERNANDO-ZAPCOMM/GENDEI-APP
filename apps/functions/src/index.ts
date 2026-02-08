@@ -29,6 +29,7 @@ import teamRouter from './routes/team';
 
 // Import services
 import { sendScheduledReminders } from './services/reminders';
+import { cleanupExpiredPaymentHolds } from './services/payment-holds';
 
 // Create Express app
 const app = express();
@@ -104,6 +105,26 @@ export const scheduledReminders = functions
       console.log('Scheduled reminders completed:', result);
     } catch (error) {
       console.error('Scheduled reminders failed:', error);
+      throw error;
+    }
+  });
+
+// Cleanup unpaid pending holds and release slots (runs every 5 minutes)
+export const scheduledPaymentHoldCleanup = functions
+  .region('us-central1')
+  .runWith({
+    timeoutSeconds: 300,
+    memory: '512MB',
+  })
+  .pubsub.schedule('every 5 minutes')
+  .onRun(async () => {
+    console.log('Starting scheduled payment-hold cleanup...');
+
+    try {
+      const result = await cleanupExpiredPaymentHolds();
+      console.log('Payment-hold cleanup completed:', result);
+    } catch (error) {
+      console.error('Payment-hold cleanup failed:', error);
       throw error;
     }
   });

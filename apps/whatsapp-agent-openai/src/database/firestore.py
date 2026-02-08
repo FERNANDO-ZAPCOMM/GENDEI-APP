@@ -535,6 +535,7 @@ class GendeiDatabase:
     def create_order(self, order_id: str, data: Dict[str, Any], clinic_id: Optional[str] = None) -> str:
         """Create a new order under clinic subcollection"""
         try:
+            data["id"] = order_id
             data["createdAt"] = datetime.now().isoformat()
             # Use clinic_id from data if not provided as parameter
             cid = clinic_id or data.get("clinicId")

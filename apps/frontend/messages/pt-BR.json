@@ -1450,6 +1450,7 @@
     "service": "Serviço",
     "date": "Data",
     "time": "Horário",
+    "paymentStatus": "Pagamento",
     "notes": "Observações",
     "confirm": "Confirmar",
     "markCompleted": "Marcar Concluído",
@@ -1466,13 +1467,18 @@
     "unblockError": "Erro ao remover bloqueio",
     "status": {
       "pending": "Pendente",
+      "pendingPayment": "Pendente de pagamento",
+      "pendingExpired": "Pendente expirado",
       "confirmed": "Confirmado",
       "awaiting": "Aguardando",
       "confirmedPresence": "Presença Confirmada",
       "completed": "Concluído",
       "cancelled": "Cancelado",
       "noShow": "Não Compareceu"
-    }
+    },
+    "pendingPaymentHelp": "Sinal pendente. Reserva ativa por mais {minutes} minuto(s).",
+    "pendingPaymentHelpNoTimer": "Sinal pendente. A reserva está aguardando pagamento.",
+    "pendingExpiredHelp": "A reserva expirou por falta de pagamento. Gere um novo agendamento para reservar horário novamente."
   },
   "patientsPage": {
     "title": "Pacientes",

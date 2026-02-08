@@ -37,6 +37,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import type { Appointment, AppointmentStatus } from '@/lib/clinic-types';
+import { getPendingPaymentHoldInfo, isPendingPaymentAppointment } from '@/lib/appointment-status';
 
 interface TimeBlock {
   id: string;
@@ -127,6 +128,31 @@ const statusConfig: Record<AppointmentStatus, {
     label: 'Nao Compareceu'
   },
 };
+
+function getCalendarStatusConfig(appointment: Appointment) {
+  if (!isPendingPaymentAppointment(appointment)) {
+    return statusConfig[appointment.status] || statusConfig.pending;
+  }
+
+  const hold = getPendingPaymentHoldInfo(appointment);
+  if (hold?.isExpired) {
+    return {
+      bg: 'bg-red-50',
+      border: 'border-l-4 border-l-red-500 border-red-200',
+      text: 'text-red-900',
+      dot: 'bg-red-500',
+      label: 'Expirado',
+    };
+  }
+
+  return {
+    bg: 'bg-amber-50',
+    border: 'border-l-4 border-l-amber-500 border-amber-200',
+    text: 'text-amber-900',
+    dot: 'bg-amber-500',
+    label: 'Pendente Pagamento',
+  };
+}
 
 export function CalendarGrid({
   selectedDate,
@@ -534,7 +560,7 @@ export function CalendarGrid({
                   {/* Appointments */}
                   {dayAppts.map((apt) => {
                     const style = getAppointmentStyle(apt);
-                    const config = statusConfig[apt.status] || statusConfig.pending;
+                    const config = getCalendarStatusConfig(apt);
 
                     return (
                       <Tooltip key={apt.id}>
@@ -617,6 +643,17 @@ export function CalendarGrid({
                             <p className="text-xs text-gray-500">{apt.professionalName}</p>
                             {apt.serviceName && <p className="text-xs text-gray-500">{apt.serviceName}</p>}
                             {apt.patientPhone && <p className="text-xs text-gray-500">{apt.patientPhone}</p>}
+                            {isPendingPaymentAppointment(apt) && (
+                              <p className="text-xs text-gray-500">
+                                {(() => {
+                                  const hold = getPendingPaymentHoldInfo(apt);
+                                  if (!hold) return 'Aguardando pagamento';
+                                  if (hold.isExpired) return 'Reserva expirada';
+                                  if (hold.minutesLeft !== null) return `Expira em ${hold.minutesLeft} min`;
+                                  return 'Aguardando pagamento';
+                                })()}
+                              </p>
+                            )}
                           </div>
                         </TooltipContent>
                       </Tooltip>
@@ -636,6 +673,10 @@ export function CalendarGrid({
                 <span className="text-xs text-gray-600">{statusConfig[key].label}</span>
               </div>
             ))}
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              <div className="w-2.5 h-2.5 rounded-full bg-red-500" />
+              <span className="text-xs text-gray-600">Expirado</span>
+            </div>
           </div>
         </div>
 

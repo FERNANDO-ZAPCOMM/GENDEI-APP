@@ -44,6 +44,7 @@ import { CalendarGrid } from '@/components/calendar/CalendarGrid';
 import { nowInTimezone, todayInTimezone, formatDateInTimezone, formatDayMonthInTimezone } from '@/lib/timezone';
 import { getSpecialtyNames, getProfessionalSpecialties } from '@/lib/specialties';
 import type { Appointment, AppointmentStatus } from '@/lib/clinic-types';
+import { getPendingPaymentHoldInfo, isPendingPaymentAppointment } from '@/lib/appointment-status';
 
 const getStatusConfig = (t: (key: string) => string): Record<AppointmentStatus, { label: string; color: string; icon: any }> => ({
   pending: { label: t('appointmentsPage.status.pending'), color: 'bg-yellow-100 text-yellow-700', icon: AlertCircle },
@@ -54,6 +55,29 @@ const getStatusConfig = (t: (key: string) => string): Record<AppointmentStatus, 
   cancelled: { label: t('appointmentsPage.status.cancelled'), color: 'bg-red-100 text-red-700', icon: XCircle },
   no_show: { label: t('appointmentsPage.status.noShow'), color: 'bg-gray-100 text-gray-700', icon: XCircle },
 });
+
+function getAppointmentStatusUi(
+  appointment: Appointment,
+  t: (key: string) => string,
+  base: Record<AppointmentStatus, { label: string; color: string; icon: any }>
+) {
+  const holdInfo = getPendingPaymentHoldInfo(appointment);
+  if (isPendingPaymentAppointment(appointment)) {
+    if (holdInfo?.isExpired) {
+      return {
+        label: t('appointmentsPage.status.pendingExpired'),
+        color: 'bg-red-100 text-red-700',
+        icon: AlertCircle,
+      };
+    }
+    return {
+      label: t('appointmentsPage.status.pendingPayment'),
+      color: 'bg-amber-100 text-amber-700',
+      icon: AlertCircle,
+    };
+  }
+  return base[appointment.status] || base.pending;
+}
 
 // Format price for display
 const formatPrice = (price: number) => {
@@ -311,7 +335,7 @@ export default function AppointmentsPage() {
                   <ChevronRight className="w-4 h-4" />
                 </Button>
                 <Button variant="ghost" size="sm" onClick={() => setSelectedDate(todayInTimezone(clinicTimezone))}>
-                  {t('appointmentsPage.today')}
+                  {t('appointmentsPage.today').toUpperCase()}
                 </Button>
               </div>
             </div>
@@ -501,10 +525,38 @@ export default function AppointmentsPage() {
 
               <div>
                 <p className="text-sm text-muted-foreground mb-2">Status</p>
-                <Badge className={`${statusConfig[selectedAppointment.status]?.color || statusConfig.pending.color} border-0`}>
-                  {statusConfig[selectedAppointment.status]?.label || t('appointmentsPage.status.pending')}
+                <Badge className={`${getAppointmentStatusUi(selectedAppointment, t, statusConfig).color} border-0`}>
+                  {getAppointmentStatusUi(selectedAppointment, t, statusConfig).label}
                 </Badge>
               </div>
+
+              {isPendingPaymentAppointment(selectedAppointment) && (
+                <div>
+                  <p className="text-sm text-muted-foreground">{t('appointmentsPage.paymentStatus')}</p>
+                  {(() => {
+                    const holdInfo = getPendingPaymentHoldInfo(selectedAppointment);
+                    if (holdInfo?.isExpired) {
+                      return (
+                        <p className="text-sm text-red-700 mt-1">
+                          {t('appointmentsPage.pendingExpiredHelp')}
+                        </p>
+                      );
+                    }
+                    if (holdInfo?.minutesLeft !== null && holdInfo?.minutesLeft !== undefined) {
+                      return (
+                        <p className="text-sm text-amber-700 mt-1">
+                          {t('appointmentsPage.pendingPaymentHelp', { minutes: holdInfo.minutesLeft })}
+                        </p>
+                      );
+                    }
+                    return (
+                      <p className="text-sm text-amber-700 mt-1">
+                        {t('appointmentsPage.pendingPaymentHelpNoTimer')}
+                      </p>
+                    );
+                  })()}
+                </div>
+              )}
 
               {selectedAppointment.notes && (
                 <div>
@@ -516,7 +568,7 @@ export default function AppointmentsPage() {
           )}
 
           <DialogFooter className="flex-col sm:flex-row gap-2">
-            {selectedAppointment && selectedAppointment.status === 'pending' && (
+            {selectedAppointment && selectedAppointment.status === 'pending' && !isPendingPaymentAppointment(selectedAppointment) && (
               <Button onClick={() => handleStatusChange(selectedAppointment.id, 'confirmed')}>
                 <CheckCircle className="w-4 h-4 mr-2" />
                 {t('appointmentsPage.confirm')}

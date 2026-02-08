@@ -30,6 +30,30 @@ class ReminderType(Enum):
     REMINDER_2H = "reminder_2h"      # 2 hours before
 
 
+def _parse_datetime(value: Any) -> Optional[datetime]:
+    """Parse ISO strings and Firestore datetime-like values safely."""
+    if not value:
+        return None
+    if isinstance(value, datetime):
+        return value
+    if hasattr(value, "isoformat"):
+        try:
+            return datetime.fromisoformat(value.isoformat())
+        except Exception:
+            return None
+    if isinstance(value, str):
+        raw = value.strip()
+        if not raw:
+            return None
+        if raw.endswith("Z"):
+            raw = raw[:-1] + "+00:00"
+        try:
+            return datetime.fromisoformat(raw)
+        except ValueError:
+            return None
+    return None
+
+
 @dataclass
 class Clinic:
     """Clinic data model"""
@@ -497,7 +521,14 @@ class Appointment:
             patient_phone=data.get("patientPhone", ""),
             professional_name=data.get("professionalName", ""),
             reminder_24h_sent=data.get("reminder24hSent", False),
+            reminder_24h_at=_parse_datetime(data.get("reminder24hAt")),
             reminder_2h_sent=data.get("reminder2hSent", False),
+            reminder_2h_at=_parse_datetime(data.get("reminder2hAt")),
+            created_at=_parse_datetime(data.get("createdAt")) or datetime.now(),
+            updated_at=_parse_datetime(data.get("updatedAt")) or datetime.now(),
+            confirmed_at=_parse_datetime(data.get("confirmedAt")),
+            cancelled_at=_parse_datetime(data.get("cancelledAt")),
+            completed_at=_parse_datetime(data.get("completedAt")),
             notes=data.get("notes", ""),
             cancellation_reason=data.get("cancellationReason")
         )

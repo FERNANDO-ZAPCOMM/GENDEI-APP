@@ -141,6 +141,13 @@ export interface Appointment {
   time: string; // HH:MM
   duration: number;
   status: AppointmentStatus;
+  paymentType?: 'particular' | 'convenio' | string;
+  totalCents?: number;
+  signalCents?: number;
+  signalPaid?: boolean;
+  signalPaidAt?: string;
+  signalPaymentId?: string;
+  cancellationReason?: string;
   notes?: string;
   depositAmount?: number;
   depositPaid?: boolean;
@@ -149,8 +156,8 @@ export interface Appointment {
   reminder24hAt?: string;
   reminder2hSent?: boolean;
   reminder2hAt?: string;
-  createdAt?: string;
-  updatedAt?: string;
+  createdAt?: string | Date | Record<string, unknown>;
+  updatedAt?: string | Date | Record<string, unknown>;
 }
 
 export interface TimeSlot {

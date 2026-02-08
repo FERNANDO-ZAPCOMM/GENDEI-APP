@@ -31,13 +31,13 @@ import {
 } from '@/components/ui/select';
 
 const DAYS_OF_WEEK = [
-  { key: '0', label: 'Segunda' },
-  { key: '1', label: 'Terça' },
-  { key: '2', label: 'Quarta' },
-  { key: '3', label: 'Quinta' },
-  { key: '4', label: 'Sexta' },
-  { key: '5', label: 'Sábado' },
-  { key: '6', label: 'Domingo' },
+  { key: '0', label: 'SEG.' },
+  { key: '1', label: 'TER.' },
+  { key: '2', label: 'QUA.' },
+  { key: '3', label: 'QUI.' },
+  { key: '4', label: 'SEX.' },
+  { key: '5', label: 'SAB.' },
+  { key: '6', label: 'DOM.' },
 ];
 
 // Phone formatting helper

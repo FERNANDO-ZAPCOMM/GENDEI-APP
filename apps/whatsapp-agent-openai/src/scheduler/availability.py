@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, date
 from typing import List, Dict, Any, Optional, Tuple
 import re
 from .models import TimeSlot, Professional, Service
+from .payment_holds import release_expired_unpaid_holds, is_unpaid_hold_expired
 
 logger = logging.getLogger(__name__)
 
@@ -151,8 +152,12 @@ def get_available_slots(
             start_date=start.isoformat(),
             end_date=end.isoformat()
         )
+        # Release expired unpaid payment holds so slots can be reused.
+        release_expired_unpaid_holds(db, existing_appointments)
         booked_slots = set()
         for apt in existing_appointments:
+            if is_unpaid_hold_expired(apt):
+                continue
             if apt.status.value not in ["cancelled", "no_show"]:
                 slot_key = f"{apt.date}_{apt.time}_{apt.professional_id}"
                 booked_slots.add(slot_key)
