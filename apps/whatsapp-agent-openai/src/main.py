@@ -847,6 +847,85 @@ def get_clinic_payment_options(clinic, service=None) -> Dict[str, Any]:
     }
 
 
+def _normalize_price_to_cents(value: Any) -> int:
+    """
+    Normalize price values that may come in BRL or cents.
+    Heuristics:
+    - float -> BRL (e.g. 300.0 => 30000)
+    - int >= 1000 -> cents (e.g. 30000 => 30000)
+    - int < 1000 -> BRL (e.g. 300 => 30000)
+    """
+    if value is None:
+        return 0
+    try:
+        if isinstance(value, float):
+            return int(round(value * 100))
+        if isinstance(value, int):
+            return value if value >= 1000 else value * 100
+        if isinstance(value, str):
+            cleaned = value.strip().replace("R$", "").replace(".", "").replace(",", ".")
+            if not cleaned:
+                return 0
+            parsed = float(cleaned)
+            return int(round(parsed * 100))
+    except Exception:
+        return 0
+    return 0
+
+
+def resolve_consultation_pricing(
+    clinic_id: str,
+    clinic: Any,
+    professional_id: str = ""
+) -> Dict[str, int]:
+    """
+    Resolve deposit percentage and consultation price with robust fallbacks.
+    Priority for price:
+    1) Professional-linked services (first active with price)
+    2) Any clinic service with price
+    3) paymentSettings.defaultConsultationPrice
+    4) system default R$ 200,00
+    """
+    signal_percentage = 15
+    default_price_cents = 20000
+
+    payment_settings = getattr(clinic, "payment_settings", {}) or {}
+    clinic_signal_percentage = getattr(clinic, "signal_percentage", 15) or 15
+    signal_percentage = int(payment_settings.get("depositPercentage", clinic_signal_percentage) or 15)
+
+    # Try services first (more accurate than generic default consultation price).
+    chosen_price_cents = 0
+    services = db.get_clinic_services(clinic_id) if db else []
+    services_by_id = {s.id: s for s in services}
+
+    if professional_id and db:
+        professional = db.get_professional(clinic_id, professional_id)
+        if professional:
+            for sid in getattr(professional, "service_ids", []) or []:
+                service = services_by_id.get(sid) or db.get_service(clinic_id, sid)
+                if service and getattr(service, "price_cents", 0):
+                    chosen_price_cents = int(getattr(service, "price_cents", 0) or 0)
+                    break
+
+    if chosen_price_cents <= 0:
+        for service in services:
+            candidate = int(getattr(service, "price_cents", 0) or 0)
+            if candidate > 0:
+                chosen_price_cents = candidate
+                break
+
+    if chosen_price_cents <= 0:
+        chosen_price_cents = _normalize_price_to_cents(payment_settings.get("defaultConsultationPrice"))
+
+    if chosen_price_cents <= 0:
+        chosen_price_cents = default_price_cents
+
+    return {
+        "signal_percentage": signal_percentage,
+        "default_price_cents": chosen_price_cents
+    }
+
+
 def get_services_for_professional(services: List[Any], professional_id: Optional[str]) -> List[Any]:
     """Filter services by professional if possible."""
     if not professional_id:
@@ -1774,11 +1853,11 @@ async def handle_conversational_booking(
                         if db:
                             db.update_appointment(appointment.id, {
                                 "signalPaymentId": payment_info.get("payment_id")
-                            })
+                            }, clinic_id=clinic_id)
                         await send_whatsapp_message(
                             phone_number_id, phone,
-                            f"💳 *Sinal necessário:* {format_payment_amount(signal_cents)}\n\n"
-                            "Vou te enviar o PIX agora.",
+                            f"*Sinal necessário:* {format_payment_amount(signal_cents)}\n\n"
+                            "Vou enviar o PIX agora.",
                             access_token
                         )
                         # Set runtime context for messaging functions
@@ -3063,6 +3142,13 @@ async def handle_flow_completion(
         # Generate new flow token with patient data
         flow_token = generate_flow_token(clinic_id, phone)
 
+        # Guidance before opening booking flow.
+        await send_whatsapp_message(
+            phone_number_id, phone,
+            "Agora escolha o melhor dia e horário para sua consulta.",
+            access_token
+        )
+
         # Send Booking Flow (Flow 2)
         success = await send_booking_flow(
             phone_number_id=phone_number_id,
@@ -3128,14 +3214,16 @@ async def handle_flow_completion(
 
         # Get clinic settings for signal percentage and default price
         clinic = db.get_clinic(clinic_id) if db else None
-        signal_percentage = 15  # Default 15%
-        default_price_cents = 20000  # Default R$ 200.00 for consultation
-
+        signal_percentage = 15  # fallback
+        default_price_cents = 20000  # fallback
         if clinic:
-            signal_percentage = getattr(clinic, 'signal_percentage', 15) or 15
-            # Check payment_settings for default consultation price
-            payment_settings = getattr(clinic, 'payment_settings', {}) or {}
-            default_price_cents = payment_settings.get('defaultConsultationPrice', 20000)
+            pricing = resolve_consultation_pricing(clinic_id, clinic, professional_id=professional_id)
+            signal_percentage = pricing["signal_percentage"]
+            default_price_cents = pricing["default_price_cents"]
+            logger.info(
+                f"💰 Pricing resolved: price={default_price_cents} cents, "
+                f"signal={signal_percentage}%"
+            )
 
         # Format date for display
         try:
@@ -3212,17 +3300,17 @@ async def handle_flow_completion(
                         if db:
                             db.update_appointment(appointment.id, {
                                 "signalPaymentId": payment_info.get("payment_id")
-                            })
+                            }, clinic_id=clinic_id)
 
                         # Send confirmation message with payment pending
                         confirmation_msg = (
-                            f"📋 *Agendamento Registrado!*\n\n"
-                            f"📅 {weekday}, {formatted_date} às {selected_time}\n"
-                            f"👨‍⚕️ {professional_name}\n"
-                            f"👤 {patient_name}\n\n"
-                            f"💳 *Sinal necessário:* {format_payment_amount(appointment.signal_cents)}\n\n"
+                            f"*Agendamento registrado*\n\n"
+                            f"{weekday}, {formatted_date} às {selected_time}\n"
+                            f"{professional_name}\n"
+                            f"Paciente: {patient_name}\n\n"
+                            f"*Sinal necessário:* {format_payment_amount(appointment.signal_cents)}\n\n"
                             "Seu agendamento será confirmado após o pagamento do sinal. "
-                            "Vou te enviar o PIX em seguida! 👇"
+                            "Vou enviar o PIX em seguida."
                         )
                         await send_whatsapp_message(phone_number_id, phone, confirmation_msg, access_token)
 
@@ -3251,11 +3339,11 @@ async def handle_flow_completion(
                         # PagSeguro failed - send manual instructions
                         logger.warning("⚠️ PagSeguro failed, sending confirmation without payment")
                         confirmation_msg = (
-                            f"📋 *Agendamento Registrado!*\n\n"
-                            f"📅 {weekday}, {formatted_date} às {selected_time}\n"
-                            f"👨‍⚕️ {professional_name}\n"
-                            f"👤 {patient_name}\n\n"
-                            f"💳 *Sinal:* {format_payment_amount(appointment.signal_cents)}\n\n"
+                            f"*Agendamento registrado*\n\n"
+                            f"{weekday}, {formatted_date} às {selected_time}\n"
+                            f"{professional_name}\n"
+                            f"Paciente: {patient_name}\n\n"
+                            f"*Sinal:* {format_payment_amount(appointment.signal_cents)}\n\n"
                             "Entre em contato com a clínica para efetuar o pagamento do sinal e confirmar sua consulta."
                         )
                         await send_whatsapp_message(phone_number_id, phone, confirmation_msg, access_token)
@@ -3263,10 +3351,10 @@ async def handle_flow_completion(
                     # Signal too low or PagSeguro not configured
                     logger.info(f"⚠️ Signal {appointment.signal_cents} cents below minimum or PagSeguro not configured")
                     confirmation_msg = (
-                        f"✅ *Agendamento Confirmado!*\n\n"
-                        f"📅 {weekday}, {formatted_date} às {selected_time}\n"
-                        f"👨‍⚕️ {professional_name}\n"
-                        f"👤 {patient_name}\n\n"
+                        f"*Agendamento confirmado*\n\n"
+                        f"{weekday}, {formatted_date} às {selected_time}\n"
+                        f"{professional_name}\n"
+                        f"Paciente: {patient_name}\n\n"
                         "Você receberá um lembrete 24h antes da consulta.\n\n"
                         "Para cancelar ou reagendar, basta enviar uma mensagem!"
                     )
@@ -3274,13 +3362,13 @@ async def handle_flow_completion(
             else:
                 # Convenio or no signal required - appointment confirmed directly
                 confirmation_msg = (
-                    f"✅ *Agendamento Confirmado!*\n\n"
-                    f"📅 {weekday}, {formatted_date} às {selected_time}\n"
-                    f"👨‍⚕️ {professional_name}\n"
-                    f"👤 {patient_name}\n"
+                    f"*Agendamento confirmado*\n\n"
+                    f"{weekday}, {formatted_date} às {selected_time}\n"
+                    f"{professional_name}\n"
+                    f"Paciente: {patient_name}\n"
                 )
                 if tipo_pagamento == "convenio" and convenio_nome:
-                    confirmation_msg += f"📋 Convênio: {convenio_nome}\n"
+                    confirmation_msg += f"Convênio: {convenio_nome}\n"
                 confirmation_msg += (
                     "\nVocê receberá um lembrete 24h antes da consulta.\n\n"
                     "Para cancelar ou reagendar, basta enviar uma mensagem!"
@@ -3361,6 +3449,13 @@ async def handle_payment_type_selection(
     # Get clinic name for the message
     clinic = db.get_clinic(clinic_id) if db else None
     clinic_name = clinic.name if clinic else "a clínica"
+
+    # Guidance before opening the first flow.
+    await send_whatsapp_message(
+        phone_number_id, phone,
+        "Vamos iniciar seu agendamento.\nEscolha o profissional e, quando aplicável, o tipo de atendimento.",
+        access_token
+    )
 
     # Send the appropriate flow
     success = await send_whatsapp_flow(
@@ -3466,9 +3561,22 @@ async def handle_scheduling_intent(
     legacy_patient_info_flow_id = whatsapp_config.get('patientInfoFlowId', '')
     booking_flow_id = whatsapp_config.get('bookingFlowId', '')
 
-    # Check if both new flows are configured
-    has_new_flows = bool(convenio_flow_id and particular_flow_id)
     has_legacy_flow = bool(legacy_patient_info_flow_id)
+
+    # Payment settings determine which flow IDs are actually required.
+    payment_settings = getattr(clinic, 'payment_settings', {}) or {}
+    accepts_particular = bool(payment_settings.get("acceptsParticular", True))
+    accepts_convenio = bool(payment_settings.get("acceptsConvenio", False))
+
+    requires_particular_flow = accepts_particular
+    requires_convenio_flow = accepts_convenio
+    has_required_new_flows = (
+        (not requires_particular_flow or bool(particular_flow_id)) and
+        (not requires_convenio_flow or bool(convenio_flow_id))
+    )
+
+    # Keep previous variable name to minimize downstream changes.
+    has_new_flows = has_required_new_flows
 
     logger.info(
         f"🔍 Flow IDs for clinic {clinic_id}: "
@@ -3477,10 +3585,14 @@ async def handle_scheduling_intent(
         f"legacy={legacy_patient_info_flow_id or 'N/A'}, "
         f"booking={booking_flow_id or 'N/A'}"
     )
+    logger.info(
+        f"🔍 Payment settings: acceptsParticular={accepts_particular}, "
+        f"acceptsConvenio={accepts_convenio}, has_required_new_flows={has_required_new_flows}"
+    )
     logger.info(f"🔍 Clinic whatsapp_config: {whatsapp_config}")
 
     if has_new_flows and professionals:
-        logger.info(f"📱 Using WhatsApp Flows for scheduling - asking payment type first")
+        logger.info("📱 Using WhatsApp Flows for scheduling")
 
         # Build especialidades list for later use (each professional = one specialty option)
         especialidades = []
@@ -3506,6 +3618,26 @@ async def handle_scheduling_intent(
         }
         if db:
             db.save_conversation_state(clinic_id, phone, new_state)
+
+        # If only one payment mode is enabled, skip payment-type selection buttons.
+        if accepts_particular and not accepts_convenio:
+            logger.info("💳 Clinic is PARTICULAR-only. Sending particular flow directly.")
+            await handle_payment_type_selection(
+                clinic_id, phone, "payment_particular", new_state,
+                phone_number_id, access_token
+            )
+            return
+
+        if accepts_convenio and not accepts_particular:
+            logger.info("💳 Clinic is CONVENIO-only. Sending convenio flow directly.")
+            await handle_payment_type_selection(
+                clinic_id, phone, "payment_convenio", new_state,
+                phone_number_id, access_token
+            )
+            return
+
+        if not accepts_particular and not accepts_convenio:
+            logger.warning("⚠️ No payment mode enabled in clinic settings; asking user payment type as fallback.")
 
         # Ask user for payment type via buttons
         buttons = [
@@ -3781,6 +3913,32 @@ async def process_message(
             auto_takeover=True
         )
         return
+
+    # Payment selection buttons need handling on active path as well.
+    if button_payload in ("payment_convenio", "payment_particular"):
+        logger.info(f"💳 User {phone} selected payment type (button): {button_payload}")
+        await handle_payment_type_selection(
+            clinic_id, phone, button_payload, state,
+            phone_number_id, access_token
+        )
+        return
+
+    # User may type "Particular" / "Convênio" instead of tapping button.
+    if current_state == "awaiting_payment_type" and not button_payload:
+        if "particular" in msg_lower:
+            logger.info(f"💳 User {phone} typed payment type: particular")
+            await handle_payment_type_selection(
+                clinic_id, phone, "payment_particular", state,
+                phone_number_id, access_token
+            )
+            return
+        if "convenio" in msg_lower or "convênio" in msg_lower:
+            logger.info(f"💳 User {phone} typed payment type: convenio")
+            await handle_payment_type_selection(
+                clinic_id, phone, "payment_convenio", state,
+                phone_number_id, access_token
+            )
+            return
 
     # =============================================
     # SENTIMENT / HUMAN ESCALATION (PRIORITY)

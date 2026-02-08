@@ -58,13 +58,16 @@ interface CalendarGridProps {
   clinicTimezone?: string;
   startHour?: number;
   endHour?: number;
+  businessStartHour?: number;
+  businessEndHour?: number;
   onAppointmentClick?: (appointment: Appointment) => void;
   onTimeSlotClick?: (date: string, time: string) => void;
   onBlockTime?: (block: Omit<TimeBlock, 'id'>) => void;
   onRemoveBlock?: (blockId: string) => void;
 }
 
-const HOUR_HEIGHT = 64; // pixels per hour
+const HOUR_HEIGHT = 64; // pixels per hour (business hours)
+const OFF_HOUR_HEIGHT = 40; // pixels per hour (off hours)
 const SLOT_DURATION = 30; // minutes per slot
 
 const statusConfig: Record<AppointmentStatus, {
@@ -133,8 +136,10 @@ export function CalendarGrid({
   professionals,
   selectedProfessional,
   clinicTimezone,
-  startHour = 7,
-  endHour = 20,
+  startHour = 0,
+  endHour = 24,
+  businessStartHour = 7,
+  businessEndHour = 20,
   onAppointmentClick,
   onTimeSlotClick,
   onBlockTime,
@@ -151,6 +156,18 @@ export function CalendarGrid({
     repeatUntil: '',
   });
   const [hoveredSlot, setHoveredSlot] = useState<string | null>(null);
+
+  // Off-hours helpers
+  const isOffHour = (hour: number) => hour < businessStartHour || hour >= businessEndHour;
+  const getHourHeight = (hour: number) => isOffHour(hour) ? OFF_HOUR_HEIGHT : HOUR_HEIGHT;
+  const getPositionForTime = (hours: number, minutes: number) => {
+    let pos = 0;
+    for (let h = startHour; h < hours; h++) {
+      pos += getHourHeight(h);
+    }
+    pos += (minutes / 60) * getHourHeight(hours);
+    return pos;
+  };
 
   // Generate time slots for the day
   const timeSlots = useMemo(() => {
@@ -178,8 +195,9 @@ export function CalendarGrid({
   // Calculate position and height for an appointment
   const getAppointmentStyle = (apt: Appointment) => {
     const [hours, minutes] = apt.time.split(':').map(Number);
-    const top = (hours - startHour) * HOUR_HEIGHT + (minutes / 60) * HOUR_HEIGHT;
-    const height = (apt.duration / 60) * HOUR_HEIGHT;
+    const top = getPositionForTime(hours, minutes);
+    const endTotal = hours * 60 + minutes + apt.duration;
+    const height = getPositionForTime(Math.floor(endTotal / 60), endTotal % 60) - top;
     return { top, height: Math.max(height, 36) };
   };
 
@@ -187,9 +205,8 @@ export function CalendarGrid({
   const getBlockStyle = (block: TimeBlock) => {
     const [startHours, startMinutes] = block.startTime.split(':').map(Number);
     const [endHours, endMinutes] = block.endTime.split(':').map(Number);
-    const top = (startHours - startHour) * HOUR_HEIGHT + (startMinutes / 60) * HOUR_HEIGHT;
-    const duration = (endHours * 60 + endMinutes) - (startHours * 60 + startMinutes);
-    const height = (duration / 60) * HOUR_HEIGHT;
+    const top = getPositionForTime(startHours, startMinutes);
+    const height = getPositionForTime(endHours, endMinutes) - top;
     return { top, height: Math.max(height, 36) };
   };
 
@@ -321,9 +338,9 @@ export function CalendarGrid({
   const currentTimePosition = useMemo(() => {
     const { hours, minutes } = nowInTimezone(clinicTimezone);
     if (hours < startHour || hours >= endHour) return null;
-    return (hours - startHour) * HOUR_HEIGHT + (minutes / 60) * HOUR_HEIGHT;
+    return getPositionForTime(hours, minutes);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [startHour, endHour, clinicTimezone, tick]);
+  }, [startHour, endHour, businessStartHour, businessEndHour, clinicTimezone, tick]);
 
   const columnWidth = viewMode === 'day' ? 'min-w-full' : 'min-w-[70px]';
 
@@ -367,17 +384,27 @@ export function CalendarGrid({
           <div className="flex overflow-auto flex-1">
             {/* Time labels column */}
             <div className="w-20 flex-shrink-0 border-r bg-gray-50/50">
-              {Array.from({ length: endHour - startHour }, (_, i) => (
-                <div
-                  key={i}
-                  className="relative border-b border-gray-100"
-                  style={{ height: HOUR_HEIGHT }}
-                >
-                  <span className="absolute -top-2.5 right-3 text-xs font-medium text-gray-400 bg-gray-50/50 px-1">
-                    {`${(startHour + i).toString().padStart(2, '0')}:00`}
-                  </span>
-                </div>
-              ))}
+              {Array.from({ length: endHour - startHour }, (_, i) => {
+                const hour = startHour + i;
+                const offHour = isOffHour(hour);
+                const height = getHourHeight(hour);
+                return (
+                  <div
+                    key={i}
+                    className={cn("relative border-b border-gray-100", offHour && "bg-gray-50/80")}
+                    style={{ height }}
+                  >
+                    <span className={cn(
+                      "absolute right-3 px-1",
+                      offHour
+                        ? "-top-2 text-[10px] font-medium text-gray-300 bg-gray-50/80"
+                        : "-top-2.5 text-xs font-medium text-gray-400 bg-gray-50/50"
+                    )}>
+                      {`${hour.toString().padStart(2, '0')}:00`}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
 
             {/* Days columns */}
@@ -395,19 +422,21 @@ export function CalendarGrid({
                   )}
                 >
                   {/* Hour grid lines */}
-                  {Array.from({ length: endHour - startHour }, (_, i) => (
-                    <div
-                      key={i}
-                      className="border-b border-gray-100"
-                      style={{ height: HOUR_HEIGHT }}
-                    >
-                      {/* Half hour line */}
+                  {Array.from({ length: endHour - startHour }, (_, i) => {
+                    const height = getHourHeight(startHour + i);
+                    return (
                       <div
-                        className="border-b border-dashed border-gray-100"
-                        style={{ height: HOUR_HEIGHT / 2 }}
-                      />
-                    </div>
-                  ))}
+                        key={i}
+                        className="border-b border-gray-100"
+                        style={{ height }}
+                      >
+                        <div
+                          className="border-b border-dashed border-gray-100"
+                          style={{ height: height / 2 }}
+                        />
+                      </div>
+                    );
+                  })}
 
                   {/* Current time indicator */}
                   {showCurrentTime && (
@@ -423,9 +452,11 @@ export function CalendarGrid({
                   {/* Click areas for time slots */}
                   {timeSlots.map((time) => {
                     const [hours, minutes] = time.split(':').map(Number);
-                    const top = (hours - startHour) * HOUR_HEIGHT + (minutes / 60) * HOUR_HEIGHT;
+                    const top = getPositionForTime(hours, minutes);
+                    const slotHeight = getHourHeight(hours) / 2;
                     const slotKey = `${dateStr}-${time}`;
                     const isHovered = hoveredSlot === slotKey;
+                    const offHour = isOffHour(hours);
 
                     // Check if slot is occupied
                     const hasAppointment = dayAppts.some(apt => apt.time === time);
@@ -439,15 +470,15 @@ export function CalendarGrid({
                         key={time}
                         className={cn(
                           'absolute left-0 right-0 transition-all duration-150',
-                          !isOccupied && 'cursor-pointer hover:bg-blue-50/70',
-                          isHovered && !isOccupied && 'bg-blue-50/70'
+                          !isOccupied && !offHour && 'cursor-pointer hover:bg-blue-50/70',
+                          isHovered && !isOccupied && !offHour && 'bg-blue-50/70'
                         )}
-                        style={{ top, height: HOUR_HEIGHT / 2 }}
+                        style={{ top, height: slotHeight }}
                         onClick={() => !isOccupied && handleSlotClick(day, time)}
-                        onMouseEnter={() => setHoveredSlot(slotKey)}
+                        onMouseEnter={() => !offHour && setHoveredSlot(slotKey)}
                         onMouseLeave={() => setHoveredSlot(null)}
                       >
-                        {isHovered && !isOccupied && (
+                        {isHovered && !isOccupied && !offHour && (
                           <div className="absolute inset-0 flex items-center justify-center">
                             <div className="flex items-center gap-1.5 text-blue-500 text-xs font-medium bg-white/90 px-2 py-1 rounded-full shadow-sm border border-blue-100">
                               <Plus className="w-3 h-3" />

@@ -454,11 +454,11 @@ async def send_pix_payment_to_customer(
         # PRIORITY 2: Send raw PIX code as text message (fallback)
         if qr_code_text:
             message = (
-                f"💳 *Pagamento via PIX*\n\n"
+                f"*Pagamento via PIX*\n\n"
                 f"Valor: *{format_payment_amount(amount)}*\n\n"
                 f"Para pagar, copie o codigo PIX abaixo e cole no seu banco:\n\n"
                 f"```{qr_code_text}```\n\n"
-                f"⏰ O pagamento expira em 24 horas.\n\n"
+                f"O pagamento expira em 24 horas.\n\n"
                 f"Assim que o pagamento for confirmado, voce recebera {product_name} automaticamente!"
             )
 
@@ -795,11 +795,11 @@ async def send_manual_pix_instructions(phone: str, amount: int, pix_key: str) ->
         from src.utils.messaging import send_whatsapp_text
 
         message = (
-            "⚠️ *Pagamento via PIX*\n\n"
+            "*Pagamento via PIX*\n\n"
             f"Não consegui gerar o QR Code automático, mas você pode fazer o pagamento usando a chave PIX abaixo:\n\n"
             f"Valor: *{format_payment_amount(amount)}*\n\n"
             f"Chave PIX:\n`{pix_key}`\n\n"
-            f"Após o pagamento, envie o comprovante aqui que eu libero seu produto! 🙏"
+            "Após o pagamento, envie o comprovante aqui para confirmação."
         )
 
         result = await send_whatsapp_text(phone, message)

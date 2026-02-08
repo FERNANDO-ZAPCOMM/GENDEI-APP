@@ -85,6 +85,22 @@ export default function AppointmentsPage() {
   const clinicTimezone = clinic?.timezone || 'America/Sao_Paulo';
   const [selectedDate, setSelectedDate] = useState(() => todayInTimezone(clinicTimezone));
 
+  // Derive business hours from clinic openingHours (e.g. "Seg: 08:00-18:00, Ter: 09:00-17:00")
+  const { businessStart, businessEnd } = useMemo(() => {
+    const hoursStr = clinic?.openingHours || '';
+    const times = [...hoursStr.matchAll(/(\d{2}):(\d{2})-(\d{2}):(\d{2})/g)];
+    if (times.length === 0) return { businessStart: 7, businessEnd: 20 };
+    let earliest = 24;
+    let latest = 0;
+    for (const m of times) {
+      const open = parseInt(m[1], 10);
+      const close = parseInt(m[3], 10);
+      if (open < earliest) earliest = open;
+      if (close > latest) latest = close;
+    }
+    return { businessStart: earliest, businessEnd: latest };
+  }, [clinic?.openingHours]);
+
   // Get professional from URL query parameter
   const professionalFromUrl = searchParams.get('professional');
   const [selectedProfessional, setSelectedProfessional] = useState<string>(professionalFromUrl || 'all');
@@ -309,6 +325,8 @@ export default function AppointmentsPage() {
               professionals={professionals}
               selectedProfessional={selectedProfessional}
               clinicTimezone={clinicTimezone}
+              businessStartHour={businessStart}
+              businessEndHour={businessEnd}
               onAppointmentClick={handleAppointmentClick}
               onBlockTime={handleBlockTime}
               onRemoveBlock={handleRemoveBlock}
@@ -408,6 +426,8 @@ export default function AppointmentsPage() {
               professionals={professionals}
               selectedProfessional={selectedProfessional}
               clinicTimezone={clinicTimezone}
+              businessStartHour={businessStart}
+              businessEndHour={businessEnd}
               onAppointmentClick={handleAppointmentClick}
               onBlockTime={handleBlockTime}
               onRemoveBlock={handleRemoveBlock}

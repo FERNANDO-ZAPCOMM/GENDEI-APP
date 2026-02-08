@@ -521,7 +521,12 @@ async def send_payment_button(
                 "text": "Pagamento PIX"
             },
             "body": {
-                "text": f"*{product_name}*\n\n💳 Valor: *{amount_formatted}*\n\nClique no botão abaixo para abrir a página de pagamento PIX.\n\n⏰ O pagamento expira em 30 minutos."
+                "text": (
+                    f"*{product_name}*\n\n"
+                    f"Valor: *{amount_formatted}*\n\n"
+                    "Clique no botão abaixo para abrir a página de pagamento PIX.\n\n"
+                    "O pagamento expira em 30 minutos."
+                )
             },
             "footer": {
                 "text": "Pagamento seguro via PagSeguro"

@@ -336,7 +336,7 @@ class FlowsHandler:
         clinic_id: str,
         data: Dict[str, Any],
     ) -> Dict[str, Any]:
-        """User selected a specialty/professional - show payment type options."""
+        """User selected a specialty/professional - route to the correct next screen."""
 
         professional_id = data.get("especialidade")
         if not professional_id:
@@ -359,34 +359,68 @@ class FlowsHandler:
                 }
             }
 
-        # Get vertical config for specialty name + feature flags
+        # Get clinic + vertical config
         clinic = self.db.get_clinic(clinic_id) if self.db else None
         vertical_slug = getattr(clinic, 'vertical', '') if clinic else ''
         vc = get_vertical_config(vertical_slug)
+
+        payment_settings = getattr(clinic, 'payment_settings', {}) if clinic else {}
+        accepts_particular = bool(payment_settings.get("acceptsParticular", True))
+        accepts_convenio = bool(payment_settings.get("acceptsConvenio", False))
 
         # Professional is a dataclass, use attribute access
         specialty_id = getattr(professional, 'specialty', '') or ''
         specialty_display = get_specialty_name(vertical_slug, specialty_id)
         professional_name = getattr(professional, 'name', '') or getattr(professional, 'full_name', '') or ''
 
-        # Payment type options - only show convênio if vertical supports it
+        # Payment type options - shown only when both modes are enabled.
         tipos_pagamento = [
             {"id": "particular", "title": "Particular", "description": "Pagamento direto (PIX/Cartão)"},
         ]
-        if vc.features.has_convenio:
+        if vc.features.has_convenio and accepts_convenio:
             tipos_pagamento.insert(0,
                 {"id": "convenio", "title": "Convênio", "description": "Tenho plano de saúde"},
             )
 
+        base_data = {
+            "especialidade": professional_id,
+            "professional_id": professional_id,
+            "professional_name": professional_name,
+            "specialty_name": specialty_display,
+            "error_message": ""
+        }
+
+        # Match the deployed flow variant routing:
+        # - particular-only: ESPECIALIDADE -> DADOS_PACIENTE
+        # - convenio-only:   ESPECIALIDADE -> INFO_CONVENIO
+        # - both modes:      ESPECIALIDADE -> TIPO_ATENDIMENTO
+        if accepts_particular and not accepts_convenio:
+            return {
+                "screen": "DADOS_PACIENTE",
+                "data": {
+                    **base_data,
+                    "tipo_pagamento": "particular",
+                    "convenio_nome": ""
+                }
+            }
+
+        if accepts_convenio and not accepts_particular:
+            convenios = await self._get_clinic_convenios(clinic_id)
+            return {
+                "screen": "INFO_CONVENIO",
+                "data": {
+                    **base_data,
+                    "tipo_pagamento": "convenio",
+                    "convenios": convenios,
+                    "show_convenio_fields": True
+                }
+            }
+
         return {
             "screen": "TIPO_ATENDIMENTO",
             "data": {
-                "especialidade": professional_id,
-                "professional_id": professional_id,
-                "professional_name": professional_name,
-                "specialty_name": specialty_display,
-                "tipos_pagamento": tipos_pagamento,
-                "error_message": ""
+                **base_data,
+                "tipos_pagamento": tipos_pagamento
             }
         }
 

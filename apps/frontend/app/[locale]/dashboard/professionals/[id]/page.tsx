@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
 import { useClinic } from '@/hooks/use-clinic';
+import { useAuth } from '@/hooks/use-auth';
 import { useProfessional, useProfessionals } from '@/hooks/use-professionals';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -111,6 +112,7 @@ export default function ProfessionalEditPage() {
   const router = useRouter();
   const professionalId = params.id as string;
 
+  const { currentUser } = useAuth();
   const { currentClinic: clinic, isLoading: clinicLoading } = useClinic();
   const { data: professional, isLoading: professionalLoading } = useProfessional(
     clinic?.id || '',
@@ -259,7 +261,7 @@ export default function ProfessionalEditPage() {
     try {
       const downloadURL = await uploadFile({
         file,
-        creatorId: clinic.id,
+        creatorId: currentUser!.uid,
         onProgress: () => {},
       });
       setFormData(prev => ({ ...prev, photoUrl: downloadURL }));
