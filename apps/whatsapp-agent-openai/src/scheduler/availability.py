@@ -4,9 +4,20 @@
 import logging
 from datetime import datetime, timedelta, date
 from typing import List, Dict, Any, Optional, Tuple
+import re
 from .models import TimeSlot, Professional, Service
 
 logger = logging.getLogger(__name__)
+
+
+def _normalize_professional_ref(value: Any) -> str:
+    """Normalize IDs/names for tolerant matching."""
+    if value is None:
+        return ""
+    text = str(value).strip().lower()
+    text = re.sub(r"\b(dr|dra)\.?\b", "", text).strip()
+    text = re.sub(r"[^\w\s]", "", text)
+    return re.sub(r"\s+", " ", text).strip()
 
 
 def _parse_time_components(raw_time: Any) -> Optional[Tuple[int, int]]:
@@ -99,10 +110,39 @@ def get_available_slots(
         # Get professionals for this clinic
         professionals = db.get_clinic_professionals(clinic_id)
         if professional_id:
-            professionals = [p for p in professionals if p.id == professional_id]
+            # Primary match by exact ID
+            exact = [p for p in professionals if p.id == professional_id]
+            if exact:
+                professionals = exact
+            else:
+                # Tolerant fallback: agent/tool may pass professional name instead of ID
+                ref = _normalize_professional_ref(professional_id)
+                by_name = [
+                    p for p in professionals
+                    if ref
+                    and (
+                        _normalize_professional_ref(getattr(p, "id", "")) == ref
+                        or _normalize_professional_ref(getattr(p, "name", "")) == ref
+                        or _normalize_professional_ref(getattr(p, "full_name", "")) == ref
+                    )
+                ]
+                if by_name:
+                    professionals = by_name
+                    logger.warning(
+                        "Resolved professional reference by name for clinic %s: input=%r -> id=%s",
+                        clinic_id,
+                        professional_id,
+                        by_name[0].id,
+                    )
+                else:
+                    professionals = []
 
         if not professionals:
-            logger.warning(f"No professionals found for clinic {clinic_id}")
+            logger.warning(
+                "No professionals found for clinic %s (filter=%r)",
+                clinic_id,
+                professional_id,
+            )
             return []
 
         # Get existing appointments to exclude booked slots

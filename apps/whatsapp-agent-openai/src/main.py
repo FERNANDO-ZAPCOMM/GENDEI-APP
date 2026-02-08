@@ -3463,11 +3463,20 @@ async def handle_scheduling_intent(
     whatsapp_config = clinic.whatsapp_config or {}
     convenio_flow_id = whatsapp_config.get('patientInfoConvenioFlowId', '')
     particular_flow_id = whatsapp_config.get('patientInfoParticularFlowId', '')
+    legacy_patient_info_flow_id = whatsapp_config.get('patientInfoFlowId', '')
+    booking_flow_id = whatsapp_config.get('bookingFlowId', '')
 
     # Check if both new flows are configured
     has_new_flows = bool(convenio_flow_id and particular_flow_id)
+    has_legacy_flow = bool(legacy_patient_info_flow_id)
 
-    logger.info(f"🔍 Flow IDs for clinic {clinic_id}: convenio={convenio_flow_id or 'N/A'}, particular={particular_flow_id or 'N/A'}")
+    logger.info(
+        f"🔍 Flow IDs for clinic {clinic_id}: "
+        f"convenio={convenio_flow_id or 'N/A'}, "
+        f"particular={particular_flow_id or 'N/A'}, "
+        f"legacy={legacy_patient_info_flow_id or 'N/A'}, "
+        f"booking={booking_flow_id or 'N/A'}"
+    )
     logger.info(f"🔍 Clinic whatsapp_config: {whatsapp_config}")
 
     if has_new_flows and professionals:
@@ -3512,6 +3521,54 @@ async def handle_scheduling_intent(
         )
         logger.info(f"✅ Payment type buttons sent to {phone}")
         return
+
+    # Backward-compatible fallback:
+    # if clinic has only legacy patient info flow, send it directly.
+    if has_legacy_flow and professionals:
+        logger.info(f"📱 Using legacy patient info flow for scheduling (ID: {legacy_patient_info_flow_id})")
+
+        especialidades = []
+        for prof in professionals:
+            specialties = getattr(prof, 'specialties', []) or []
+            specialty = specialties[0] if specialties else (getattr(prof, 'specialty', '') or '')
+            specialty_name = ALL_SPECIALTIES.get(specialty, specialty) if specialty else "Especialista"
+            prof_name = (prof.full_name or prof.name or "")[:72]
+            especialidades.append({
+                "id": prof.id,
+                "title": specialty_name[:24],
+                "description": prof_name
+            })
+
+        flow_token = generate_flow_token(clinic_id, phone)
+        initial_data = {
+            "especialidades": especialidades[:10],
+            "error_message": "",
+        }
+
+        success = await send_whatsapp_flow(
+            phone_number_id=phone_number_id,
+            to=phone,
+            flow_id=legacy_patient_info_flow_id,
+            flow_token=flow_token,
+            flow_cta="Agendar Consulta",
+            header_text="Seus Dados",
+            body_text=f"Preencha seus dados para agendar sua consulta na *{clinic.name}*",
+            access_token=access_token,
+            flow_action="navigate",
+            initial_screen="ESPECIALIDADE",
+            initial_data=initial_data,
+        )
+
+        if success and db:
+            db.save_conversation_state(clinic_id, phone, {
+                "state": "in_patient_info_flow",
+                "flow_token": flow_token,
+                "clinic_id": clinic_id,
+            })
+            logger.info(f"✅ Legacy patient info flow sent to {phone}")
+            return
+
+        logger.warning("⚠️ Legacy flow send failed, falling back to agent scheduling")
 
     if not professionals:
         await send_whatsapp_message(
