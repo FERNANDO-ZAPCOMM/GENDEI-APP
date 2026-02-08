@@ -2,6 +2,8 @@ import { useEffect, useState, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import './index.css'
 
+const CURRENT_YEAR = new Date().getFullYear()
+
 // Icons as SVG components
 const Icons = {
   ArrowRight: () => (
@@ -76,16 +78,6 @@ const Icons = {
       <path d="M17 19h4"></path>
     </svg>
   ),
-  Dog: () => (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M10 5.172C10 3.782 8.423 2.679 6.5 3c-2.823.47-4.113 6.006-4 7 .08.703 1.725 1.722 3.656 1 1.261-.472 1.96-1.45 2.344-2.5"></path>
-      <path d="M14.267 5.172c0-1.39 1.577-2.493 3.5-2.172 2.823.47 4.113 6.006 4 7-.08.703-1.725 1.722-3.656 1-1.261-.472-1.855-1.45-2.239-2.5"></path>
-      <path d="M8 14v.5"></path>
-      <path d="M16 14v.5"></path>
-      <path d="M11.25 16.25h1.5L12 17l-.75-.75Z"></path>
-      <path d="M4.42 11.247A13.152 13.152 0 0 0 4 14.556C4 18.728 7.582 21 12 21s8-2.272 8-6.444c0-1.061-.162-2.2-.493-3.309m-9.243-6.082A8.801 8.801 0 0 1 12 5c.78 0 1.5.108 2.161.306"></path>
-    </svg>
-  ),
 }
 
 // Navigation Component
@@ -94,9 +86,10 @@ function Navigation() {
     <nav className="nav">
       <div className="container">
         <div className="nav-inner">
-          <a href="#" className="nav-logo logo-font">gendei</a>
+          <a href="#top" className="nav-logo logo-font">gendei</a>
           <div className="nav-links">
-            <a href="#clinicas" className="nav-link">O Agente</a>
+            <a href="#clinicas" className="nav-link">Agendamento IA</a>
+            <a href="#dominios" className="nav-link">Domínios</a>
             <a href="#como-funciona" className="nav-link">Como funciona</a>
             <a href="#app" className="nav-link">App</a>
             <a href="#preco" className="nav-link">Preço</a>
@@ -141,7 +134,7 @@ function IPhoneMockup() {
   useEffect(() => {
     const loopTimer = setTimeout(() => {
       if (chatRef.current) {
-        chatRef.current.scrollTo({ top: 0, behavior: 'instant' })
+        chatRef.current.scrollTo({ top: 0, behavior: 'auto' })
       }
       setAnimationKey(prev => prev + 1)
     }, totalAnimationTime)
@@ -253,7 +246,7 @@ function HeroSection() {
               <span className="hero-title-sans">Reduza no-show de 20% para 5% e recupere receita perdida com WhatsApp</span>
             </h1>
             <p className="hero-subtitle">
-              Nosso Agente de IA cuida de todo o agendamento e cobra o sinal via PIX, gerando compromisso e reduzindo o no-show.
+              A Gendei automatiza o agendamento no WhatsApp, confirma presença com cobrança de sinal via PIX e reduz faltas com lembretes inteligentes.
             </p>
             <div className="hero-features">
               <div className="hero-feature">
@@ -261,21 +254,21 @@ function HeroSection() {
                   <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
                   <path d="m9 11 3 3L22 4"></path>
                 </svg>
-                <span>Sinal via PIX</span>
+                <span>Confirmação com sinal via PIX</span>
               </div>
               <div className="hero-feature">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
                   <path d="m9 11 3 3L22 4"></path>
                 </svg>
-                <span>Lembretes Automáticos</span>
+                <span>Lembretes automáticos</span>
               </div>
               <div className="hero-feature">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
                   <path d="m9 11 3 3L22 4"></path>
                 </svg>
-                <span>IA entende contexto e áudio</span>
+                <span>Fluxo natural para o paciente</span>
               </div>
             </div>
             <a href="https://go.gendei.app/pt-BR/signup" className="btn btn-primary btn-lg">
@@ -294,41 +287,29 @@ function HeroSection() {
 
 // How the Agent Works Section - Expandable Cards
 function ClinicsSection() {
-  const [activeCard, setActiveCard] = useState(null)
-
   const steps = [
     {
       id: 'agendamento',
       title: 'Agendamento em menos de 2 minutos',
-      description: 'O paciente agenda direto no WhatsApp usando um mini app nativo no chat. Sem sair da conversa, escolhe especialidade, profissional, data e horário, e informa convênio. Tudo em uma experiência fluida e rápida.',
+      description: 'O paciente agenda direto no WhatsApp, escolhe especialidade, profissional, data e horário em poucos passos. Tudo sem tirar a equipe da recepção para tarefas operacionais.',
       icon: <Icons.MessageCircle />,
       image: '/agendamento.png',
     },
     {
       id: 'pagamento',
       title: 'Sinal via PIX no WhatsApp que elimina no-show',
-      description: 'Após escolher o horário, o paciente paga o sinal via PIX dentro do WhatsApp (geralmente 10-15% do valor da consulta). Esse compromisso reduz faltas - de 20% para 5%. Pagamento confirmado automaticamente.',
+      description: 'Após escolher o horário, o paciente recebe a cobrança de sinal via PIX no próprio WhatsApp. A confirmação é automática e gera mais compromisso com o comparecimento.',
       icon: <Icons.CreditCard />,
       image: '/pagamento.png',
     },
     {
       id: 'lembretes',
       title: 'Lembretes automáticos inteligentes',
-      description: 'O agente envia lembretes 24h e 2h antes. O paciente confirma ou reagenda com um clique. Se precisar, há handover humano, e a clínica acompanha relatório básico de no-show e conversões.',
+      description: 'A plataforma envia lembretes 24h e 2h antes da consulta. O paciente confirma ou solicita remarcação pelo chat, e a clínica mantém controle completo no painel.',
       icon: <Icons.Bell />,
       image: '/lembretes.png',
     },
   ]
-
-  const handleCardClick = (index) => {
-    setActiveCard(activeCard === index ? null : index)
-  }
-
-  const getCardPositionClass = (index) => {
-    if (index === 1) return 'card-middle'
-    if (index === 2) return 'card-right'
-    return 'card-left'
-  }
 
   return (
     <section id="clinicas" className="section section-alt">
@@ -339,52 +320,93 @@ function ClinicsSection() {
             <span className="section-title-sans">como o Agente de IA atende no WhatsApp</span>
           </h2>
           <p className="section-subtitle section-subtitle-large">
-            Um mini app dentro do WhatsApp guia todo o agendamento: entende a intenção do paciente, coleta dados em formulários, mostra horários disponíveis, cobra o sinal via PIX e envia lembretes 24h/2h. Tudo automático, sem precisar da recepção.
+            Um fluxo guiado no WhatsApp conduz toda a jornada: triagem inicial, escolha de horários, confirmação de sinal e lembretes. A clínica ganha previsibilidade sem aumentar o time.
           </p>
         </div>
-
-        <div className={`sell-cards-container ${activeCard !== null ? 'has-active' : ''}`}>
-          <div className="sell-cards-grid">
-            {steps.map((step, index) => (
-              <div
-                key={step.id}
-                className={`sell-card ${getCardPositionClass(index)} ${activeCard === index ? 'active' : ''} ${activeCard !== null && activeCard !== index ? 'hidden' : ''}`}
-                onClick={() => handleCardClick(index)}
-              >
-                <div className="sell-card-image">
-                  {step.image ? (
-                    <img src={step.image} alt={step.title} />
-                  ) : (
-                    <div className="sell-card-placeholder">
-                      {step.icon}
-                    </div>
-                  )}
-                  <div className="sell-card-overlay">
-                    <span className="sell-card-label">{step.title}</span>
-                  </div>
-                </div>
-                {activeCard === index && (
-                  <div className="sell-expanded-content">
-                    <h3>{step.title}</h3>
-                    <p>{step.description}</p>
-                    <button
-                      className="sell-expanded-back"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        setActiveCard(null)
-                      }}
-                    >
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <line x1="19" y1="12" x2="5" y2="12"></line>
-                        <polyline points="12 19 5 12 12 5"></polyline>
-                      </svg>
-                      Ver outros passos
-                    </button>
+        <div className="flow-grid">
+          {steps.map((step) => (
+            <article key={step.id} className="flow-card">
+              <div className="flow-card-image">
+                {step.image ? (
+                  <img src={step.image} alt={step.title} />
+                ) : (
+                  <div className="flow-card-placeholder">
+                    {step.icon}
                   </div>
                 )}
               </div>
-            ))}
-          </div>
+              <div className="flow-card-content">
+                <h3>{step.title}</h3>
+                <p>{step.description}</p>
+              </div>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function DomainsSection() {
+  const domains = [
+    {
+      id: 'med',
+      icon: <Icons.Stethoscope />,
+      title: 'Clínica Médica',
+      subtitle: 'Consultas e retorno com múltiplos profissionais',
+    },
+    {
+      id: 'dental',
+      icon: <Icons.Sparkles />,
+      title: 'Odontologia',
+      subtitle: 'Agenda por procedimento, triagem e confirmações',
+    },
+    {
+      id: 'psi',
+      icon: <Icons.Heart />,
+      title: 'Psicologia',
+      subtitle: 'Sessões recorrentes com gestão de remarcações',
+    },
+    {
+      id: 'nutri',
+      icon: <Icons.Users />,
+      title: 'Nutrição',
+      subtitle: 'Acompanhamento contínuo e lembretes inteligentes',
+    },
+    {
+      id: 'fisio',
+      icon: <Icons.Clock />,
+      title: 'Fisioterapia',
+      subtitle: 'Agenda por sessão e controle de comparecimento',
+    },
+    {
+      id: 'multi',
+      icon: <Icons.Calendar />,
+      title: 'Clínicas Multiespecialidade',
+      subtitle: 'Múltiplas agendas e profissionais no mesmo fluxo',
+    },
+  ]
+
+  return (
+    <section id="dominios" className="section">
+      <div className="container">
+        <div className="section-header">
+          <span className="section-number">02</span>
+          <h2 className="section-title">
+            <span className="section-title-sans">domínios e verticais atendidos</span>
+          </h2>
+          <p className="section-subtitle section-subtitle-large">
+            A plataforma é configurável por vertical e atende operações com agenda real, confirmação de presença e redução consistente de faltas.
+          </p>
+        </div>
+        <div className="domains-grid">
+          {domains.map((domain) => (
+            <article key={domain.id} className="domain-card">
+              <div className="domain-icon">{domain.icon}</div>
+              <h3>{domain.title}</h3>
+              <p>{domain.subtitle}</p>
+            </article>
+          ))}
         </div>
       </div>
     </section>
@@ -398,7 +420,7 @@ function HowSection() {
   const steps = [
     {
       number: '1',
-      title: 'Configure sua Clínica e especialidades',
+      title: 'Configure clínica, serviços e especialidades',
     },
     {
       number: '2',
@@ -406,11 +428,11 @@ function HowSection() {
     },
     {
       number: '3',
-      title: 'Conecte WhatsApp e templates',
+      title: 'Conecte o WhatsApp da clínica',
     },
     {
       number: '4',
-      title: 'Ative o agente e comece a agendar',
+      title: 'Ative o agente e acompanhe no painel',
     },
   ]
 
@@ -425,10 +447,13 @@ function HowSection() {
     <section id="como-funciona" className="section">
       <div className="container">
         <div className="section-header">
-          <span className="section-number">02</span>
+          <span className="section-number">03</span>
           <h2 className="section-title">
             <span className="section-title-sans">comece a agendar em 10 minutos</span>
           </h2>
+          <p className="section-subtitle">
+            Onboarding simples, sem projeto longo de implantação.
+          </p>
         </div>
         <div className="how-steps">
           {steps.map((step, index) => (
@@ -456,7 +481,7 @@ function AppScreenshotsSection() {
       label: 'Agenda',
       image: '/agenda.png',
       description:
-        'Visualize agendamentos por dia, semana ou mês. Acompanhe confirmações e comparecimento para reduzir no-show.',
+        'Visualize agendamentos por dia, semana ou mês. Acompanhe confirmações e comparecimento com visão clara da operação.',
       features: ['Calendário visual', 'Confirmações em tempo real', 'Comparecimento por profissional'],
     },
     {
@@ -464,15 +489,15 @@ function AppScreenshotsSection() {
       label: 'Conversas',
       image: '/conversas.png',
       description:
-        'Acompanhe conversas com pacientes, intervenção humana quando necessário e alertas para não perder oportunidades.',
-      features: ['Histórico completo', 'Handover humano', 'Alertas de follow-up'],
+        'Acompanhe conversas com pacientes, assuma o atendimento quando necessário e não perca oportunidades de confirmação.',
+      features: ['Histórico completo', 'Atendimento humano quando necessário', 'Alertas de follow-up'],
     },
     {
       id: 'pacientes',
       label: 'Pacientes',
       image: '/pacientes.png',
       description:
-        'Base completa dos pacientes com histórico, contato e convênio. Facilita reagendamentos e melhora a taxa de comparecimento.',
+        'Base de pacientes com histórico, contato e convênio para facilitar reagendamentos e melhorar a experiência de atendimento.',
       features: ['Cadastro automático', 'Histórico de consultas', 'Contato e convênio'],
     },
     {
@@ -480,7 +505,7 @@ function AppScreenshotsSection() {
       label: 'Relatórios',
       image: '/relatorios.png',
       description:
-        'Métricas essenciais: no-show por profissional, taxa de comparecimento e economia gerada. Decisões baseadas em dados.',
+        'Métricas essenciais: no-show por profissional, taxa de comparecimento e evolução operacional para decisões baseadas em dados.',
       features: ['No-show por profissional', 'Taxa de comparecimento', 'Economia gerada'],
     },
   ]
@@ -489,10 +514,13 @@ function AppScreenshotsSection() {
     <section id="app" className="app-screenshots-section">
       <div className="container">
         <div className="section-header">
-          <span className="section-number">03</span>
+          <span className="section-number">04</span>
           <h2 className="section-title">
             <span className="section-title-sans">o app em ação:</span>
           </h2>
+          <p className="section-subtitle">
+            Tudo que sua equipe precisa para operar com controle e velocidade.
+          </p>
         </div>
 
         <div className="app-tabs-nav">
@@ -550,32 +578,32 @@ function BenefitsSection() {
     {
       icon: <Icons.TrendingDown />,
       title: 'Recupere receita perdida',
-      description: 'Sinal via PIX + lembretes reduzem no-show e recuperam consultas que seriam perdidas.',
+      description: 'Sinal via PIX e lembretes reduzem faltas e recuperam receita que seria perdida com horários vagos.',
     },
     {
       icon: <Icons.Clock />,
       title: 'Atendimento mais rápido no WhatsApp',
-      description: 'Respostas em segundos, com agenda e confirmação sem fricção.',
+      description: 'Respostas rápidas com jornada de agendamento clara para o paciente.',
     },
     {
       icon: <Icons.CreditCard />,
       title: 'Sinal Automático via PIX',
-      description: 'Cobra o sinal via PIX dentro do WhatsApp para confirmar o agendamento. Sem trabalho manual.',
+      description: 'Cobrança de sinal via PIX no WhatsApp para confirmar o agendamento sem processo manual.',
     },
     {
       icon: <Icons.Bell />,
       title: 'Lembretes Inteligentes',
-      description: 'Lembretes 24h e 2h antes da consulta. Paciente confirma ou reagenda pelo WhatsApp.',
+      description: 'Lembretes 24h e 2h antes da consulta, com confirmação ou remarcação pelo próprio chat.',
     },
     {
       icon: <Icons.Users />,
       title: 'Menos caos na recepção',
-      description: 'Equipe foca no atendimento presencial enquanto o WhatsApp agenda sozinho.',
+      description: 'A equipe foca no atendimento presencial enquanto o fluxo digital resolve a parte repetitiva.',
     },
     {
       icon: <Icons.Sparkles />,
       title: 'Conversas Naturais',
-      description: 'IA entende histórico e áudio, responde com contexto e guia o paciente até o agendamento.',
+      description: 'A interação respeita contexto da conversa e conduz o paciente até a confirmação.',
     },
   ]
 
@@ -583,7 +611,7 @@ function BenefitsSection() {
     <section className="section">
       <div className="container">
         <div className="section-header">
-          <span className="section-number">04</span>
+          <span className="section-number">05</span>
           <h2 className="section-title">
             <span className="section-title-sans">por que clínicas escolhem Gendei</span>
           </h2>
@@ -607,10 +635,10 @@ function BenefitsSection() {
 // Stats Section
 function StatsSection() {
   const stats = [
-    { value: '48%', label: 'gestores citam no-show' },
-    { value: '290k', label: 'clínicas no Brasil' },
-    { value: '20-30%', label: 'média de no-show' },
-    { value: 'R$35k', label: 'recuperação (exemplo)' },
+    { value: '24/7', label: 'atendimento no WhatsApp' },
+    { value: '2h + 24h', label: 'lembretes automáticos' },
+    { value: 'PIX', label: 'confirmação com sinal' },
+    { value: '1 painel', label: 'controle da operação' },
   ]
 
   return (
@@ -646,12 +674,12 @@ function PricingSection() {
     <section id="preco" className="pricing-section">
       <div className="container">
         <div className="section-header">
-          <span className="section-number">05</span>
+          <span className="section-number">06</span>
           <h2 className="section-title">
-            <span className="section-title-sans">preço simples. ROI garantido.</span>
+            <span className="section-title-sans">preço simples para operação profissional</span>
           </h2>
           <p className="section-subtitle section-subtitle-large">
-            Exemplo de ROI: 60 consultas/dia, ticket médio R$ 180, no-show 20% = R$ 35.640/mês perdidos. Com 5% de no-show, a recuperação passa de R$ 23.000/mês.
+            Valor mensal fixo para padronizar o atendimento via WhatsApp, reduzir no-show e escalar agendamentos sem aumentar custo operacional da recepção.
           </p>
         </div>
 
@@ -666,7 +694,7 @@ function PricingSection() {
             </div>
 
             <p className="pricing-explanation">
-              Valor fixo mensal que se paga com poucas consultas recuperadas. O ROI cresce conforme o volume da clínica. Sem taxa por agendamento, sem surpresas.
+              Um plano direto: sem cobrança por mensagem e sem taxa por agendamento. Previsibilidade para clínicas que querem operar com processo, não improviso.
             </p>
 
             <ul className="pricing-features-glass">
@@ -701,22 +729,24 @@ function Footer() {
       <div className="container">
         <div className="footer-inner">
           <div className="footer-brand">
-            <a href="#" className="nav-logo logo-font">gendei</a>
+            <a href="#top" className="nav-logo logo-font">gendei</a>
+            <p>Agendamento inteligente via WhatsApp para clínicas que querem reduzir no-show e aumentar eficiência operacional.</p>
           </div>
           <div className="footer-column">
             <h4>Produto</h4>
             <ul>
-              <li><a href="#clinicas">O Agente</a></li>
+              <li><a href="#clinicas">Agendamento IA</a></li>
+              <li><a href="#dominios">Domínios</a></li>
               <li><a href="#como-funciona">Configuração</a></li>
               <li><a href="#app">App</a></li>
               <li><a href="#preco">Preço</a></li>
             </ul>
           </div>
           <div className="footer-column">
-            <h4>Recursos</h4>
+            <h4>Acesso</h4>
             <ul>
-              <li><a href="#">Blog</a></li>
-              <li><a href="#">Central de Ajuda</a></li>
+              <li><a href="https://go.gendei.app/pt-BR/signin">Entrar</a></li>
+              <li><a href="https://go.gendei.app/pt-BR/signup">Criar conta</a></li>
             </ul>
           </div>
           <div className="footer-column">
@@ -728,7 +758,7 @@ function Footer() {
           </div>
         </div>
         <div className="footer-bottom">
-          <p>&copy; 2025 Gendei. Todos os direitos reservados.</p>
+          <p>&copy; {CURRENT_YEAR} Gendei. Todos os direitos reservados.</p>
         </div>
       </div>
     </footer>
@@ -759,10 +789,11 @@ function App() {
   }, [])
 
   return (
-    <div className="app">
+    <div className="app" id="top">
       <Navigation />
       <HeroSection />
       <ClinicsSection />
+      <DomainsSection />
       <HowSection />
       <AppScreenshotsSection />
       <BenefitsSection />

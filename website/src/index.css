@@ -33,6 +33,7 @@
 
   --font-logo: 'Borel', cursive;
   --font-body: 'Urbanist', system-ui, sans-serif;
+  --font-sans: 'Urbanist', system-ui, sans-serif;
   --font-serif: 'Georgia', 'Times New Roman', serif;
 
   --container-max: 1200px;
@@ -72,7 +73,7 @@ body::before {
   width: 100%;
   height: 100%;
   pointer-events: none;
-  opacity: 0.12;
+  opacity: 0.03;
   z-index: 9999;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
 }
@@ -768,6 +769,124 @@ a.nav-logo,
   margin-left: auto;
   margin-right: auto;
   color: var(--foreground);
+}
+
+/* ============================================
+   Workflow Cards (Professional, less visual noise)
+   ============================================ */
+.flow-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+}
+
+.flow-card {
+  border: 1px solid var(--border);
+  background: var(--card);
+  overflow: hidden;
+}
+
+.flow-card-image {
+  height: 220px;
+  background: #f8fafc;
+}
+
+.flow-card-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.flow-card-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  background: linear-gradient(135deg, #0f172a 0%, #0369a1 100%);
+}
+
+.flow-card-placeholder svg {
+  width: 42px;
+  height: 42px;
+}
+
+.flow-card-content {
+  padding: 24px;
+}
+
+.flow-card-content h3 {
+  font-size: 22px;
+  margin-bottom: 12px;
+  color: var(--foreground);
+}
+
+.flow-card-content p {
+  font-size: 16px;
+  color: var(--muted-foreground);
+  line-height: 1.6;
+}
+
+/* ============================================
+   Domains Section
+   ============================================ */
+.domains-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.domain-card {
+  border: 1px solid var(--border);
+  background: #fbfdff;
+  padding: 26px;
+}
+
+.domain-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: #0f172a;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+
+.domain-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.domain-card h3 {
+  font-size: 19px;
+  margin-bottom: 8px;
+}
+
+.domain-card p {
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--muted-foreground);
+}
+
+@media (max-width: 1024px) {
+  .flow-grid,
+  .domains-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .flow-grid,
+  .domains-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .flow-card-image {
+    height: 200px;
+  }
 }
 
 /* ============================================

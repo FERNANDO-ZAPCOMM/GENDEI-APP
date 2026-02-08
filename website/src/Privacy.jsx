@@ -1,6 +1,8 @@
 import { Link } from 'react-router-dom'
 import './index.css'
 
+const CURRENT_YEAR = new Date().getFullYear()
+
 function Privacy() {
   return (
     <div className="legal-page">
@@ -10,7 +12,7 @@ function Privacy() {
             <Link to="/" className="nav-logo logo-font">gendei</Link>
             <div className="nav-cta">
               <a href="https://go.gendei.app/pt-BR/signup" className="btn btn-primary">
-                COMECAR AGORA
+                COMEÇAR AGORA
               </a>
             </div>
           </div>
@@ -19,113 +21,112 @@ function Privacy() {
 
       <main className="legal-content">
         <div className="container">
-          <h1>Politica de Privacidade</h1>
-          <p className="legal-updated">Ultima atualizacao: Janeiro de 2025</p>
+          <h1>Política de Privacidade</h1>
+          <p className="legal-updated">Última atualização: fevereiro de 2026</p>
 
           <section>
-            <h2>1. Introducao</h2>
+            <h2>1. Introdução</h2>
             <p>
-              A Gendei esta comprometida em proteger sua privacidade. Esta Politica de Privacidade explica
-              como coletamos, usamos e protegemos suas informacoes pessoais quando voce utiliza nossa plataforma.
+              A Gendei está comprometida com a proteção de dados pessoais.
+              Esta Política explica como coletamos, utilizamos, armazenamos e protegemos informações quando você utiliza nossa plataforma.
             </p>
           </section>
 
           <section>
-            <h2>2. Informacoes que Coletamos</h2>
-            <h3>2.1 Informacoes de Cadastro</h3>
+            <h2>2. Dados que Coletamos</h2>
+            <h3>2.1 Dados de Cadastro</h3>
             <ul>
-              <li>Nome e dados de contato</li>
-              <li>Informacoes da clinica (nome, endereco, CNPJ)</li>
-              <li>Dados de profissionais (nome, especialidade, CRM)</li>
+              <li>Nome, e-mail, telefone e dados de acesso</li>
+              <li>Informações da clínica (nome, endereço, CNPJ, dados operacionais)</li>
+              <li>Dados de profissionais cadastrados na plataforma</li>
             </ul>
 
-            <h3>2.2 Informacoes de Pacientes</h3>
+            <h3>2.2 Dados de Pacientes Inseridos pela Clínica</h3>
             <ul>
               <li>Nome e telefone</li>
-              <li>Historico de agendamentos</li>
-              <li>Dados de convenio (quando aplicavel)</li>
+              <li>Histórico de agendamentos e interações</li>
+              <li>Dados de convênio e pagamento, quando aplicável</li>
             </ul>
 
-            <h3>2.3 Informacoes de Uso</h3>
+            <h3>2.3 Dados de Uso e Operação</h3>
             <ul>
-              <li>Logs de acesso a plataforma</li>
-              <li>Metricas de uso do servico</li>
-              <li>Historico de conversas com o agente de IA</li>
+              <li>Logs técnicos de acesso e segurança</li>
+              <li>Métricas de uso da plataforma</li>
+              <li>Histórico de conversas para execução do serviço</li>
             </ul>
           </section>
 
           <section>
-            <h2>3. Como Usamos suas Informacoes</h2>
-            <p>Utilizamos suas informacoes para:</p>
+            <h2>3. Como Utilizamos os Dados</h2>
+            <p>Utilizamos os dados para:</p>
             <ul>
-              <li>Fornecer e melhorar nossos servicos</li>
+              <li>Fornecer e aprimorar os serviços contratados</li>
               <li>Processar agendamentos e pagamentos</li>
-              <li>Enviar lembretes e notificacoes</li>
-              <li>Analisar o uso da plataforma</li>
-              <li>Cumprir obrigacoes legais</li>
+              <li>Enviar lembretes e notificações</li>
+              <li>Gerar relatórios operacionais</li>
+              <li>Cumprir obrigações legais e regulatórias</li>
             </ul>
           </section>
 
           <section>
             <h2>4. Compartilhamento de Dados</h2>
             <p>
-              Nao vendemos suas informacoes pessoais. Podemos compartilhar dados com:
+              Não vendemos dados pessoais. O compartilhamento pode ocorrer apenas quando necessário para execução dos serviços, por exemplo:
             </p>
             <ul>
-              <li>Provedores de servicos (processamento de pagamentos, hospedagem)</li>
-              <li>Autoridades quando exigido por lei</li>
-              <li>Parceiros tecnologicos (WhatsApp Business API, integracao PIX)</li>
+              <li>Provedores de infraestrutura, mensageria e pagamento</li>
+              <li>Parceiros tecnológicos para integração com APIs externas</li>
+              <li>Autoridades públicas, quando houver obrigação legal</li>
             </ul>
           </section>
 
           <section>
-            <h2>5. Seguranca dos Dados</h2>
+            <h2>5. Segurança dos Dados</h2>
             <p>
-              Implementamos medidas de seguranca tecnicas e organizacionais para proteger suas informacoes,
-              incluindo criptografia, controle de acesso e monitoramento de seguranca.
+              Aplicamos medidas técnicas e administrativas de segurança, como controle de acesso, monitoramento, segregação de ambientes e boas práticas de proteção de dados.
             </p>
           </section>
 
           <section>
             <h2>6. Seus Direitos</h2>
-            <p>Conforme a LGPD, voce tem direito a:</p>
+            <p>Nos termos da LGPD, você pode solicitar:</p>
             <ul>
-              <li>Acessar seus dados pessoais</li>
-              <li>Corrigir dados incompletos ou inexatos</li>
-              <li>Solicitar a exclusao de seus dados</li>
-              <li>Portar seus dados para outro servico</li>
-              <li>Revogar consentimento</li>
+              <li>Confirmação do tratamento e acesso aos dados</li>
+              <li>Correção de dados incompletos, inexatos ou desatualizados</li>
+              <li>Anonimização, bloqueio ou eliminação, quando cabível</li>
+              <li>Portabilidade, quando aplicável</li>
+              <li>Informações sobre compartilhamento e revogação de consentimento</li>
             </ul>
           </section>
 
           <section>
-            <h2>7. Retencao de Dados</h2>
+            <h2>7. Retenção de Dados</h2>
             <p>
-              Mantemos seus dados pelo tempo necessario para fornecer nossos servicos e cumprir obrigacoes
-              legais. Apos o encerramento da conta, dados podem ser retidos conforme exigencias regulatorias.
+              Mantemos os dados pelo período necessário para prestação dos serviços e cumprimento de obrigações legais.
+              Após encerramento da conta, determinados dados podem ser mantidos pelos prazos exigidos em lei.
             </p>
           </section>
 
           <section>
             <h2>8. Cookies</h2>
             <p>
-              Utilizamos cookies para melhorar sua experiencia na plataforma. Voce pode configurar
-              seu navegador para recusar cookies, mas isso pode afetar a funcionalidade do servico.
+              Utilizamos cookies e tecnologias similares para melhorar a experiência de navegação, segurança e desempenho.
+              Você pode ajustar preferências no navegador, observando que isso pode impactar funcionalidades.
             </p>
           </section>
 
           <section>
-            <h2>9. Alteracoes nesta Politica</h2>
+            <h2>9. Alterações desta Política</h2>
             <p>
-              Podemos atualizar esta politica periodicamente. Notificaremos sobre alteracoes significativas
-              atraves de nossos canais de comunicacao.
+              Esta Política pode ser atualizada periodicamente.
+              Em caso de alterações relevantes, comunicaremos pelos canais oficiais.
             </p>
           </section>
 
           <section>
             <h2>10. Contato</h2>
             <p>
-              Para questoes sobre privacidade ou exercer seus direitos, entre em contato:
+              Para dúvidas sobre privacidade ou exercício de direitos relacionados a dados pessoais:
               privacidade@gendei.com
             </p>
           </section>
@@ -134,7 +135,7 @@ function Privacy() {
 
       <footer className="legal-footer">
         <div className="container">
-          <p>&copy; 2025 Gendei. Todos os direitos reservados.</p>
+          <p>&copy; {CURRENT_YEAR} Gendei. Todos os direitos reservados.</p>
           <div className="legal-footer-links">
             <Link to="/terms">Termos de Uso</Link>
             <Link to="/privacy">Privacidade</Link>

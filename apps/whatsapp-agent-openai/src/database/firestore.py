@@ -101,9 +101,10 @@ class GendeiDatabase:
     def get_clinic_professionals(self, clinic_id: str) -> List[Professional]:
         """Get all professionals for a clinic"""
         try:
-            docs = self.db.collection(CLINICS).document(clinic_id).collection(
+            professionals_ref = self.db.collection(CLINICS).document(clinic_id).collection(
                 "professionals"
-            ).where("active", "==", True).get()
+            )
+            docs = professionals_ref.where("active", "==", True).get()
 
             professionals = []
             for doc in docs:
@@ -111,6 +112,38 @@ class GendeiDatabase:
                 data["id"] = doc.id
                 data["clinicId"] = clinic_id
                 professionals.append(Professional.from_dict(data))
+
+            # Backward-compatible fallback:
+            # some legacy docs may have missing/non-boolean `active` values, which
+            # are excluded by Firestore equality query.
+            if not professionals:
+                all_docs = professionals_ref.get()
+                for doc in all_docs:
+                    data = doc.to_dict() or {}
+                    active_raw = data.get("active", True)
+                    if isinstance(active_raw, bool):
+                        is_active = active_raw
+                    elif isinstance(active_raw, str):
+                        is_active = active_raw.strip().lower() in {
+                            "true", "1", "yes", "sim", "active", "ativo"
+                        }
+                    else:
+                        is_active = bool(active_raw)
+
+                    if not is_active:
+                        continue
+
+                    data["id"] = doc.id
+                    data["clinicId"] = clinic_id
+                    professionals.append(Professional.from_dict(data))
+
+                if professionals:
+                    logger.warning(
+                        "Fallback professionals loader used for clinic %s (count=%d). "
+                        "Consider normalizing `active` field to boolean true/false.",
+                        clinic_id,
+                        len(professionals),
+                    )
 
             return professionals
         except Exception as e:
