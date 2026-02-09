@@ -936,7 +936,8 @@
       "confirming": "Confirming",
       "new": "New",
       "scheduling": "Scheduling",
-      "selecting_slot": "Selecting time"
+      "selecting_slot": "Selecting time",
+      "awaiting_appointment_action": "Awaiting appointment action"
     },
     "handler": {
       "ai": "AI",

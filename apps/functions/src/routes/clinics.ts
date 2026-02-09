@@ -106,7 +106,7 @@ router.patch('/me', verifyAuth, async (req: Request, res: Response) => {
       } = req.body;
 
       const clinicData: Record<string, any> = {
-        name: name || 'Nova Clínica',
+        name: name || '',
         ownerId: user?.uid,
         phone: phone || '',
         email: email || user?.email || '',

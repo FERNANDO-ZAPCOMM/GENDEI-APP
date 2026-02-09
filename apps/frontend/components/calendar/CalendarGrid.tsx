@@ -68,7 +68,7 @@ interface CalendarGridProps {
 }
 
 const HOUR_HEIGHT = 64; // pixels per hour (business hours)
-const OFF_HOUR_HEIGHT = 40; // pixels per hour (off hours)
+const OFF_HOUR_HEIGHT = 64; // pixels per hour (off hours - same height, visually disabled)
 const SLOT_DURATION = 30; // minutes per slot
 
 const statusConfig: Record<AppointmentStatus, {
@@ -136,13 +136,7 @@ function getCalendarStatusConfig(appointment: Appointment) {
 
   const hold = getPendingPaymentHoldInfo(appointment);
   if (hold?.isExpired) {
-    return {
-      bg: 'bg-red-50',
-      border: 'border-l-4 border-l-red-500 border-red-200',
-      text: 'text-red-900',
-      dot: 'bg-red-500',
-      label: 'Expirado',
-    };
+    return statusConfig.cancelled;
   }
 
   return {
@@ -194,6 +188,21 @@ export function CalendarGrid({
     pos += (minutes / 60) * getHourHeight(hours);
     return pos;
   };
+
+  const hourRows = useMemo(() => {
+    const length = Math.max(endHour - startHour, 0);
+    return Array.from({ length }, (_, i) => {
+      const hour = startHour + i;
+      const offHour = isOffHour(hour);
+      const height = getHourHeight(hour);
+      return { hour, offHour, height };
+    });
+  }, [startHour, endHour, businessStartHour, businessEndHour]);
+
+  const totalGridHeight = useMemo(
+    () => hourRows.reduce((sum, row) => sum + row.height, 0),
+    [hourRows]
+  );
 
   // Generate time slots for the day
   const timeSlots = useMemo(() => {
@@ -409,11 +418,8 @@ export function CalendarGrid({
           {/* Time grid */}
           <div className="flex overflow-auto flex-1">
             {/* Time labels column */}
-            <div className="w-20 flex-shrink-0 border-r bg-gray-50/50">
-              {Array.from({ length: endHour - startHour }, (_, i) => {
-                const hour = startHour + i;
-                const offHour = isOffHour(hour);
-                const height = getHourHeight(hour);
+            <div className="w-20 flex-shrink-0 border-r bg-gray-50/50" style={{ minHeight: totalGridHeight }}>
+              {hourRows.map(({ hour, offHour, height }, i) => {
                 return (
                   <div
                     key={i}
@@ -423,7 +429,7 @@ export function CalendarGrid({
                     <span className={cn(
                       "absolute right-3 px-1",
                       offHour
-                        ? "-top-2 text-[10px] font-medium text-gray-300 bg-gray-50/80"
+                        ? "-top-2.5 text-xs font-medium text-gray-300 bg-gray-50/80"
                         : "-top-2.5 text-xs font-medium text-gray-400 bg-gray-50/50"
                     )}>
                       {`${hour.toString().padStart(2, '0')}:00`}
@@ -446,14 +452,14 @@ export function CalendarGrid({
                     `flex-1 ${columnWidth} relative border-r last:border-r-0`,
                     isToday(day) && 'bg-blue-50/20'
                   )}
+                  style={{ minHeight: totalGridHeight }}
                 >
                   {/* Hour grid lines */}
-                  {Array.from({ length: endHour - startHour }, (_, i) => {
-                    const height = getHourHeight(startHour + i);
+                  {hourRows.map(({ height, offHour }, i) => {
                     return (
                       <div
                         key={i}
-                        className="border-b border-gray-100"
+                        className={cn("border-b border-gray-100", offHour && "bg-gray-50/60")}
                         style={{ height }}
                       >
                         <div
@@ -497,10 +503,11 @@ export function CalendarGrid({
                         className={cn(
                           'absolute left-0 right-0 transition-all duration-150',
                           !isOccupied && !offHour && 'cursor-pointer hover:bg-blue-50/70',
+                          offHour && 'cursor-not-allowed bg-gray-50/50',
                           isHovered && !isOccupied && !offHour && 'bg-blue-50/70'
                         )}
                         style={{ top, height: slotHeight }}
-                        onClick={() => !isOccupied && handleSlotClick(day, time)}
+                        onClick={() => !isOccupied && !offHour && handleSlotClick(day, time)}
                         onMouseEnter={() => !offHour && setHoveredSlot(slotKey)}
                         onMouseLeave={() => setHoveredSlot(null)}
                       >
@@ -648,7 +655,7 @@ export function CalendarGrid({
                                 {(() => {
                                   const hold = getPendingPaymentHoldInfo(apt);
                                   if (!hold) return 'Aguardando pagamento';
-                                  if (hold.isExpired) return 'Reserva expirada';
+                                  if (hold.isExpired) return 'Cancelado por falta de pagamento';
                                   if (hold.minutesLeft !== null) return `Expira em ${hold.minutesLeft} min`;
                                   return 'Aguardando pagamento';
                                 })()}
@@ -673,10 +680,6 @@ export function CalendarGrid({
                 <span className="text-xs text-gray-600">{statusConfig[key].label}</span>
               </div>
             ))}
-            <div className="flex items-center gap-1.5 flex-shrink-0">
-              <div className="w-2.5 h-2.5 rounded-full bg-red-500" />
-              <span className="text-xs text-gray-600">Expirado</span>
-            </div>
           </div>
         </div>
 

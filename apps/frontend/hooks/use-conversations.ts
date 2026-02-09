@@ -17,6 +17,17 @@ export interface ConversationDocument {
   waUserName?: string;
   waUserPhone?: string;
   state: ConversationState;
+  appointmentContext?: {
+    appointmentId?: string;
+    status?: string;
+    date?: string;
+    time?: string;
+    patientPhone?: string;
+    patientName?: string;
+    professionalName?: string;
+    serviceName?: string;
+    updatedAt?: Date | string;
+  };
   lastMessageAt: Date;
   isHumanTakeover: boolean;
   aiPaused: boolean;

@@ -125,6 +125,13 @@ export default function AppointmentsPage() {
     return { businessStart: earliest, businessEnd: latest };
   }, [clinic?.openingHours]);
 
+  // Show context around clinic business hours in calendar view
+  const { calendarStartHour, calendarEndHour } = useMemo(() => {
+    const start = Math.max(0, businessStart - 2);
+    const end = Math.min(24, businessEnd + 2);
+    return { calendarStartHour: start, calendarEndHour: end };
+  }, [businessStart, businessEnd]);
+
   // Get professional from URL query parameter
   const professionalFromUrl = searchParams.get('professional');
   const [selectedProfessional, setSelectedProfessional] = useState<string>(professionalFromUrl || 'all');
@@ -349,6 +356,8 @@ export default function AppointmentsPage() {
               professionals={professionals}
               selectedProfessional={selectedProfessional}
               clinicTimezone={clinicTimezone}
+              startHour={calendarStartHour}
+              endHour={calendarEndHour}
               businessStartHour={businessStart}
               businessEndHour={businessEnd}
               onAppointmentClick={handleAppointmentClick}
@@ -450,6 +459,8 @@ export default function AppointmentsPage() {
               professionals={professionals}
               selectedProfessional={selectedProfessional}
               clinicTimezone={clinicTimezone}
+              startHour={calendarStartHour}
+              endHour={calendarEndHour}
               businessStartHour={businessStart}
               businessEndHour={businessEnd}
               onAppointmentClick={handleAppointmentClick}

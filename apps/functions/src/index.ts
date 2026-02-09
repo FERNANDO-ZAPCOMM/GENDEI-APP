@@ -7,6 +7,7 @@ dotenv.config();
 
 import * as functions from 'firebase-functions/v1';
 import { initializeApp, getApps } from 'firebase-admin/app';
+import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import express from 'express';
 import cors from 'cors';
 
@@ -14,6 +15,7 @@ import cors from 'cors';
 if (getApps().length === 0) {
   initializeApp();
 }
+const db = getFirestore();
 
 // Import routes - Gendei clinic management
 import clinicsRouter from './routes/clinics';
@@ -169,6 +171,75 @@ export const onAppointmentStatusChange = functions
       // Patient confirmed attendance
       console.log(`Appointment ${appointmentId} - patient confirmed presence`);
     }
+  });
+
+function getPhoneVariants(phone?: string): string[] {
+  if (!phone) return [];
+  const cleaned = String(phone).trim();
+  if (!cleaned) return [];
+
+  const digits = cleaned.replace(/\D/g, '');
+  const plusDigits = digits ? `+${digits}` : '';
+  const variants = new Set<string>([cleaned]);
+  if (digits) variants.add(digits);
+  if (plusDigits) variants.add(plusDigits);
+  return Array.from(variants);
+}
+
+async function findConversationRef(clinicId: string, patientPhone?: string) {
+  const variants = getPhoneVariants(patientPhone);
+  if (variants.length === 0) return null;
+
+  const conversationsRef = db.collection('gendei_clinics').doc(clinicId).collection('conversations');
+
+  for (const variant of variants) {
+    const doc = await conversationsRef.doc(variant).get();
+    if (doc.exists) return doc.ref;
+  }
+
+  const fields = ['waUserPhone', 'waUserId', 'phone'];
+  for (const field of fields) {
+    for (const variant of variants) {
+      const snapshot = await conversationsRef.where(field, '==', variant).limit(1).get();
+      if (!snapshot.empty) return snapshot.docs[0].ref;
+    }
+  }
+
+  return null;
+}
+
+// Keep conversation appointment tag in sync for all appointment writes (API + agent + scripts).
+export const syncConversationAppointmentContext = functions
+  .region('us-central1')
+  .runWith({
+    timeoutSeconds: 60,
+    memory: '256MB',
+  })
+  .firestore.document('gendei_clinics/{clinicId}/appointments/{appointmentId}')
+  .onWrite(async (change, context) => {
+    const { clinicId, appointmentId } = context.params;
+    const afterData = change.after.exists ? change.after.data() : null;
+
+    // We only persist current appointment context for existing appointments.
+    if (!afterData) return;
+
+    const conversationRef = await findConversationRef(clinicId, afterData.patientPhone);
+    if (!conversationRef) return;
+
+    await conversationRef.set({
+      appointmentContext: {
+        appointmentId,
+        status: afterData.status || null,
+        date: afterData.date || null,
+        time: afterData.time || null,
+        patientPhone: afterData.patientPhone || null,
+        patientName: afterData.patientName || null,
+        professionalName: afterData.professionalName || null,
+        serviceName: afterData.serviceName || null,
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
   });
 
 // Trigger when new clinic is created to set up defaults

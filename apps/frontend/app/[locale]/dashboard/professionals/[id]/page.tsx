@@ -29,7 +29,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { MultiSelect } from '@/components/ui/multi-select';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -122,7 +121,7 @@ export default function ProfessionalEditPage() {
 
   // Get available specialties based on the clinic's vertical
   const vertical = useVertical();
-  const availableSpecialties = filterSpecialties(vertical.specialties);
+  const availableSpecialties = filterSpecialties(vertical.specialties).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
 
   const [formData, setFormData] = useState<ProfessionalFormData>({
     name: '',
@@ -517,18 +516,41 @@ export default function ProfessionalEditPage() {
                     </div>
                     <div className="space-y-2">
                       <Label>Especialidades <span className="text-red-500">*</span></Label>
-                      <MultiSelect
-                        options={availableSpecialties.map((specialty) => ({
-                          value: specialty.id,
-                          label: specialty.name,
-                        }))}
-                        selected={formData.specialties}
-                        onChange={(selected) => setFormData({ ...formData, specialties: selected })}
-                        placeholder="Selecione as especialidades..."
-                        disabled={isSaving}
-                      />
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                        {availableSpecialties.map((specialty) => {
+                          const isSelected = formData.specialties.includes(specialty.id);
+                          return (
+                            <button
+                              key={specialty.id}
+                              type="button"
+                              onClick={() => {
+                                if (isSelected) {
+                                  setFormData({
+                                    ...formData,
+                                    specialties: formData.specialties.filter(s => s !== specialty.id)
+                                  });
+                                } else {
+                                  setFormData({
+                                    ...formData,
+                                    specialties: [...formData.specialties, specialty.id]
+                                  });
+                                }
+                              }}
+                              disabled={isSaving}
+                              className={cn(
+                                "px-3 py-1.5 text-sm rounded-full border transition-colors text-center",
+                                isSelected
+                                  ? "bg-black text-white border-black"
+                                  : "bg-white text-gray-700 border-gray-200 hover:border-gray-400"
+                              )}
+                            >
+                              {specialty.name}
+                            </button>
+                          );
+                        })}
+                      </div>
                       {formData.specialties.length === 0 && (
-                        <p className="text-xs text-amber-600">
+                        <p className="text-xs text-muted-foreground">
                           Selecione pelo menos uma especialidade
                         </p>
                       )}

@@ -29,7 +29,7 @@ export function useClinic() {
         // New user or no clinic exists - return minimal object with composite ID
         return {
           id: `${currentUser!.uid}_${vertical.slug}`,
-          name: currentUser!.displayName || 'Nova Clínica',
+          name: '',
           ownerId: currentUser!.uid,
           isNewClinic: true,
         } as Clinic & { isNewClinic: boolean };

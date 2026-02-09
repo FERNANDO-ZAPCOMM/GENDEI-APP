@@ -139,12 +139,23 @@ export default function ClinicSettingsPage() {
   });
   const [newConvenio, setNewConvenio] = useState('');
 
+  const normalizeClinicName = (name?: string) => {
+    const value = (name || '').trim();
+    if (!value) return '';
+    const normalized = value
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase();
+    if (normalized === 'nova clinica') return '';
+    return value;
+  };
+
   useEffect(() => {
     if (currentClinic) {
       const clinicData = currentClinic as any;
 
       setFormData({
-        name: currentClinic.name || '',
+        name: normalizeClinicName(currentClinic.name),
         description: clinicData.description || '',
         address: currentClinic.address || currentClinic.addressData?.formatted || '',
         phone: currentClinic.phone || '',
@@ -446,7 +457,7 @@ export default function ClinicSettingsPage() {
                       placeholder={t('clinicPage.basicInfo.descriptionPlaceholder')}
                       rows={3}
                       maxLength={750}
-                      className="resize-none min-h-[80px] sm:min-h-[100px]"
+                      className="resize-none min-h-[100px] sm:min-h-[125px]"
                     />
                     <div className="flex items-center justify-between">
                       {formData.description.length >= 20 && (

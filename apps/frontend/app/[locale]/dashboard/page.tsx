@@ -59,7 +59,9 @@ export default function DashboardPage() {
   // Sort today's appointments by time
   const sortedAppointments = useMemo(() => {
     if (!todayAppointments) return [];
-    return [...todayAppointments].sort((a, b) => a.time.localeCompare(b.time));
+    return [...todayAppointments]
+      .filter((appointment) => appointment.status !== 'cancelled')
+      .sort((a, b) => a.time.localeCompare(b.time));
   }, [todayAppointments]);
 
   // Show skeleton while clinic is loading

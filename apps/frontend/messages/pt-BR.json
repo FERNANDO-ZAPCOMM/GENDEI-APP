@@ -935,7 +935,8 @@
       "selecting_slot": "Selecionando horário",
       "scheduling": "Agendando",
       "confirming": "Confirmando",
-      "awaiting_greeting_response": "Aguardando resposta"
+      "awaiting_greeting_response": "Aguardando resposta",
+      "awaiting_appointment_action": "Aguardando ação no agendamento"
     },
     "handler": {
       "ai": "IA",

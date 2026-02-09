@@ -93,6 +93,99 @@ function mapChatHistoryMessage(
   };
 }
 
+function looksLikeMessageObject(value: unknown): value is Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const v = value as Record<string, unknown>;
+  return (
+    typeof v.body === 'string' ||
+    typeof v.content === 'string' ||
+    typeof v.text === 'string' ||
+    typeof v.messageType === 'string' ||
+    typeof v.type === 'string' ||
+    typeof v.direction === 'string' ||
+    typeof v.source === 'string' ||
+    v.timestamp !== undefined
+  );
+}
+
+function normalizeChatHistoryMessages(
+  data: Record<string, unknown>,
+  conversationId: string,
+  clinicId: string
+): Array<StoredConversationMessage & { id: string }> {
+  const candidates = [data.messages, data.chatHistory, data.history, data.items];
+  const mapped: Array<StoredConversationMessage & { id: string }> = [];
+
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+
+    if (Array.isArray(candidate)) {
+      candidate.forEach((item, index) => {
+        if (!looksLikeMessageObject(item)) return;
+        const rawTs = item.timestamp;
+        const messageId = typeof rawTs === 'string'
+          ? sanitizeTimestampKey(rawTs)
+          : `msg_${index}`;
+        mapped.push({
+          id: messageId,
+          ...mapChatHistoryMessage(messageId, item, conversationId, clinicId),
+        });
+      });
+      if (mapped.length > 0) return mapped;
+      continue;
+    }
+
+    if (typeof candidate === 'object') {
+      const entries = Object.entries(candidate as Record<string, unknown>);
+      entries.forEach(([key, value]) => {
+        if (!looksLikeMessageObject(value)) return;
+        mapped.push({
+          id: key,
+          ...mapChatHistoryMessage(key, value, conversationId, clinicId),
+        });
+      });
+      if (mapped.length > 0) return mapped;
+
+      // Some older docs stored a single message object directly.
+      if (looksLikeMessageObject(candidate)) {
+        const single = candidate as Record<string, unknown>;
+        const rawTs = single.timestamp;
+        const messageId = typeof rawTs === 'string'
+          ? sanitizeTimestampKey(rawTs)
+          : 'msg_0';
+        return [{
+          id: messageId,
+          ...mapChatHistoryMessage(messageId, single, conversationId, clinicId),
+        }];
+      }
+    }
+  }
+
+  // Final fallback: look for timestamp-keyed message objects at root level.
+  const rootEntries = Object.entries(data).filter(([key]) => (
+    key !== 'messages' &&
+    key !== 'chatHistory' &&
+    key !== 'history' &&
+    key !== 'items' &&
+    key !== 'lastUpdated' &&
+    key !== 'messageCount' &&
+    key !== 'clinicId' &&
+    key !== 'waUserId' &&
+    key !== 'conversationId' &&
+    key !== 'creatorId'
+  ));
+
+  rootEntries.forEach(([key, value]) => {
+    if (!looksLikeMessageObject(value)) return;
+    mapped.push({
+      id: key,
+      ...mapChatHistoryMessage(key, value, conversationId, clinicId),
+    });
+  });
+
+  return mapped;
+}
+
 async function appendMessageToChatHistory(
   convRef: FirebaseFirestore.DocumentReference,
   message: Omit<StoredConversationMessage, 'timestamp'> & { timestamp?: string }
@@ -166,29 +259,32 @@ async function getConversationMessages(
 
   if (chatHistoryDoc.exists) {
     const data = chatHistoryDoc.data() || {};
-    const messagesMap = (data.messages || {}) as Record<string, Record<string, unknown>>;
-    const mapped = Object.entries(messagesMap)
-      .map(([id, value]) => ({
-        id,
-        ...mapChatHistoryMessage(id, value || {}, conversationId, clinicId),
-      }))
+    const mapped = normalizeChatHistoryMessages(
+      data as Record<string, unknown>,
+      conversationId,
+      clinicId
+    )
       .sort((a, b) => parseTimestamp(a.timestamp).getTime() - parseTimestamp(b.timestamp).getTime());
-
-    return mapped.slice(-limit);
+    if (mapped.length > 0) {
+      return mapped.slice(-limit);
+    }
   }
 
   // Legacy fallback: one document per message in subcollection.
   const legacySnapshot = await convRef
     .collection('messages')
     .orderBy('timestamp', 'asc')
-    .limit(limit)
+    .limit(limit + 1)
     .get();
 
-  return legacySnapshot.docs.map(doc => ({
-    id: doc.id,
-    ...(doc.data() as StoredConversationMessage),
-    timestamp: parseTimestamp(doc.data().timestamp).toISOString(),
-  }));
+  return legacySnapshot.docs
+    .filter((doc) => doc.id !== 'chat_history')
+    .map(doc => ({
+      id: doc.id,
+      ...(doc.data() as StoredConversationMessage),
+      timestamp: parseTimestamp(doc.data().timestamp).toISOString(),
+    }))
+    .slice(-limit);
 }
 
 // GET /conversations?clinicId=xxx - Get conversations for a clinic

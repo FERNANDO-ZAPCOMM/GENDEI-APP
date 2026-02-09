@@ -368,10 +368,7 @@ function NavigationItems({
                 )}
               </div>
             )}
-            <span className={cn(
-              'flex-1',
-              item.step && item.step < notifications.onboardingStep && 'text-green-700'
-            )}>{t(`dashboard.${item.name}`)}</span>
+            <span className="flex-1">{t(`dashboard.${item.name}`)}</span>
             {/* Show count badge for action notifications */}
             {notification?.count ? (
               <NotificationBadge notification={notification} />

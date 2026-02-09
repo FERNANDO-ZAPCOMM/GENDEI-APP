@@ -10,6 +10,91 @@ const router = Router();
 const db = getFirestore();
 
 const CLINICS = 'gendei_clinics';
+type AppointmentLifecycleStatus =
+  | 'pending'
+  | 'confirmed'
+  | 'awaiting_confirmation'
+  | 'confirmed_presence'
+  | 'completed'
+  | 'cancelled'
+  | 'no_show';
+
+interface AppointmentContextPayload {
+  id: string;
+  status: AppointmentLifecycleStatus;
+  date?: string;
+  time?: string;
+  patientPhone?: string;
+  patientName?: string;
+  professionalName?: string;
+  serviceName?: string;
+}
+
+function getPhoneVariants(phone?: string): string[] {
+  if (!phone) return [];
+  const cleaned = String(phone).trim();
+  if (!cleaned) return [];
+
+  const digits = cleaned.replace(/\D/g, '');
+  const plusDigits = digits ? `+${digits}` : '';
+  const variants = new Set<string>([cleaned]);
+
+  if (digits) variants.add(digits);
+  if (plusDigits) variants.add(plusDigits);
+
+  return Array.from(variants);
+}
+
+async function findConversationForPhone(clinicId: string, patientPhone?: string) {
+  const variants = getPhoneVariants(patientPhone);
+  if (variants.length === 0) return null;
+
+  const conversationsRef = db.collection(CLINICS).doc(clinicId).collection('conversations');
+
+  // Fast path: conversationId is often the phone number.
+  for (const variant of variants) {
+    const doc = await conversationsRef.doc(variant).get();
+    if (doc.exists) return doc.ref;
+  }
+
+  // Fallback: query common phone fields.
+  const fields = ['waUserPhone', 'waUserId', 'phone'];
+  for (const field of fields) {
+    for (const variant of variants) {
+      const snapshot = await conversationsRef.where(field, '==', variant).limit(1).get();
+      if (!snapshot.empty) return snapshot.docs[0].ref;
+    }
+  }
+
+  return null;
+}
+
+async function syncConversationAppointmentContext(
+  clinicId: string,
+  appointment: AppointmentContextPayload
+): Promise<void> {
+  try {
+    const conversationRef = await findConversationForPhone(clinicId, appointment.patientPhone);
+    if (!conversationRef) return;
+
+    await conversationRef.set({
+      appointmentContext: {
+        appointmentId: appointment.id,
+        status: appointment.status,
+        date: appointment.date || null,
+        time: appointment.time || null,
+        patientPhone: appointment.patientPhone || null,
+        patientName: appointment.patientName || null,
+        professionalName: appointment.professionalName || null,
+        serviceName: appointment.serviceName || null,
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+  } catch (error) {
+    console.error('Failed to sync conversation appointment context:', error);
+  }
+}
 
 // Helper function to get appointments from clinic subcollection
 async function getAppointmentsForClinic(
@@ -219,10 +304,24 @@ router.put('/:appointmentId', verifyAuth, async (req: Request, res: Response) =>
     await docRef.update(updateData);
 
     const updatedDoc = await docRef.get();
+    const updatedData = updatedDoc.data() as Record<string, any> | undefined;
+
+    if (updatedData?.status) {
+      await syncConversationAppointmentContext(clinicId, {
+        id: appointmentId,
+        status: updatedData.status as AppointmentLifecycleStatus,
+        date: updatedData.date,
+        time: updatedData.time,
+        patientPhone: updatedData.patientPhone,
+        patientName: updatedData.patientName,
+        professionalName: updatedData.professionalName,
+        serviceName: updatedData.serviceName,
+      });
+    }
 
     return res.json({
       id: appointmentId,
-      ...updatedDoc.data()
+      ...updatedData
     });
   } catch (error: any) {
     console.error('Error updating appointment:', error);
@@ -288,10 +387,24 @@ router.patch('/:appointmentId/status', verifyAuth, async (req: Request, res: Res
     await docRef.update(updateData);
 
     const updatedDoc = await docRef.get();
+    const updatedData = updatedDoc.data() as Record<string, any> | undefined;
+
+    if (updatedData?.status) {
+      await syncConversationAppointmentContext(clinicId, {
+        id: appointmentId,
+        status: updatedData.status as AppointmentLifecycleStatus,
+        date: updatedData.date,
+        time: updatedData.time,
+        patientPhone: updatedData.patientPhone,
+        patientName: updatedData.patientName,
+        professionalName: updatedData.professionalName,
+        serviceName: updatedData.serviceName,
+      });
+    }
 
     return res.json({
       id: appointmentId,
-      ...updatedDoc.data()
+      ...updatedData
     });
   } catch (error: any) {
     console.error('Error updating appointment status:', error);
@@ -351,6 +464,21 @@ router.put('/:appointmentId/status', verifyAuth, async (req: Request, res: Respo
 
     await docRef.update(updateData);
 
+    const updatedDoc = await docRef.get();
+    const updatedData = updatedDoc.data() as Record<string, any> | undefined;
+    if (updatedData?.status) {
+      await syncConversationAppointmentContext(clinicId, {
+        id: appointmentId,
+        status: updatedData.status as AppointmentLifecycleStatus,
+        date: updatedData.date,
+        time: updatedData.time,
+        patientPhone: updatedData.patientPhone,
+        patientName: updatedData.patientName,
+        professionalName: updatedData.professionalName,
+        serviceName: updatedData.serviceName,
+      });
+    }
+
     return res.json({
       message: 'Status updated successfully',
       appointmentId,
@@ -404,10 +532,23 @@ router.put('/:appointmentId/reschedule', verifyAuth, async (req: Request, res: R
     await docRef.update(updateData);
 
     const updatedDoc = await docRef.get();
+    const updatedData = updatedDoc.data() as Record<string, any> | undefined;
+    if (updatedData?.status) {
+      await syncConversationAppointmentContext(clinicId, {
+        id: appointmentId,
+        status: updatedData.status as AppointmentLifecycleStatus,
+        date: updatedData.date,
+        time: updatedData.time,
+        patientPhone: updatedData.patientPhone,
+        patientName: updatedData.patientName,
+        professionalName: updatedData.professionalName,
+        serviceName: updatedData.serviceName,
+      });
+    }
 
     return res.json({
       id: appointmentId,
-      ...updatedDoc.data()
+      ...updatedData
     });
   } catch (error: any) {
     console.error('Error rescheduling appointment:', error);
@@ -445,10 +586,21 @@ router.post('/:appointmentId/cancel', verifyAuth, async (req: Request, res: Resp
     });
 
     const updatedDoc = await docRef.get();
+    const updatedData = updatedDoc.data() as Record<string, any> | undefined;
+    await syncConversationAppointmentContext(clinicId, {
+      id: appointmentId,
+      status: 'cancelled',
+      date: updatedData?.date,
+      time: updatedData?.time,
+      patientPhone: updatedData?.patientPhone,
+      patientName: updatedData?.patientName,
+      professionalName: updatedData?.professionalName,
+      serviceName: updatedData?.serviceName,
+    });
 
     return res.json({
       id: appointmentId,
-      ...updatedDoc.data()
+      ...updatedData
     });
   } catch (error: any) {
     console.error('Error cancelling appointment:', error);
@@ -478,11 +630,24 @@ router.delete('/:appointmentId', verifyAuth, async (req: Request, res: Response)
       return res.status(404).json({ message: 'Appointment not found' });
     }
 
+    const currentData = doc.data() as Record<string, any>;
+
     await docRef.update({
       status: 'cancelled',
       cancellationReason: reason,
       cancelledAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp()
+    });
+
+    await syncConversationAppointmentContext(clinicId, {
+      id: appointmentId,
+      status: 'cancelled',
+      date: currentData?.date,
+      time: currentData?.time,
+      patientPhone: currentData?.patientPhone,
+      patientName: currentData?.patientName,
+      professionalName: currentData?.professionalName,
+      serviceName: currentData?.serviceName,
     });
 
     return res.json({ message: 'Appointment cancelled successfully' });

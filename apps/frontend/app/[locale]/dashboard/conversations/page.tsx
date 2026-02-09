@@ -106,6 +106,61 @@ function ConversationsPageContent() {
   const [selectedProfessionalId, setSelectedProfessionalId] = useState<string | null>(null);
   const [conversationToDelete, setConversationToDelete] = useState<ConversationDocument | null>(null);
 
+  const getConversationStateLabel = (state: string): string => {
+    switch (state) {
+      case 'novo':
+        return t('conversations.state.novo');
+      case 'new':
+        return t('conversations.state.new');
+      case 'qualificado':
+        return t('conversations.state.qualificado');
+      case 'negociando':
+        return t('conversations.state.negociando');
+      case 'fechado':
+        return t('conversations.state.fechado');
+      case 'checkout':
+        return t('conversations.state.checkout');
+      case 'greeting':
+        return t('conversations.state.greeting');
+      case 'engaged':
+        return t('conversations.state.engaged');
+      case 'selecting_slot':
+        return t('conversations.state.selecting_slot');
+      case 'scheduling':
+        return t('conversations.state.scheduling');
+      case 'confirming':
+        return t('conversations.state.confirming');
+      case 'awaiting_greeting_response':
+        return t('conversations.state.awaiting_greeting_response');
+      case 'awaiting_appointment_action':
+        return t('conversations.state.awaiting_appointment_action');
+      default:
+        return state.replace(/_/g, ' ');
+    }
+  };
+
+  const getAppointmentTagConfig = (status?: string): { label: string; classes: string } | null => {
+    if (!status) return null;
+    switch (status) {
+      case 'pending':
+        return { label: t('appointmentsPage.status.pending'), classes: 'bg-amber-50 text-amber-900 border-amber-200' };
+      case 'confirmed':
+        return { label: t('appointmentsPage.status.confirmed'), classes: 'bg-blue-50 text-blue-900 border-blue-200' };
+      case 'awaiting_confirmation':
+        return { label: t('appointmentsPage.status.awaiting'), classes: 'bg-orange-50 text-orange-900 border-orange-200' };
+      case 'confirmed_presence':
+        return { label: t('appointmentsPage.status.confirmedPresence'), classes: 'bg-emerald-50 text-emerald-900 border-emerald-200' };
+      case 'completed':
+        return { label: t('appointmentsPage.status.completed'), classes: 'bg-green-50 text-green-900 border-green-200' };
+      case 'cancelled':
+        return { label: t('appointmentsPage.status.cancelled'), classes: 'bg-gray-50 text-gray-600 border-gray-200 opacity-60' };
+      case 'no_show':
+        return { label: t('appointmentsPage.status.noShow'), classes: 'bg-red-50 text-red-800 border-red-200 opacity-60' };
+      default:
+        return null;
+    }
+  };
+
   const archiveMutation = useArchiveConversation();
   const deleteMutation = useDeleteConversation();
 
@@ -313,7 +368,9 @@ function ConversationsPageContent() {
               </div>
             ) : (
               <div className="space-y-2">
-                {conversations.map((conversation) => (
+                {conversations.map((conversation) => {
+                  const appointmentTag = getAppointmentTagConfig(conversation.appointmentContext?.status);
+                  return (
                   <div
                     key={conversation.id}
                     onClick={() => handleConversationClick(conversation.id)}
@@ -334,8 +391,13 @@ function ConversationsPageContent() {
                             variant="outline"
                             className={`text-xs ${getConversationStateColor(conversation.state)}`}
                           >
-                            {t(`conversations.state.${conversation.state}`)}
+                            {getConversationStateLabel(conversation.state)}
                           </Badge>
+                          {appointmentTag && (
+                            <Badge variant="outline" className={`text-xs ${appointmentTag.classes}`}>
+                              {appointmentTag.label}
+                            </Badge>
+                          )}
                           {conversation.isHumanTakeover && (
                             <Badge variant="outline" className="text-xs text-blue-600 border-blue-600">
                               {t('conversations.handler.human')}
@@ -374,7 +436,8 @@ function ConversationsPageContent() {
                       </DropdownMenu>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </CardContent>
@@ -475,7 +538,9 @@ function ConversationsPageContent() {
               </div>
             ) : (
               <div className="space-y-3">
-                {conversations.map((conversation) => (
+                {conversations.map((conversation) => {
+                  const appointmentTag = getAppointmentTagConfig(conversation.appointmentContext?.status);
+                  return (
                   <div
                     key={conversation.id}
                     onClick={() => handleConversationClick(conversation.id)}
@@ -525,8 +590,13 @@ function ConversationsPageContent() {
                             variant="outline"
                             className={`text-xs ${getConversationStateColor(conversation.state)}`}
                           >
-                            {t(`conversations.state.${conversation.state}`)}
+                            {getConversationStateLabel(conversation.state)}
                           </Badge>
+                          {appointmentTag && (
+                            <Badge variant="outline" className={`text-xs ${appointmentTag.classes}`}>
+                              {appointmentTag.label}
+                            </Badge>
+                          )}
                           {conversation.isHumanTakeover && (
                             <Badge variant="outline" className="text-xs text-blue-600 border-blue-600">
                               {t('conversations.handler.human')}
@@ -536,7 +606,8 @@ function ConversationsPageContent() {
                       </div>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </CardContent>

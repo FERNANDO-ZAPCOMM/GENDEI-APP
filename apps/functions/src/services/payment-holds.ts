@@ -57,6 +57,74 @@ function needsPendingPaymentRelease(data: Record<string, any>): boolean {
   return pendingSignal || pendingLegacyDeposit;
 }
 
+function getPhoneVariants(phone?: string): string[] {
+  if (!phone) return [];
+  const cleaned = String(phone).trim();
+  if (!cleaned) return [];
+
+  const digits = cleaned.replace(/\D/g, '');
+  const plusDigits = digits ? `+${digits}` : '';
+  const variants = new Set<string>([cleaned]);
+  if (digits) variants.add(digits);
+  if (plusDigits) variants.add(plusDigits);
+  return Array.from(variants);
+}
+
+async function findConversationForPhone(
+  clinicId: string,
+  patientPhone?: string
+): Promise<FirebaseFirestore.DocumentReference | null> {
+  const variants = getPhoneVariants(patientPhone);
+  if (variants.length === 0) return null;
+
+  const conversationsRef = db.collection('gendei_clinics').doc(clinicId).collection('conversations');
+
+  for (const variant of variants) {
+    const doc = await conversationsRef.doc(variant).get();
+    if (doc.exists) return doc.ref;
+  }
+
+  const fields = ['waUserPhone', 'waUserId', 'phone'];
+  for (const field of fields) {
+    for (const variant of variants) {
+      const snapshot = await conversationsRef.where(field, '==', variant).limit(1).get();
+      if (!snapshot.empty) return snapshot.docs[0].ref;
+    }
+  }
+
+  return null;
+}
+
+async function syncCancelledAppointmentContext(
+  appointmentRef: FirebaseFirestore.DocumentReference,
+  appointmentData: Record<string, any>
+): Promise<void> {
+  try {
+    const clinicId = appointmentRef.parent.parent?.id;
+    if (!clinicId) return;
+
+    const conversationRef = await findConversationForPhone(clinicId, appointmentData.patientPhone);
+    if (!conversationRef) return;
+
+    await conversationRef.set({
+      appointmentContext: {
+        appointmentId: appointmentRef.id,
+        status: 'cancelled',
+        date: appointmentData.date || null,
+        time: appointmentData.time || null,
+        patientPhone: appointmentData.patientPhone || null,
+        patientName: appointmentData.patientName || null,
+        professionalName: appointmentData.professionalName || null,
+        serviceName: appointmentData.serviceName || null,
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+  } catch (error) {
+    console.error(`Failed to sync cancelled appointment context for ${appointmentRef.path}:`, error);
+  }
+}
+
 export async function cleanupExpiredPaymentHolds(): Promise<PaymentHoldCleanupResult> {
   const result: PaymentHoldCleanupResult = {
     scanned: 0,
@@ -98,6 +166,7 @@ export async function cleanupExpiredPaymentHolds(): Promise<PaymentHoldCleanupRe
         cancelledAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
       });
+      await syncCancelledAppointmentContext(doc.ref, data);
       ops += 1;
       result.expired += 1;
 
@@ -118,4 +187,3 @@ export async function cleanupExpiredPaymentHolds(): Promise<PaymentHoldCleanupRe
 
   return result;
 }
-
