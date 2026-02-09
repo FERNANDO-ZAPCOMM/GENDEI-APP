@@ -475,6 +475,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     }
   }, [currentUser, authLoading, router, locale]);
 
+  useEffect(() => {
+    if (authLoading || clinicLoading || !currentUser) return;
+
+    const clinicPath = `/${locale}/dashboard/clinic`;
+    const isClinicPage = pathname === clinicPath || pathname.startsWith(`${clinicPath}/`);
+
+    if (notifications.clinic && !isClinicPage) {
+      router.replace(clinicPath);
+    }
+  }, [authLoading, clinicLoading, currentUser, pathname, locale, notifications.clinic, router]);
+
   const handleSignOut = async () => {
     try {
       await signOut();

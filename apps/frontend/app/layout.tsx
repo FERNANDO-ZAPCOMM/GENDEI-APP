@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import '@xyflow/react/dist/style.css';
 
 export const metadata: Metadata = {
   title: "Gendei - Agendamento de Consultas via WhatsApp",

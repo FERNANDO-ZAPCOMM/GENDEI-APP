@@ -1689,7 +1689,7 @@
       "selectCategories": "Selecione as categorias",
       "categoriesSelected": "{count} categoria(s) selecionada(s)",
       "categoriesHelp": "Isso define quais especialidades estarão disponíveis para os profissionais",
-      "descriptionLabel": "Descrição",
+      "descriptionLabel": "Sobre",
       "descriptionPlaceholder": "Descreva os serviços oferecidos...",
       "enhanceButton": "Melhorar com IA",
       "summaryLabel": "Resumo para Saudação (IA)",

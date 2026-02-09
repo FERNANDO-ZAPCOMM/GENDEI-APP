@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useTranslations } from 'next-intl';
 import { Check, Loader2, Save, FileText, MessageSquare, Play, Flag, MousePointer, HelpCircle, Plus, Wand2, X, Calendar, Search, CreditCard, CheckCircle, Bell, BotMessageSquare } from 'lucide-react';
+import { ReactFlow, Background, Controls, MarkerType, Position, type Edge, type Node } from '@xyflow/react';
 import { toast } from 'sonner';
 
 import { useClinic } from '@/hooks/use-clinic';
@@ -23,6 +24,14 @@ interface FAQItem {
   question: string;
   answer: string;
 }
+
+type WorkflowStepColor = 'gray' | 'blue' | 'green' | 'amber';
+type WorkflowStep = {
+  key: string;
+  icon: any;
+  color: WorkflowStepColor;
+  ai: boolean;
+};
 
 const INFO_MODE_EXTRA_FAQS: FAQItem[] = [
   { question: 'Como chegar na clínica?', answer: '' },
@@ -223,6 +232,131 @@ export default function WorkflowPage() {
     );
   }
 
+  const showDeposit = vertical.features.showDeposit;
+  const bookingSteps: WorkflowStep[] = [
+    { key: 'inicio', icon: Play, color: 'gray', ai: false },
+    { key: 'triagem', icon: Search, color: 'blue', ai: true },
+    { key: 'agendamento', icon: Calendar, color: 'blue', ai: true },
+    ...(showDeposit ? ([{ key: 'pagamento', icon: CreditCard, color: 'blue', ai: true }] as WorkflowStep[]) : []),
+    { key: 'confirmacao', icon: CheckCircle, color: 'green', ai: false },
+    { key: 'lembrete', icon: Bell, color: 'amber', ai: true },
+    { key: 'fim', icon: Flag, color: 'gray', ai: false },
+  ];
+
+  const infoSteps: WorkflowStep[] = [
+    { key: 'info_inicio', icon: Play, color: 'gray', ai: false },
+    { key: 'info_responde', icon: BotMessageSquare, color: 'blue', ai: true },
+    { key: 'info_fim', icon: Flag, color: 'gray', ai: false },
+  ];
+
+  const renderFlowGraph = (steps: WorkflowStep[], keyPrefix: 'bookingSteps' | 'infoSteps') => {
+    const colorClasses: Record<WorkflowStepColor, { border: string; bg: string; iconBg: string; iconText: string; edge: string; }> = {
+      gray: { border: '#d1d5db', bg: '#ffffff', iconBg: '#f3f4f6', iconText: '#6b7280', edge: '#9ca3af' },
+      blue: { border: '#bfdbfe', bg: '#eff6ff', iconBg: '#dbeafe', iconText: '#2563eb', edge: '#60a5fa' },
+      green: { border: '#a7f3d0', bg: '#ecfdf5', iconBg: '#d1fae5', iconText: '#059669', edge: '#34d399' },
+      amber: { border: '#fde68a', bg: '#fffbeb', iconBg: '#fef3c7', iconText: '#d97706', edge: '#f59e0b' },
+    };
+
+    const nodes: Node[] = steps.map((step, index) => {
+      const Icon = step.icon;
+      const colors = colorClasses[step.color];
+      const x = 40;
+      const y = index * 145 + 20;
+
+      return {
+        id: step.key,
+        position: { x, y },
+        draggable: false,
+        selectable: false,
+        data: {
+          label: (
+            <div className="w-[240px]">
+              <div className="flex items-center gap-2">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-black/5 text-[11px] font-semibold text-gray-700">
+                  {index + 1}
+                </span>
+                <h4 className="text-sm text-gray-900">{t(`workflowPage.${keyPrefix}.${step.key}.title`)}</h4>
+                {step.ai && (
+                  <Badge variant="secondary" className="bg-blue-100 text-blue-700 text-[10px] px-1.5 py-0 ml-auto">
+                    IA
+                  </Badge>
+                )}
+              </div>
+              <div className="mt-2 flex items-start gap-2">
+                <span
+                  className="mt-0.5 flex h-7 w-7 items-center justify-center rounded-lg"
+                  style={{ backgroundColor: colors.iconBg }}
+                >
+                  <Icon className="h-4 w-4" style={{ color: colors.iconText }} />
+                </span>
+                <p className="text-xs text-gray-600 leading-5">
+                  {t(`workflowPage.${keyPrefix}.${step.key}.description`)}
+                </p>
+              </div>
+            </div>
+          ),
+        },
+        style: {
+          border: `1px solid ${colors.border}`,
+          background: colors.bg,
+          borderRadius: '14px',
+          padding: '12px',
+          boxShadow: '0 6px 16px rgba(15, 23, 42, 0.08)',
+          width: 320,
+        },
+        sourcePosition: Position.Bottom,
+        targetPosition: Position.Top,
+      };
+    });
+
+    const edges: Edge[] = steps.slice(0, -1).map((step, index) => {
+      const next = steps[index + 1];
+      const colors = colorClasses[next.color];
+      return {
+        id: `${step.key}-${next.key}`,
+        source: step.key,
+        target: next.key,
+        type: 'default',
+        animated: true,
+        style: { stroke: colors.edge, strokeWidth: 2 },
+        markerEnd: {
+          type: MarkerType.ArrowClosed,
+          width: 18,
+          height: 18,
+          color: colors.edge,
+        },
+      };
+    });
+
+    return (
+      <Card>
+        <CardContent className="pt-6">
+          <div className="rounded-xl border border-gray-200 bg-gradient-to-b from-gray-50/90 to-white p-3 sm:p-4">
+            <div className="h-[580px] w-full min-w-0 rounded-lg bg-white" style={{ height: 580, width: '100%' }}>
+              <ReactFlow
+                nodes={nodes}
+                edges={edges}
+                fitView
+                fitViewOptions={{ padding: 0.12, minZoom: 0.55, maxZoom: 1.1 }}
+                proOptions={{ hideAttribution: true }}
+                nodesDraggable={false}
+                nodesConnectable={false}
+                elementsSelectable={false}
+                panOnDrag
+                zoomOnPinch
+                zoomOnScroll
+                style={{ width: '100%', height: '100%' }}
+              >
+                <Background gap={24} size={1} color="#e5e7eb" />
+                <Controls showInteractive={false} position="bottom-right" />
+              </ReactFlow>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  };
+
   return (
     <div className="space-y-6 page-transition">
       {/* Header */}
@@ -293,139 +427,9 @@ export default function WorkflowPage() {
             </CardContent>
           </Card>
 
-          {/* Booking Mode - Flow Steps */}
-          {selectedMode === 'booking' && (() => {
-            const showDeposit = vertical.features.showDeposit;
-            const steps = [
-              { key: 'inicio', icon: Play, color: 'gray', ai: false },
-              { key: 'triagem', icon: Search, color: 'blue', ai: true },
-              { key: 'agendamento', icon: Calendar, color: 'blue', ai: true },
-              ...(showDeposit ? [{ key: 'pagamento', icon: CreditCard, color: 'blue', ai: true }] : []),
-              { key: 'confirmacao', icon: CheckCircle, color: 'green', ai: false },
-              { key: 'lembrete', icon: Bell, color: 'amber', ai: true },
-              { key: 'fim', icon: Flag, color: 'gray', ai: false },
-            ];
-            return (
-              <Card>
-                <CardContent className="pt-6 space-y-1">
-                  {steps.map((step, index) => {
-                    const Icon = step.icon;
-                    const isAi = step.ai;
-                    const stepNum = index + 1;
-                    const colorClasses = {
-                      gray: {
-                        numBg: 'bg-gray-100 text-gray-500',
-                        iconText: 'text-gray-400',
-                      },
-                      blue: {
-                        numBg: 'bg-blue-100 text-blue-600',
-                        iconText: 'text-blue-500',
-                      },
-                      green: {
-                        numBg: 'bg-emerald-100 text-emerald-600',
-                        iconText: 'text-emerald-500',
-                      },
-                      amber: {
-                        numBg: 'bg-amber-100 text-amber-600',
-                        iconText: 'text-amber-500',
-                      },
-                    };
-                    const c = colorClasses[step.color as keyof typeof colorClasses];
-                    return (
-                      <div key={step.key}>
-                        <div className="flex items-center gap-4 p-3.5 rounded-lg border border-gray-100">
-                          <div className={`flex items-center justify-center w-7 h-7 rounded-full ${c.numBg} text-xs font-semibold`}>
-                            {stepNum}
-                          </div>
-                          <Icon className={`h-4 w-4 ${c.iconText}`} />
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2">
-                              <h4 className="font-medium text-sm text-gray-900">
-                                {t(`workflowPage.bookingSteps.${step.key}.title`)}
-                              </h4>
-                              {isAi && (
-                                <Badge variant="secondary" className="bg-blue-100 text-blue-700 text-[10px] px-1.5 py-0">
-                                  IA
-                                </Badge>
-                              )}
-                            </div>
-                            <p className="text-xs text-gray-500">
-                              {t(`workflowPage.bookingSteps.${step.key}.description`)}
-                            </p>
-                          </div>
-                        </div>
-                        {/* Connector line between steps */}
-                        {index < steps.length - 1 && (
-                          <div className="flex justify-start ml-[2.05rem] py-0.5">
-                            <div className="w-px h-3 bg-gray-200" />
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </CardContent>
-              </Card>
-            );
-          })()}
-
-          {/* Info Mode - Flow Steps */}
-          {selectedMode === 'info' && (() => {
-            const infoSteps = [
-              { key: 'info_inicio', icon: Play, color: 'gray' as const, ai: false },
-              { key: 'info_responde', icon: BotMessageSquare, color: 'blue' as const, ai: true },
-              { key: 'info_fim', icon: Flag, color: 'gray' as const, ai: false },
-            ];
-            return (
-              <Card>
-                <CardContent className="pt-6 space-y-1">
-                  {infoSteps.map((step, index) => {
-                    const Icon = step.icon;
-                    const colorClasses = {
-                      gray: {
-                        numBg: 'bg-gray-100 text-gray-500',
-                        iconText: 'text-gray-400',
-                      },
-                      blue: {
-                        numBg: 'bg-blue-100 text-blue-600',
-                        iconText: 'text-blue-500',
-                      },
-                    };
-                    const c = colorClasses[step.color];
-                    return (
-                      <div key={step.key}>
-                        <div className="flex items-center gap-4 p-3.5 rounded-lg border border-gray-100">
-                          <div className={`flex items-center justify-center w-7 h-7 rounded-full ${c.numBg} text-xs font-semibold`}>
-                            {index + 1}
-                          </div>
-                          <Icon className={`h-4 w-4 ${c.iconText}`} />
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2">
-                              <h4 className="font-medium text-sm text-gray-900">
-                                {t(`workflowPage.infoSteps.${step.key}.title`)}
-                              </h4>
-                              {step.ai && (
-                                <Badge variant="secondary" className="bg-blue-100 text-blue-700 text-[10px] px-1.5 py-0">
-                                  IA
-                                </Badge>
-                              )}
-                            </div>
-                            <p className="text-xs text-gray-500">
-                              {t(`workflowPage.infoSteps.${step.key}.description`)}
-                            </p>
-                          </div>
-                        </div>
-                        {index < infoSteps.length - 1 && (
-                          <div className="flex justify-start ml-[2.05rem] py-0.5">
-                            <div className="w-px h-3 bg-gray-200" />
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </CardContent>
-              </Card>
-            );
-          })()}
+          {/* Flow Graph */}
+          {selectedMode === 'booking' && renderFlowGraph(bookingSteps, 'bookingSteps')}
+          {selectedMode === 'info' && renderFlowGraph(infoSteps, 'infoSteps')}
 
           {/* Info Mode Additional Settings */}
           {selectedMode === 'info' && (

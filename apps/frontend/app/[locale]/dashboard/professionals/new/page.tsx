@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef } from 'react';
 import { useTranslations, useLocale } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Loader2, Camera, User, DollarSign, Save, Clock, Plus, Trash2, Briefcase, Mail, Phone, CheckCircle2 } from 'lucide-react';
@@ -102,22 +102,6 @@ export default function NewProfessionalPage() {
   const { currentUser } = useAuth();
   const { currentClinic: clinic, isLoading: clinicLoading } = useClinic();
   const { create } = useProfessionals(clinic?.id || '');
-
-  // Redirect to clinic settings if profile isn't complete
-  useEffect(() => {
-    if (!clinicLoading && clinic) {
-      const clinicData = clinic as any;
-      const hasClinicProfile = !!(
-        clinicData?.name &&
-        clinicData?.name !== 'Nova Clínica' &&
-        clinicData?.phone
-      );
-      if (!hasClinicProfile) {
-        toast.error('Complete o perfil da clínica antes de adicionar profissionais');
-        router.push(`/${locale}/dashboard/clinic`);
-      }
-    }
-  }, [clinicLoading, clinic, router, locale]);
 
   // Get available specialties based on the clinic's vertical
   const vertical = useVertical();
