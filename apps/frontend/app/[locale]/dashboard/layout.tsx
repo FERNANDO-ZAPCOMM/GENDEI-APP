@@ -19,6 +19,7 @@ import {
   Stethoscope,
   CreditCard,
   Bot,
+  Check,
 } from 'lucide-react';
 import { FaWhatsapp } from 'react-icons/fa';
 
@@ -345,7 +346,7 @@ function NavigationItems({
                             : 'bg-gray-200 text-gray-600'
                         )}
                       >
-                        {item.step}
+                        {isComplete ? <Check className="w-3.5 h-3.5" /> : item.step}
                       </div>
                       {/* Flashing dot on current step */}
                       {isCurrentStep && (

@@ -190,6 +190,16 @@ export interface PaymentSettings {
   depositPercentage: number;        // 0-100, percentage required
   pixKey?: string;                  // PIX key for payments
   pixKeyType?: 'cpf' | 'cnpj' | 'email' | 'phone' | 'random';
+  stripeConnect?: {
+    accountId?: string;
+    onboardingComplete?: boolean;
+    chargesEnabled?: boolean;
+    payoutsEnabled?: boolean;
+    detailsSubmitted?: boolean;
+    country?: string;
+    defaultCurrency?: string;
+    updatedAt?: string;
+  };
 }
 
 // Extended clinic with payment settings

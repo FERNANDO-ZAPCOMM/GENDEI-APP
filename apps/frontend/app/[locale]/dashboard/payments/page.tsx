@@ -9,11 +9,15 @@ import {
   Key,
   Loader2,
   Save,
+  SplitSquareVertical,
+  ExternalLink,
+  ShieldCheck,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { useClinic } from '@/hooks/use-clinic';
 import { usePayments } from '@/hooks/use-payments';
+import { useStripeConnect } from '@/hooks/use-stripe-connect';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -32,6 +36,15 @@ export default function PaymentsPage() {
 
   const { currentClinic, isLoading: clinicLoading, updateClinic } = useClinic();
   const { data: payments = [], isLoading: paymentsLoading } = usePayments(currentClinic?.id || '');
+  const {
+    data: stripeStatus,
+    isLoading: stripeLoading,
+    refetch: refetchStripeStatus,
+    startOnboarding,
+    refreshOnboarding,
+    isStarting,
+    isRefreshing,
+  } = useStripeConnect(currentClinic?.id || '');
 
   const [settings, setSettings] = useState<PaymentSettings>({
     acceptsConvenio: false,
@@ -154,6 +167,40 @@ export default function PaymentsPage() {
     return 'secondary';
   };
 
+  const stripeState = stripeStatus?.state;
+  const stripeConnected = Boolean(stripeState?.accountId);
+  const stripeReadyForSplit = Boolean(
+    stripeState?.onboardingComplete && stripeState?.chargesEnabled && stripeState?.payoutsEnabled
+  );
+
+  const openStripeOnboarding = (url: string) => {
+    if (!url) return;
+    const popup = window.open(url, '_blank', 'noopener,noreferrer');
+    if (!popup) {
+      window.location.assign(url);
+    }
+  };
+
+  const handleStripeConnect = async () => {
+    if (!currentClinic?.id) return;
+    try {
+      const response = await startOnboarding();
+      openStripeOnboarding(response.onboardingUrl);
+    } catch (error: any) {
+      toast.error(error.message || 'Falha ao iniciar Stripe Connect');
+    }
+  };
+
+  const handleStripeContinue = async () => {
+    if (!currentClinic?.id) return;
+    try {
+      const response = await refreshOnboarding();
+      openStripeOnboarding(response.onboardingUrl);
+    } catch (error: any) {
+      toast.error(error.message || 'Falha ao continuar onboarding Stripe');
+    }
+  };
+
   return (
     <div className="space-y-6 page-transition">
       {/* Header */}
@@ -216,93 +263,190 @@ export default function PaymentsPage() {
         </CardContent>
       </Card>
 
-      {/* PIX Card */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Key className="w-4 h-4" />
-            {t('paymentSettings.pixCard.title')}
-            <span className="text-red-500">*</span>
-          </CardTitle>
-          <CardDescription>{t('paymentSettings.pixCard.description')}</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {/* Tipo de Chave - alone at top, same width as fields below */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="pixKeyType">
-                {t('paymentSettings.pixCard.keyType')} <span className="text-red-500">*</span>
-              </Label>
-              <Select
-                value={settings.pixKeyType || 'cpf'}
-                onValueChange={(value) => updateSettings({ pixKeyType: value as PaymentSettings['pixKeyType'] })}
-                disabled={isSaving}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder={t('paymentSettings.pixCard.selectType')} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="cpf">CPF</SelectItem>
-                  <SelectItem value="cnpj">CNPJ</SelectItem>
-                  <SelectItem value="email">Email</SelectItem>
-                  <SelectItem value="phone">{t('paymentSettings.pixCard.phone')}</SelectItem>
-                  <SelectItem value="random">{t('paymentSettings.pixCard.randomKey')}</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
+      {/* Stripe + PIX Cards */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        {/* Stripe Connect Card */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <SplitSquareVertical className="w-4 h-4" />
+              Stripe Connect (Split de Pagamentos)
+            </CardTitle>
+            <CardDescription>
+              Conecte sua conta Stripe para receber pagamentos com divisão automática de repasses.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {stripeLoading ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <TypingDots size="sm" /> Verificando status do Stripe Connect...
+              </div>
+            ) : (
+              <>
+                <div className="flex flex-wrap items-center gap-2">
+                  {stripeReadyForSplit ? (
+                    <Badge variant="default" className="bg-green-600">
+                      <ShieldCheck className="mr-1 h-3 w-3" />
+                      Pronto para split
+                    </Badge>
+                  ) : stripeConnected ? (
+                    <Badge variant="secondary">Conectado - onboarding pendente</Badge>
+                  ) : (
+                    <Badge variant="outline">Não conectado</Badge>
+                  )}
+                </div>
 
-          {/* Chave PIX and Confirmation - side by side */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="pixKey">
-                {t('paymentSettings.pixCard.pixKey')} <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                id="pixKey"
-                placeholder={
-                  settings.pixKeyType === 'cpf' ? '000.000.000-00' :
-                  settings.pixKeyType === 'cnpj' ? '00.000.000/0000-00' :
-                  settings.pixKeyType === 'email' ? 'exemplo@email.com' :
-                  settings.pixKeyType === 'phone' ? '+55 11 99999-9999' :
-                  t('paymentSettings.pixCard.randomKey')
-                }
-                value={settings.pixKey || ''}
-                onChange={(e) => {
-                  updateSettings({ pixKey: e.target.value });
-                  setPixKeyError('');
-                }}
-                disabled={isSaving}
-                className={pixKeyError ? 'border-red-500' : ''}
-                required
-              />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                  <div className="rounded-md border p-3">
+                    <p className="font-medium">Conta Stripe</p>
+                    <p className="text-muted-foreground mt-1 break-all">{stripeState?.accountId || '-'}</p>
+                  </div>
+                  <div className="rounded-md border p-3">
+                    <p className="font-medium">Capacidades</p>
+                    <p className="text-muted-foreground mt-1">
+                      Cobrança: {stripeState?.chargesEnabled ? 'Ativa' : 'Pendente'} | Repasse:{' '}
+                      {stripeState?.payoutsEnabled ? 'Ativo' : 'Pendente'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  {!stripeConnected && (
+                    <Button
+                      type="button"
+                      onClick={handleStripeConnect}
+                      disabled={isStarting}
+                    >
+                      {isStarting ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Conectando...
+                        </>
+                      ) : (
+                        <>Conectar Stripe Connect</>
+                      )}
+                    </Button>
+                  )}
+
+                  {stripeConnected && !stripeReadyForSplit && (
+                    <Button
+                      type="button"
+                      onClick={handleStripeContinue}
+                      disabled={isRefreshing}
+                    >
+                      {isRefreshing ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Abrindo...
+                        </>
+                      ) : (
+                        <>
+                          Continuar onboarding
+                          <ExternalLink className="h-4 w-4 ml-2" />
+                        </>
+                      )}
+                    </Button>
+                  )}
+
+                  {stripeConnected && (
+                    <Button type="button" variant="outline" onClick={() => refetchStripeStatus()}>
+                      Atualizar status
+                    </Button>
+                  )}
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* PIX Card */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Key className="w-4 h-4" />
+              {t('paymentSettings.pixCard.title')}
+              <span className="text-red-500">*</span>
+            </CardTitle>
+            <CardDescription>{t('paymentSettings.pixCard.description')}</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Tipo de Chave - kept in left area style */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="pixKeyType">
+                  {t('paymentSettings.pixCard.keyType')} <span className="text-red-500">*</span>
+                </Label>
+                <Select
+                  value={settings.pixKeyType || 'cpf'}
+                  onValueChange={(value) => updateSettings({ pixKeyType: value as PaymentSettings['pixKeyType'] })}
+                  disabled={isSaving}
+                >
+                  <SelectTrigger className="max-w-[280px] md:max-w-none">
+                    <SelectValue placeholder={t('paymentSettings.pixCard.selectType')} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="cpf">CPF</SelectItem>
+                    <SelectItem value="cnpj">CNPJ</SelectItem>
+                    <SelectItem value="email">Email</SelectItem>
+                    <SelectItem value="phone">{t('paymentSettings.pixCard.phone')}</SelectItem>
+                    <SelectItem value="random">{t('paymentSettings.pixCard.randomKey')}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="confirmPixKey">
-                {t('paymentSettings.pixCard.confirmPixKey')} <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                id="confirmPixKey"
-                placeholder={t('paymentSettings.pixCard.confirmPlaceholder')}
-                value={confirmPixKey}
-                onChange={(e) => {
-                  setConfirmPixKey(e.target.value);
-                  setPixKeyError('');
-                }}
-                disabled={isSaving}
-                className={pixKeyError ? 'border-red-500' : ''}
-                required
-              />
+
+            {/* Chave PIX and Confirmation - side by side as before */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="pixKey">
+                  {t('paymentSettings.pixCard.pixKey')} <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  id="pixKey"
+                  placeholder={
+                    settings.pixKeyType === 'cpf' ? '000.000.000-00' :
+                    settings.pixKeyType === 'cnpj' ? '00.000.000/0000-00' :
+                    settings.pixKeyType === 'email' ? 'exemplo@email.com' :
+                    settings.pixKeyType === 'phone' ? '+55 11 99999-9999' :
+                    t('paymentSettings.pixCard.randomKey')
+                  }
+                  value={settings.pixKey || ''}
+                  onChange={(e) => {
+                    updateSettings({ pixKey: e.target.value });
+                    setPixKeyError('');
+                  }}
+                  disabled={isSaving}
+                  className={pixKeyError ? 'border-red-500' : ''}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="confirmPixKey">
+                  {t('paymentSettings.pixCard.confirmPixKey')} <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  id="confirmPixKey"
+                  placeholder={t('paymentSettings.pixCard.confirmPlaceholder')}
+                  value={confirmPixKey}
+                  onChange={(e) => {
+                    setConfirmPixKey(e.target.value);
+                    setPixKeyError('');
+                  }}
+                  disabled={isSaving}
+                  className={pixKeyError ? 'border-red-500' : ''}
+                  required
+                />
+              </div>
             </div>
-          </div>
-          {pixKeyError && (
-            <p className="text-sm text-red-500">{pixKeyError}</p>
-          )}
-          <p className="text-xs text-muted-foreground">
-            {t('paymentSettings.pixCard.help')}
-          </p>
-        </CardContent>
-      </Card>
+            {pixKeyError && (
+              <p className="text-sm text-red-500">{pixKeyError}</p>
+            )}
+            <p className="text-xs text-muted-foreground">
+              {t('paymentSettings.pixCard.help')}
+            </p>
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Save Button */}
       <div className="flex justify-end">
