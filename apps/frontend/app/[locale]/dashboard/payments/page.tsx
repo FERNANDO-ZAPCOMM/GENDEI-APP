@@ -3,13 +3,12 @@
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
+import Image from 'next/image';
 import { getNextStepUrl } from '@/hooks/use-onboarding';
 import {
   Percent,
-  Key,
   Loader2,
   Save,
-  SplitSquareVertical,
   ExternalLink,
   ShieldCheck,
 } from 'lucide-react';
@@ -88,6 +87,8 @@ export default function PaymentsPage() {
   };
 
   const handleSave = async () => {
+    const effectivePixKeyType = settings.pixKeyType || 'cpf';
+
     // Validate PIX key is required
     if (!settings.pixKey || !settings.pixKey.trim()) {
       setPixKeyError(t('paymentSettings.pixKeyRequired'));
@@ -108,6 +109,7 @@ export default function PaymentsPage() {
       // Always ensure requiresDeposit is true (business model requirement)
       const settingsToSave = {
         ...settings,
+        pixKeyType: effectivePixKeyType,
         requiresDeposit: true,
       };
       await updateClinic.mutateAsync({
@@ -264,13 +266,13 @@ export default function PaymentsPage() {
       </Card>
 
       {/* Stripe + PIX Cards */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+      <div className="space-y-6">
         {/* Stripe Connect Card */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <SplitSquareVertical className="w-4 h-4" />
-              Stripe Connect (Split de Pagamentos)
+            <CardTitle className="flex items-center justify-between gap-3 text-base">
+              <span>Stripe Connect (Split de Pagamentos)</span>
+              <Image src="/stripe.png" alt="Stripe" width={64} height={20} className="h-5 w-auto object-contain" />
             </CardTitle>
             <CardDescription>
               Conecte sua conta Stripe para receber pagamentos com divisão automática de repasses.
@@ -362,39 +364,16 @@ export default function PaymentsPage() {
         {/* PIX Card */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Key className="w-4 h-4" />
-              {t('paymentSettings.pixCard.title')}
-              <span className="text-red-500">*</span>
+            <CardTitle className="flex items-center justify-between gap-3 text-base">
+              <span>
+                {t('paymentSettings.pixCard.title')}
+                <span className="text-red-500"> *</span>
+              </span>
+              <Image src="/pix.png" alt="PIX" width={48} height={20} className="h-5 w-auto object-contain" />
             </CardTitle>
             <CardDescription>{t('paymentSettings.pixCard.description')}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {/* Tipo de Chave - kept in left area style */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="pixKeyType">
-                  {t('paymentSettings.pixCard.keyType')} <span className="text-red-500">*</span>
-                </Label>
-                <Select
-                  value={settings.pixKeyType || 'cpf'}
-                  onValueChange={(value) => updateSettings({ pixKeyType: value as PaymentSettings['pixKeyType'] })}
-                  disabled={isSaving}
-                >
-                  <SelectTrigger className="max-w-[280px] md:max-w-none">
-                    <SelectValue placeholder={t('paymentSettings.pixCard.selectType')} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="cpf">CPF</SelectItem>
-                    <SelectItem value="cnpj">CNPJ</SelectItem>
-                    <SelectItem value="email">Email</SelectItem>
-                    <SelectItem value="phone">{t('paymentSettings.pixCard.phone')}</SelectItem>
-                    <SelectItem value="random">{t('paymentSettings.pixCard.randomKey')}</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
             {/* Chave PIX and Confirmation - side by side as before */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
@@ -403,13 +382,7 @@ export default function PaymentsPage() {
                 </Label>
                 <Input
                   id="pixKey"
-                  placeholder={
-                    settings.pixKeyType === 'cpf' ? '000.000.000-00' :
-                    settings.pixKeyType === 'cnpj' ? '00.000.000/0000-00' :
-                    settings.pixKeyType === 'email' ? 'exemplo@email.com' :
-                    settings.pixKeyType === 'phone' ? '+55 11 99999-9999' :
-                    t('paymentSettings.pixCard.randomKey')
-                  }
+                  placeholder={t('paymentSettings.pixCard.randomKey')}
                   value={settings.pixKey || ''}
                   onChange={(e) => {
                     updateSettings({ pixKey: e.target.value });
@@ -444,25 +417,24 @@ export default function PaymentsPage() {
             <p className="text-xs text-muted-foreground">
               {t('paymentSettings.pixCard.help')}
             </p>
+
+            <div className="flex justify-end pt-2">
+              <Button onClick={handleSave} disabled={isSaving}>
+                {isSaving ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    {t('common.saving')}
+                  </>
+                ) : (
+                  <>
+                    <Save className="h-4 w-4 mr-2" />
+                    {t('common.save')}
+                  </>
+                )}
+              </Button>
+            </div>
           </CardContent>
         </Card>
-      </div>
-
-      {/* Save Button */}
-      <div className="flex justify-end">
-        <Button onClick={handleSave} disabled={isSaving}>
-          {isSaving ? (
-            <>
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              {t('common.saving')}
-            </>
-          ) : (
-            <>
-              <Save className="h-4 w-4 mr-2" />
-              {t('common.save')}
-            </>
-          )}
-        </Button>
       </div>
 
       <Card>

@@ -2,6 +2,7 @@
 
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/hooks/use-auth';
+import { useClinic } from '@/hooks/use-clinic';
 import { useWhatsAppTemplates, MessageTemplate } from '@/hooks/use-whatsapp-templates';
 import {
   Card,
@@ -132,6 +133,7 @@ const GENDEI_TEMPLATES = [
 export function TemplateStatusCardContent({ wabaId }: TemplateStatusCardProps) {
   const t = useTranslations();
   const { currentUser } = useAuth();
+  const { currentClinic } = useClinic();
 
   const {
     templates,
@@ -141,7 +143,7 @@ export function TemplateStatusCardContent({ wabaId }: TemplateStatusCardProps) {
     createTemplates,
     isCreating,
     createError,
-  } = useWhatsAppTemplates(currentUser?.uid || '');
+  } = useWhatsAppTemplates(currentClinic?.id || currentUser?.uid || '');
 
   // Don't show if WABA is not connected
   if (!wabaId) {

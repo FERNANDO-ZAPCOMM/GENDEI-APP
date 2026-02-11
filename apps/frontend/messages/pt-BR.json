@@ -814,6 +814,7 @@
   "dashboard": {
     "welcome": "Bem-vindo",
     "overview": "Visão Geral",
+    "analytics": "Analytics",
     "agendaSection": "Agenda",
     "agenda": "Agenda",
     "professionalsSection": "Profissionais",
@@ -852,6 +853,30 @@
         "description": "Sua conta do WhatsApp Business precisa de verificação para enviar mensagens.",
         "action": "Verificar Agora"
       }
+    }
+  },
+  "analyticsPage": {
+    "title": "Analytics",
+    "description": "Acompanhe performance de pagamentos e indicadores da clínica.",
+    "cards": {
+      "totalRevenue": "Receita Total (Pagas)",
+      "monthRevenue": "Receita do Mês",
+      "averageTicket": "Ticket Médio",
+      "conversion": "Conversão de Pagamentos"
+    },
+    "methodBreakdown": {
+      "title": "Receita por Método",
+      "description": "Comparativo de receita por forma de pagamento.",
+      "card": "Cartão",
+      "other": "Outros"
+    },
+    "transactions": {
+      "title": "Resumo Operacional",
+      "description": "Visão rápida de volume e eficiência.",
+      "total": "Transações Totais",
+      "paid": "Transações Pagas",
+      "todayAppointments": "Consultas Hoje",
+      "totalPatients": "Pacientes Totais"
     }
   },
   "sales": {

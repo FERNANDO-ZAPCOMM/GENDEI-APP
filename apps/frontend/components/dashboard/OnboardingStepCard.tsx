@@ -12,6 +12,7 @@ import {
   CheckCircle2,
   ChevronRight,
 } from 'lucide-react';
+import { FaWhatsapp } from 'react-icons/fa';
 import { cn } from '@/lib/utils';
 import type { OnboardingStep } from '@/lib/onboarding-types';
 
@@ -48,6 +49,7 @@ export function OnboardingStepCard({
   const params = useParams();
   const locale = params.locale as string;
   const Icon = STEP_ICONS[icon as keyof typeof STEP_ICONS] || Building2;
+  const isWhatsAppStep = href.includes('/dashboard/whatsapp');
 
   return (
     <Link
@@ -88,7 +90,7 @@ export function OnboardingStepCard({
               : 'bg-gray-50 text-gray-400'
         )}
       >
-        <Icon className="h-4 w-4" />
+        {isWhatsAppStep ? <FaWhatsapp className="h-4 w-4" /> : <Icon className="h-4 w-4" />}
       </div>
 
       {/* Content */}

@@ -814,6 +814,7 @@
   "dashboard": {
     "welcome": "Welcome",
     "overview": "Overview",
+    "analytics": "Analytics",
     "agendaSection": "Schedule",
     "agenda": "Schedule",
     "professionalsSection": "Professionals",
@@ -854,6 +855,30 @@
       }
     },
     "workflow": "Service Mode"
+  },
+  "analyticsPage": {
+    "title": "Analytics",
+    "description": "Track payment performance and clinic KPIs.",
+    "cards": {
+      "totalRevenue": "Total Revenue (Paid)",
+      "monthRevenue": "Month Revenue",
+      "averageTicket": "Average Ticket",
+      "conversion": "Payment Conversion"
+    },
+    "methodBreakdown": {
+      "title": "Revenue by Method",
+      "description": "Revenue comparison by payment method.",
+      "card": "Card",
+      "other": "Other"
+    },
+    "transactions": {
+      "title": "Operational Summary",
+      "description": "Quick view of volume and efficiency.",
+      "total": "Total Transactions",
+      "paid": "Paid Transactions",
+      "todayAppointments": "Today's Appointments",
+      "totalPatients": "Total Patients"
+    }
   },
   "sales": {
     "title": "Sales",

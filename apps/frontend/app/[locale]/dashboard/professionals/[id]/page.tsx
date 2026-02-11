@@ -414,7 +414,7 @@ export default function ProfessionalEditPage() {
       </div>
 
       {/* Main Card with Tabs */}
-      <div className="w-full lg:w-3/4">
+      <div className="w-full lg:w-3/4 space-y-6">
       <Card>
         <CardHeader className="pb-3 sm:pb-6">
           <div className="flex items-center justify-between">

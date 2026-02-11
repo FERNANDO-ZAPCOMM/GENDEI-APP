@@ -29,14 +29,14 @@ export interface CreateTemplatesResponse {
 /**
  * Hook for fetching and managing WhatsApp message templates
  */
-export function useWhatsAppTemplates(creatorId: string) {
+export function useWhatsAppTemplates(clinicId: string) {
   const { getIdToken } = useAuth();
   const queryClient = useQueryClient();
 
   const query = useQuery({
-    queryKey: ['whatsapp-templates', creatorId],
+    queryKey: ['whatsapp-templates', clinicId],
     queryFn: async (): Promise<TemplatesResponse> => {
-      if (!creatorId) throw new Error('Creator ID is required');
+      if (!clinicId) throw new Error('Clinic ID is required');
 
       const token = await getIdToken();
       if (!token) throw new Error('Not authenticated');
@@ -45,7 +45,7 @@ export function useWhatsAppTemplates(creatorId: string) {
       const timeoutId = setTimeout(() => controller.abort(), 15000);
 
       try {
-        const response = await fetch(`${API_URL}/meta/templates/${creatorId}`, {
+        const response = await fetch(`${API_URL}/meta/templates/${clinicId}`, {
           headers: {
             Authorization: `Bearer ${token}`,
           },
@@ -68,7 +68,7 @@ export function useWhatsAppTemplates(creatorId: string) {
         throw error;
       }
     },
-    enabled: !!creatorId,
+    enabled: !!clinicId,
     retry: 1,
     retryDelay: 1000,
     staleTime: 60000, // Consider data stale after 1 minute
@@ -81,7 +81,7 @@ export function useWhatsAppTemplates(creatorId: string) {
       const token = await getIdToken();
       if (!token) throw new Error('Not authenticated');
 
-      const response = await fetch(`${API_URL}/meta/templates/${creatorId}`, {
+      const response = await fetch(`${API_URL}/meta/templates/${clinicId}`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -98,7 +98,7 @@ export function useWhatsAppTemplates(creatorId: string) {
     },
     onSuccess: () => {
       // Refetch templates after creation
-      queryClient.invalidateQueries({ queryKey: ['whatsapp-templates', creatorId] });
+      queryClient.invalidateQueries({ queryKey: ['whatsapp-templates', clinicId] });
     },
   });
 

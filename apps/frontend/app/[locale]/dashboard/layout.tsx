@@ -19,7 +19,8 @@ import {
   Stethoscope,
   CreditCard,
   Bot,
-  Check,
+  CheckCircle2,
+  BarChart3,
 } from 'lucide-react';
 import { FaWhatsapp } from 'react-icons/fa';
 
@@ -103,6 +104,7 @@ interface NavItem {
 // Organized by: Overview → Agenda Section → Patients Section → Professionals Section → Configuration
 const navigation: NavItem[] = [
   { name: 'overview', href: '/dashboard', icon: LayoutDashboard },
+  { name: 'analytics', href: '/dashboard/analytics', icon: BarChart3 },
   {
     name: 'agendaSection',
     href: '#',
@@ -136,7 +138,7 @@ const navigation: NavItem[] = [
       { name: 'clinic', href: '/dashboard/clinic', icon: Stethoscope, notificationKey: 'clinic', step: 1 },
       { name: 'payments', href: '/dashboard/payments', icon: CreditCard, notificationKey: 'payments', step: 2 },
       { name: 'whatsapp', href: '/dashboard/whatsapp', icon: FaWhatsapp, notificationKey: 'whatsapp', step: 3 },
-      { name: 'workflow', href: '/dashboard/workflow', icon: Bot, step: 4 },
+      // { name: 'workflow', href: '/dashboard/workflow', icon: Bot, step: 4 },
       { name: 'account', href: '/dashboard/account', icon: User },
     ],
   },
@@ -342,11 +344,11 @@ function NavigationItems({
                         className={cn(
                           'w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold',
                           isComplete
-                            ? 'bg-green-500 text-white'
+                            ? 'bg-green-100 text-green-600'
                             : 'bg-gray-200 text-gray-600'
                         )}
                       >
-                        {isComplete ? <Check className="w-3.5 h-3.5" /> : item.step}
+                        {isComplete ? <CheckCircle2 className="w-4 h-4" /> : item.step}
                       </div>
                       {/* Flashing dot on current step */}
                       {isCurrentStep && (
@@ -463,6 +465,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const { data: stats } = useClinicStats(clinic?.id || '');
   const notifications = useSidebarNotifications();
   const vertical = useVertical();
+  const verticalLabel = (vertical.name || vertical.slug).replace(/^Gendei\s*/i, '').trim();
 
   const locale = pathname.split('/')[1];
   const todayCount = stats?.todayAppointments || 0;
@@ -508,9 +511,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <div className="md:hidden fixed top-0 left-0 right-0 z-50 bg-white border-b border-gray-200">
         <div className="flex items-center justify-center px-4 py-3">
           <span className="text-xl text-black logo-font">Gendei</span>
-          {vertical.slug !== 'geral' && (
-            <span className="text-xl text-gray-400 logo-font ml-1">- {vertical.slug}</span>
-          )}
         </div>
       </div>
 
@@ -520,7 +520,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div className="p-6">
           <span className="text-2xl text-black logo-font">Gendei</span>
           {vertical.slug !== 'geral' && (
-            <span className="text-2xl text-gray-400 logo-font ml-1">- {vertical.slug}</span>
+            <p className="text-sm font-normal text-muted-foreground mt-1 truncate">{verticalLabel}</p>
           )}
           <p className="text-sm text-muted-foreground mt-1 truncate">{clinic?.name || 'Painel da Clínica'}</p>
         </div>
