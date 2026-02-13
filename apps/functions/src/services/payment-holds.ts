@@ -1,4 +1,5 @@
 import { getFirestore, FieldValue, Timestamp } from 'firebase-admin/firestore';
+import { findConversationForPhone } from '../utils/phone';
 
 const db = getFirestore();
 
@@ -55,44 +56,6 @@ function needsPendingPaymentRelease(data: Record<string, any>): boolean {
   const pendingLegacyDeposit = depositAmount > 0 && !depositPaid;
 
   return pendingSignal || pendingLegacyDeposit;
-}
-
-function getPhoneVariants(phone?: string): string[] {
-  if (!phone) return [];
-  const cleaned = String(phone).trim();
-  if (!cleaned) return [];
-
-  const digits = cleaned.replace(/\D/g, '');
-  const plusDigits = digits ? `+${digits}` : '';
-  const variants = new Set<string>([cleaned]);
-  if (digits) variants.add(digits);
-  if (plusDigits) variants.add(plusDigits);
-  return Array.from(variants);
-}
-
-async function findConversationForPhone(
-  clinicId: string,
-  patientPhone?: string
-): Promise<FirebaseFirestore.DocumentReference | null> {
-  const variants = getPhoneVariants(patientPhone);
-  if (variants.length === 0) return null;
-
-  const conversationsRef = db.collection('gendei_clinics').doc(clinicId).collection('conversations');
-
-  for (const variant of variants) {
-    const doc = await conversationsRef.doc(variant).get();
-    if (doc.exists) return doc.ref;
-  }
-
-  const fields = ['waUserPhone', 'waUserId', 'phone'];
-  for (const field of fields) {
-    for (const variant of variants) {
-      const snapshot = await conversationsRef.where(field, '==', variant).limit(1).get();
-      if (!snapshot.empty) return snapshot.docs[0].ref;
-    }
-  }
-
-  return null;
 }
 
 async function syncCancelledAppointmentContext(

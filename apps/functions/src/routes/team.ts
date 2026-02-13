@@ -33,33 +33,4 @@ router.get('/my-role', verifyAuth, async (req: Request, res: Response) => {
   }
 });
 
-// GET /team/members - Get team members (placeholder for now)
-router.get('/members', verifyAuth, async (req: Request, res: Response) => {
-  try {
-    const user = req.user;
-
-    if (!user?.clinicId) {
-      res.json([]);
-      return;
-    }
-
-    // For now, return empty array - Gendei doesn't have team members yet
-    res.json([]);
-  } catch (error) {
-    console.error('Error fetching team members:', error);
-    res.status(500).json({ message: 'Failed to fetch team members' });
-  }
-});
-
-// GET /team/invitations - Get pending invitations (placeholder for now)
-router.get('/invitations', verifyAuth, async (req: Request, res: Response) => {
-  try {
-    // Return empty array for now
-    res.json([]);
-  } catch (error) {
-    console.error('Error fetching invitations:', error);
-    res.status(500).json({ message: 'Failed to fetch invitations' });
-  }
-});
-
 export default router;
