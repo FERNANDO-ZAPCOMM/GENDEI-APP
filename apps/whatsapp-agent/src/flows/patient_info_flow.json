@@ -1,0 +1,240 @@
+{
+  "version": "6.2",
+  "data_api_version": "3.0",
+  "routing_model": {
+    "ESPECIALIDADE": ["TIPO_ATENDIMENTO"],
+    "TIPO_ATENDIMENTO": ["INFO_CONVENIO"],
+    "INFO_CONVENIO": ["DADOS_PACIENTE"],
+    "DADOS_PACIENTE": []
+  },
+  "screens": [
+    {
+      "id": "ESPECIALIDADE",
+      "title": "Agendar Consulta",
+      "data": {
+        "especialidades": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "title": { "type": "string" },
+              "description": { "type": "string" }
+            }
+          },
+          "__example__": [
+            { "id": "prof_1", "title": "Cardiologia", "description": "Dr. João Silva" },
+            { "id": "prof_2", "title": "Dermatologia", "description": "Dra. Maria Santos" }
+          ]
+        },
+        "error_message": {
+          "type": "string",
+          "__example__": ""
+        }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "form_especialidade",
+            "children": [
+              {
+                "type": "RadioButtonsGroup",
+                "name": "especialidade",
+                "label": "Profissional",
+                "required": true,
+                "data-source": "${data.especialidades}"
+              },
+              {
+                "type": "Footer",
+                "label": "Continuar",
+                "on-click-action": {
+                  "name": "data_exchange",
+                  "payload": { "especialidade": "${form.especialidade}" }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "TIPO_ATENDIMENTO",
+      "title": "Tipo de Atendimento",
+      "data": {
+        "especialidade": { "type": "string", "__example__": "prof_1" },
+        "professional_id": { "type": "string", "__example__": "prof_1" },
+        "professional_name": { "type": "string", "__example__": "Dr. João Silva" },
+        "specialty_name": { "type": "string", "__example__": "Cardiologia" },
+        "tipos_pagamento": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "title": { "type": "string" },
+              "description": { "type": "string" }
+            }
+          },
+          "__example__": [
+            { "id": "convenio", "title": "Convênio", "description": "Tenho plano de saúde" },
+            { "id": "particular", "title": "Particular", "description": "Pagamento direto" }
+          ]
+        },
+        "error_message": { "type": "string", "__example__": "" }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "form_pagamento",
+            "children": [
+              {
+                "type": "RadioButtonsGroup",
+                "name": "tipo_pagamento",
+                "label": "TIPO DE ATENDIMENTO",
+                "required": true,
+                "data-source": "${data.tipos_pagamento}"
+              },
+              {
+                "type": "Footer",
+                "label": "Continuar",
+                "on-click-action": {
+                  "name": "data_exchange",
+                  "payload": {
+                    "especialidade": "${data.especialidade}",
+                    "professional_id": "${data.professional_id}",
+                    "professional_name": "${data.professional_name}",
+                    "specialty_name": "${data.specialty_name}",
+                    "tipo_pagamento": "${form.tipo_pagamento}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "INFO_CONVENIO",
+      "title": "Dados do Convênio",
+      "data": {
+        "especialidade": { "type": "string", "__example__": "prof_1" },
+        "professional_id": { "type": "string", "__example__": "prof_1" },
+        "professional_name": { "type": "string", "__example__": "Dr. João Silva" },
+        "specialty_name": { "type": "string", "__example__": "Cardiologia" },
+        "tipo_pagamento": { "type": "string", "__example__": "convenio" },
+        "convenios": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "title": { "type": "string" }
+            }
+          },
+          "__example__": [
+            { "id": "unimed", "title": "Unimed" },
+            { "id": "bradesco", "title": "Bradesco Saúde" }
+          ]
+        },
+        "show_convenio_fields": { "type": "boolean", "__example__": true },
+        "error_message": { "type": "string", "__example__": "" }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "form_convenio",
+            "children": [
+              {
+                "type": "Dropdown",
+                "name": "convenio_nome",
+                "label": "Seu convênio",
+                "required": false,
+                "visible": "${data.show_convenio_fields}",
+                "data-source": "${data.convenios}"
+              },
+              {
+                "type": "Footer",
+                "label": "Continuar",
+                "on-click-action": {
+                  "name": "data_exchange",
+                  "payload": {
+                    "especialidade": "${data.especialidade}",
+                    "professional_id": "${data.professional_id}",
+                    "professional_name": "${data.professional_name}",
+                    "specialty_name": "${data.specialty_name}",
+                    "tipo_pagamento": "${data.tipo_pagamento}",
+                    "convenio_nome": "${form.convenio_nome}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "DADOS_PACIENTE",
+      "title": "Dados do Paciente",
+      "terminal": true,
+      "data": {
+        "especialidade": { "type": "string", "__example__": "prof_1" },
+        "professional_id": { "type": "string", "__example__": "prof_1" },
+        "professional_name": { "type": "string", "__example__": "Dr. João Silva" },
+        "specialty_name": { "type": "string", "__example__": "Cardiologia" },
+        "tipo_pagamento": { "type": "string", "__example__": "convenio" },
+        "convenio_nome": { "type": "string", "__example__": "unimed" },
+        "error_message": { "type": "string", "__example__": "" }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "form_paciente",
+            "children": [
+              {
+                "type": "TextInput",
+                "name": "nome",
+                "label": "Nome completo",
+                "input-type": "text",
+                "required": true,
+                "helper-text": "Como consta no documento"
+              },
+              {
+                "type": "TextInput",
+                "name": "email",
+                "label": "E-mail",
+                "input-type": "email",
+                "required": true,
+                "helper-text": "Para confirmação do agendamento"
+              },
+              {
+                "type": "Footer",
+                "label": "Ver Horários",
+                "on-click-action": {
+                  "name": "complete",
+                  "payload": {
+                    "especialidade": "${data.especialidade}",
+                    "professional_id": "${data.professional_id}",
+                    "professional_name": "${data.professional_name}",
+                    "specialty_name": "${data.specialty_name}",
+                    "tipo_pagamento": "${data.tipo_pagamento}",
+                    "convenio_nome": "${data.convenio_nome}",
+                    "nome": "${form.nome}",
+                    "email": "${form.email}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}
