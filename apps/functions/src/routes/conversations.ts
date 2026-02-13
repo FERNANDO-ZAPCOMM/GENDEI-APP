@@ -114,7 +114,14 @@ function normalizeChatHistoryMessages(
   clinicId: string
 ): Array<StoredConversationMessage & { id: string }> {
   const candidates = [data.messages, data.chatHistory, data.history, data.items];
-  const mapped: Array<StoredConversationMessage & { id: string }> = [];
+  const mappedById = new Map<string, StoredConversationMessage & { id: string }>();
+
+  const addMapped = (id: string, value: Record<string, unknown>) => {
+    mappedById.set(id, {
+      id,
+      ...mapChatHistoryMessage(id, value, conversationId, clinicId),
+    });
+  };
 
   for (const candidate of candidates) {
     if (!candidate) continue;
@@ -126,12 +133,8 @@ function normalizeChatHistoryMessages(
         const messageId = typeof rawTs === 'string'
           ? sanitizeTimestampKey(rawTs)
           : `msg_${index}`;
-        mapped.push({
-          id: messageId,
-          ...mapChatHistoryMessage(messageId, item, conversationId, clinicId),
-        });
+        addMapped(messageId, item);
       });
-      if (mapped.length > 0) return mapped;
       continue;
     }
 
@@ -139,12 +142,8 @@ function normalizeChatHistoryMessages(
       const entries = Object.entries(candidate as Record<string, unknown>);
       entries.forEach(([key, value]) => {
         if (!looksLikeMessageObject(value)) return;
-        mapped.push({
-          id: key,
-          ...mapChatHistoryMessage(key, value, conversationId, clinicId),
-        });
+        addMapped(key, value);
       });
-      if (mapped.length > 0) return mapped;
 
       // Some older docs stored a single message object directly.
       if (looksLikeMessageObject(candidate)) {
@@ -153,10 +152,7 @@ function normalizeChatHistoryMessages(
         const messageId = typeof rawTs === 'string'
           ? sanitizeTimestampKey(rawTs)
           : 'msg_0';
-        return [{
-          id: messageId,
-          ...mapChatHistoryMessage(messageId, single, conversationId, clinicId),
-        }];
+        addMapped(messageId, single);
       }
     }
   }
@@ -177,13 +173,11 @@ function normalizeChatHistoryMessages(
 
   rootEntries.forEach(([key, value]) => {
     if (!looksLikeMessageObject(value)) return;
-    mapped.push({
-      id: key,
-      ...mapChatHistoryMessage(key, value, conversationId, clinicId),
-    });
+    const messageId = key.startsWith('messages.') ? key.slice('messages.'.length) : key;
+    addMapped(messageId, value);
   });
 
-  return mapped;
+  return Array.from(mappedById.values());
 }
 
 async function appendMessageToChatHistory(
@@ -237,10 +231,35 @@ async function appendMessageToChatHistory(
       clinicId: payload.clinicId,
     });
   } else {
+    const currentData = chatHistoryDoc.data() as Record<string, unknown>;
+    const currentMessages = (
+      currentData.messages &&
+      typeof currentData.messages === 'object' &&
+      !Array.isArray(currentData.messages)
+    )
+      ? (currentData.messages as Record<string, unknown>)
+      : {};
+
+    // Backward compatibility: some old writes used root-level "messages.<id>" fields.
+    // Merge them into the canonical messages map so reads/writes are consistent.
+    const dottedEntries = Object.entries(currentData)
+      .filter(([key, value]) => key.startsWith('messages.') && looksLikeMessageObject(value))
+      .map(([key, value]) => [key.slice('messages.'.length), value] as const);
+
+    const mergedMessages = {
+      ...currentMessages,
+      ...Object.fromEntries(dottedEntries),
+      [messageId]: payload,
+    };
+
+    const trimmedEntries = Object.entries(mergedMessages)
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .slice(-MAX_MESSAGES_PER_CONVERSATION);
+
     await chatHistoryRef.set({
-      [`messages.${messageId}`]: payload,
+      messages: Object.fromEntries(trimmedEntries),
       lastUpdated: timestamp,
-      messageCount: FieldValue.increment(1),
+      messageCount: trimmedEntries.length,
       conversationId: payload.conversationId,
       clinicId: payload.clinicId,
     }, { merge: true });

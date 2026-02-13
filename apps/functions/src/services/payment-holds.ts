@@ -2,6 +2,7 @@ import { getFirestore, FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { findConversationForPhone } from '../utils/phone';
 
 const db = getFirestore();
+const CLINICS = 'gendei_clinics';
 
 const PAYMENT_HOLD_MINUTES = Number(process.env.PAYMENT_HOLD_MINUTES || 15);
 const HOLD_MS = Math.max(1, PAYMENT_HOLD_MINUTES) * 60 * 1000;
@@ -11,6 +12,15 @@ export interface PaymentHoldCleanupResult {
   expired: number;
   skipped: number;
   errors: number;
+}
+
+function createEmptyResult(): PaymentHoldCleanupResult {
+  return {
+    scanned: 0,
+    expired: 0,
+    skipped: 0,
+    errors: 0,
+  };
 }
 
 function parseDate(input: any): Date | null {
@@ -88,21 +98,16 @@ async function syncCancelledAppointmentContext(
   }
 }
 
-export async function cleanupExpiredPaymentHolds(): Promise<PaymentHoldCleanupResult> {
-  const result: PaymentHoldCleanupResult = {
-    scanned: 0,
-    expired: 0,
-    skipped: 0,
-    errors: 0,
-  };
-
+async function processPendingHoldDocs(
+  docs: FirebaseFirestore.QueryDocumentSnapshot[]
+): Promise<PaymentHoldCleanupResult> {
+  const result = createEmptyResult();
   const now = Date.now();
-  const docs = await db.collectionGroup('appointments').where('status', '==', 'pending').get();
 
   let batch = db.batch();
   let ops = 0;
 
-  for (const doc of docs.docs) {
+  for (const doc of docs) {
     result.scanned += 1;
     const data = doc.data() as Record<string, any>;
 
@@ -149,4 +154,22 @@ export async function cleanupExpiredPaymentHolds(): Promise<PaymentHoldCleanupRe
   }
 
   return result;
+}
+
+export async function cleanupExpiredPaymentHoldsForClinic(
+  clinicId: string
+): Promise<PaymentHoldCleanupResult> {
+  const snapshot = await db
+    .collection(CLINICS)
+    .doc(clinicId)
+    .collection('appointments')
+    .where('status', '==', 'pending')
+    .get();
+
+  return processPendingHoldDocs(snapshot.docs);
+}
+
+export async function cleanupExpiredPaymentHolds(): Promise<PaymentHoldCleanupResult> {
+  const docs = await db.collectionGroup('appointments').where('status', '==', 'pending').get();
+  return processPendingHoldDocs(docs.docs);
 }

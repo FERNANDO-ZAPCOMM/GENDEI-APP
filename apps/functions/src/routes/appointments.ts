@@ -5,6 +5,7 @@
 import { Router, Request, Response } from 'express';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { verifyAuth } from '../middleware/auth';
+import { cleanupExpiredPaymentHoldsForClinic } from '../services/payment-holds';
 
 const router = Router();
 const db = getFirestore();
@@ -96,6 +97,20 @@ async function syncConversationAppointmentContext(
   }
 }
 
+async function cleanupExpiredPendingPaymentHoldsForRead(clinicId: string): Promise<void> {
+  try {
+    const result = await cleanupExpiredPaymentHoldsForClinic(clinicId);
+    if (result.expired > 0) {
+      console.log(
+        `[appointments] auto-cancelled ${result.expired} expired pending payment hold(s) for clinic ${clinicId}`
+      );
+    }
+  } catch (error) {
+    // Reads should not fail due to cleanup issues.
+    console.error(`[appointments] failed to cleanup expired payment holds for clinic ${clinicId}:`, error);
+  }
+}
+
 // Helper function to get appointments from clinic subcollection
 async function getAppointmentsForClinic(
   clinicId: string,
@@ -152,6 +167,7 @@ router.get('/clinic/:clinicId', verifyAuth, async (req: Request, res: Response) 
       return res.status(403).json({ message: 'Access denied' });
     }
 
+    await cleanupExpiredPendingPaymentHoldsForRead(clinicId);
     const appointments = await getAppointmentsForClinic(clinicId, startDate, endDate, professionalId, status);
     return res.json(appointments);
   } catch (error: any) {
@@ -178,6 +194,7 @@ router.get('/', verifyAuth, async (req: Request, res: Response) => {
       return res.status(403).json({ message: 'Access denied' });
     }
 
+    await cleanupExpiredPendingPaymentHoldsForRead(clinicId);
     const appointments = await getAppointmentsForClinic(clinicId, startDate, endDate, professionalId, status);
     return res.json(appointments);
   } catch (error: any) {
@@ -200,6 +217,7 @@ router.get('/today', verifyAuth, async (req: Request, res: Response) => {
       return res.status(403).json({ message: 'Access denied' });
     }
 
+    await cleanupExpiredPendingPaymentHoldsForRead(clinicId);
     const today = new Date().toISOString().split('T')[0];
 
     const snapshot = await db.collection(CLINICS)
@@ -231,6 +249,8 @@ router.get('/:appointmentId', verifyAuth, async (req: Request, res: Response) =>
     if (!clinicId) {
       return res.status(401).json({ message: 'Not authenticated' });
     }
+
+    await cleanupExpiredPendingPaymentHoldsForRead(clinicId);
 
     // Query from nested path: gendei_clinics/{clinicId}/appointments/{appointmentId}
     const doc = await db.collection(CLINICS)

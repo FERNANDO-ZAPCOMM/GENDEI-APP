@@ -962,7 +962,8 @@
       "new": "New",
       "scheduling": "Scheduling",
       "selecting_slot": "Selecting time",
-      "awaiting_appointment_action": "Awaiting appointment action"
+      "awaiting_appointment_action": "Awaiting appointment action",
+      "in_patient_info_flow": "In patient info flow"
     },
     "handler": {
       "ai": "AI",

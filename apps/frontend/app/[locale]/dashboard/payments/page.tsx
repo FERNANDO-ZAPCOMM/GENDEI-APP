@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type ReactNode } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import Image from 'next/image';
@@ -11,6 +11,8 @@ import {
   Save,
   ExternalLink,
   ShieldCheck,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -26,6 +28,80 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { TypingDots } from '@/components/PageLoader';
 import type { PaymentSettings } from '@/lib/clinic-types';
+
+type SectionStatus = 'ready' | 'processing' | 'missing';
+
+interface ExpandableCardProps {
+  title: string;
+  description?: string;
+  icon: ReactNode;
+  status: SectionStatus;
+  isExpanded: boolean;
+  onToggle: () => void;
+  headerRight?: ReactNode;
+  children: ReactNode;
+}
+
+function ExpandableCard({
+  title,
+  description,
+  icon,
+  status,
+  isExpanded,
+  onToggle,
+  headerRight,
+  children,
+}: ExpandableCardProps) {
+  const statusStyles = {
+    ready: {
+      iconBg: 'bg-green-100',
+      iconColor: 'text-green-600',
+      border: isExpanded ? 'border-green-200' : 'border-gray-200',
+    },
+    processing: {
+      iconBg: 'bg-blue-100',
+      iconColor: 'text-blue-600',
+      border: isExpanded ? 'border-blue-200' : 'border-gray-200',
+    },
+    missing: {
+      iconBg: 'bg-orange-100',
+      iconColor: 'text-orange-600',
+      border: isExpanded ? 'border-orange-200' : 'border-gray-200',
+    },
+  } as const;
+
+  const style = statusStyles[status];
+
+  return (
+    <Card className={`${style.border} transition-colors`}>
+      <div
+        className="flex items-center justify-between p-4 cursor-pointer hover:bg-gray-50/50 transition-colors"
+        onClick={onToggle}
+      >
+        <div className="flex items-center gap-3">
+          <div className={`p-2 rounded-full ${style.iconBg} ${style.iconColor}`}>
+            {icon}
+          </div>
+          <div>
+            <h3 className="font-medium text-gray-900">{title}</h3>
+            {description && <p className="text-sm text-gray-500">{description}</p>}
+          </div>
+        </div>
+        <div className="flex items-center gap-3 text-gray-500">
+          {headerRight}
+          <div className="p-1.5 rounded-full hover:bg-gray-100">
+            {isExpanded ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+          </div>
+        </div>
+      </div>
+      {isExpanded && (
+        <CardContent className="pt-0 border-t">
+          {children}
+        </CardContent>
+      )}
+    </Card>
+  );
+}
 
 export default function PaymentsPage() {
   const t = useTranslations();
@@ -57,6 +133,14 @@ export default function PaymentsPage() {
   const [confirmPixKey, setConfirmPixKey] = useState('');
   const [pixKeyError, setPixKeyError] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [expandedSections, setExpandedSections] = useState({
+    stripe: true,
+    pix: false,
+  });
+
+  const toggleSection = (section: keyof typeof expandedSections) => {
+    setExpandedSections((prev) => ({ ...prev, [section]: !prev[section] }));
+  };
 
   // Initialize settings from clinic data
   useEffect(() => {
@@ -223,7 +307,7 @@ export default function PaymentsPage() {
           <CardDescription>{t('paymentSettings.depositCard.description')}</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="p-4 border rounded-lg border-green-200 bg-green-50/30">
+          <div className="p-4 border rounded-lg">
             <div className="flex items-center justify-between">
               <div>
                 <Label className="font-medium">{t('paymentSettings.depositRequired')}</Label>
@@ -268,17 +352,16 @@ export default function PaymentsPage() {
       {/* Stripe + PIX Cards */}
       <div className="space-y-6">
         {/* Stripe Connect Card */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center justify-between gap-3 text-base">
-              <span>Stripe Connect (Split de Pagamentos)</span>
-              <Image src="/stripe.png" alt="Stripe" width={64} height={20} className="h-5 w-auto object-contain" />
-            </CardTitle>
-            <CardDescription>
-              Conecte sua conta Stripe para receber pagamentos com divisão automática de repasses.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
+        <ExpandableCard
+          title="Stripe Connect (Split de Pagamentos)"
+          description="Conecte sua conta Stripe para receber pagamentos com divisão automática de repasses."
+          icon={<ShieldCheck className="h-5 w-5" />}
+          status={stripeReadyForSplit ? 'ready' : stripeConnected ? 'processing' : 'missing'}
+          isExpanded={expandedSections.stripe}
+          onToggle={() => toggleSection('stripe')}
+          headerRight={<Image src="/stripe.png" alt="Stripe" width={64} height={20} className="h-5 w-auto object-contain" />}
+        >
+          <div className="space-y-4 py-4">
             {stripeLoading ? (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <TypingDots size="sm" /> Verificando status do Stripe Connect...
@@ -358,83 +441,91 @@ export default function PaymentsPage() {
                 </div>
               </>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </ExpandableCard>
 
         {/* PIX Card */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center justify-between gap-3 text-base">
-              <span>
-                {t('paymentSettings.pixCard.title')}
-                <span className="text-red-500"> *</span>
-              </span>
+        <ExpandableCard
+          title="Pagamento PIX"
+          description={t('paymentSettings.pixCard.description')}
+          icon={<Percent className="h-5 w-5" />}
+          status="missing"
+          isExpanded={expandedSections.pix}
+          onToggle={() => toggleSection('pix')}
+          headerRight={
+            <div className="flex items-center gap-2">
+              <Badge variant="secondary" className="text-xs uppercase tracking-wide">Em breve</Badge>
               <Image src="/pix.png" alt="PIX" width={48} height={20} className="h-5 w-auto object-contain" />
-            </CardTitle>
-            <CardDescription>{t('paymentSettings.pixCard.description')}</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {/* Chave PIX and Confirmation - side by side as before */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="pixKey">
-                  {t('paymentSettings.pixCard.pixKey')} <span className="text-red-500">*</span>
-                </Label>
-                <Input
-                  id="pixKey"
-                  placeholder={t('paymentSettings.pixCard.randomKey')}
-                  value={settings.pixKey || ''}
-                  onChange={(e) => {
-                    updateSettings({ pixKey: e.target.value });
-                    setPixKeyError('');
-                  }}
-                  disabled={isSaving}
-                  className={pixKeyError ? 'border-red-500' : ''}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="confirmPixKey">
-                  {t('paymentSettings.pixCard.confirmPixKey')} <span className="text-red-500">*</span>
-                </Label>
-                <Input
-                  id="confirmPixKey"
-                  placeholder={t('paymentSettings.pixCard.confirmPlaceholder')}
-                  value={confirmPixKey}
-                  onChange={(e) => {
-                    setConfirmPixKey(e.target.value);
-                    setPixKeyError('');
-                  }}
-                  disabled={isSaving}
-                  className={pixKeyError ? 'border-red-500' : ''}
-                  required
-                />
-              </div>
             </div>
-            {pixKeyError && (
-              <p className="text-sm text-red-500">{pixKeyError}</p>
-            )}
-            <p className="text-xs text-muted-foreground">
-              {t('paymentSettings.pixCard.help')}
-            </p>
+          }
+        >
+          <div className="space-y-4 py-4 opacity-60 pointer-events-none">
+            <div className="rounded-md border border-dashed border-muted-foreground/40 bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+              Configuração de Pagamento PIX disponível em breve.
+            </div>
+            <fieldset disabled className="space-y-4">
+              {/* Chave PIX and Confirmation - side by side as before */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="pixKey">
+                    {t('paymentSettings.pixCard.pixKey')} <span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    id="pixKey"
+                    placeholder={t('paymentSettings.pixCard.randomKey')}
+                    value={settings.pixKey || ''}
+                    onChange={(e) => {
+                      updateSettings({ pixKey: e.target.value });
+                      setPixKeyError('');
+                    }}
+                    disabled={isSaving}
+                    className={pixKeyError ? 'border-red-500' : ''}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="confirmPixKey">
+                    {t('paymentSettings.pixCard.confirmPixKey')} <span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    id="confirmPixKey"
+                    placeholder={t('paymentSettings.pixCard.confirmPlaceholder')}
+                    value={confirmPixKey}
+                    onChange={(e) => {
+                      setConfirmPixKey(e.target.value);
+                      setPixKeyError('');
+                    }}
+                    disabled={isSaving}
+                    className={pixKeyError ? 'border-red-500' : ''}
+                    required
+                  />
+                </div>
+              </div>
+              {pixKeyError && (
+                <p className="text-sm text-red-500">{pixKeyError}</p>
+              )}
+              <p className="text-xs text-muted-foreground">
+                {t('paymentSettings.pixCard.help')}
+              </p>
 
-            <div className="flex justify-end pt-2">
-              <Button onClick={handleSave} disabled={isSaving}>
-                {isSaving ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    {t('common.saving')}
-                  </>
-                ) : (
-                  <>
-                    <Save className="h-4 w-4 mr-2" />
-                    {t('common.save')}
-                  </>
-                )}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+              <div className="flex justify-end pt-2">
+                <Button onClick={handleSave} disabled>
+                  {isSaving ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      {t('common.saving')}
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-4 w-4 mr-2" />
+                      {t('common.save')}
+                    </>
+                  )}
+                </Button>
+              </div>
+            </fieldset>
+          </div>
+        </ExpandableCard>
       </div>
 
       <Card>

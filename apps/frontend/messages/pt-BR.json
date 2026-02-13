@@ -814,7 +814,7 @@
   "dashboard": {
     "welcome": "Bem-vindo",
     "overview": "Visão Geral",
-    "analytics": "Analytics",
+    "analytics": "Relatórios",
     "agendaSection": "Agenda",
     "agenda": "Agenda",
     "professionalsSection": "Profissionais",
@@ -856,7 +856,7 @@
     }
   },
   "analyticsPage": {
-    "title": "Analytics",
+    "title": "Relatórios",
     "description": "Acompanhe performance de pagamentos e indicadores da clínica.",
     "cards": {
       "totalRevenue": "Receita Total (Pagas)",
@@ -961,7 +961,8 @@
       "scheduling": "Agendando",
       "confirming": "Confirmando",
       "awaiting_greeting_response": "Aguardando resposta",
-      "awaiting_appointment_action": "Aguardando ação no agendamento"
+      "awaiting_appointment_action": "Aguardando ação no agendamento",
+      "in_patient_info_flow": "No fluxo de dados do paciente"
     },
     "handler": {
       "ai": "IA",

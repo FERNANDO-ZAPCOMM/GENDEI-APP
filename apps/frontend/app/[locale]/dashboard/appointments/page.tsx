@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useParams, useRouter } from 'next/navigation';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
@@ -13,12 +13,15 @@ import {
   XCircle,
   AlertCircle,
   User,
+  MessageSquare,
+  Loader2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { useClinic } from '@/hooks/use-clinic';
 import { useAppointments } from '@/hooks/use-appointments';
 import { useProfessionals } from '@/hooks/use-professionals';
+import { useAuth } from '@/hooks/use-auth';
 import { useTimeBlocks, CreateTimeBlockInput } from '@/hooks/use-time-blocks';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -43,6 +46,7 @@ import {
 import { CalendarGrid } from '@/components/calendar/CalendarGrid';
 import { nowInTimezone, todayInTimezone, formatDateInTimezone, formatDayMonthInTimezone } from '@/lib/timezone';
 import { getSpecialtyNames, getProfessionalSpecialties } from '@/lib/specialties';
+import { apiClient } from '@/lib/api';
 import type { Appointment, AppointmentStatus } from '@/lib/clinic-types';
 import { getPendingPaymentHoldInfo, isPendingPaymentAppointment } from '@/lib/appointment-status';
 
@@ -101,8 +105,12 @@ const getInitials = (name: string) => {
 export default function AppointmentsPage() {
   const t = useTranslations();
   const searchParams = useSearchParams();
+  const params = useParams();
+  const router = useRouter();
+  const { getIdToken } = useAuth();
   const { currentClinic: clinic, isLoading: clinicLoading } = useClinic();
   const { data: professionals = [] } = useProfessionals(clinic?.id || '');
+  const locale = (params?.locale as string) || 'pt-BR';
 
   const statusConfig = getStatusConfig(t);
 
@@ -145,6 +153,7 @@ export default function AppointmentsPage() {
   const [viewMode] = useState<'day' | 'week'>('week'); // Always week view
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
+  const [openingConversation, setOpeningConversation] = useState(false);
 
   // Compute Monday of the week using UTC arithmetic (avoids browser timezone issues)
   const utcDay = selectedDate.getUTCDay(); // 0=Sun … 6=Sat
@@ -224,6 +233,54 @@ export default function AppointmentsPage() {
       toast.success(t('appointmentsPage.unblockSuccess'));
     } catch (error: any) {
       toast.error(error.message || t('appointmentsPage.unblockError'));
+    }
+  };
+
+  const normalizePhoneDigits = (value?: string | null) =>
+    (value || '').replace(/\D/g, '');
+
+  const handleOpenConversation = async () => {
+    if (!clinic?.id || !selectedAppointment?.patientPhone) return;
+
+    setOpeningConversation(true);
+    try {
+      const token = await getIdToken();
+      if (!token) throw new Error('Não autenticado');
+
+      const phoneRaw = selectedAppointment.patientPhone;
+      const phoneDigits = normalizePhoneDigits(phoneRaw);
+      const searchCandidates = Array.from(new Set([phoneRaw, phoneDigits].filter(Boolean)));
+
+      let foundConversationId: string | null = null;
+
+      for (const search of searchCandidates) {
+        const result = await apiClient<{ data: Array<{ id: string; waUserPhone?: string }> }>(
+          `/conversations?clinicId=${clinic.id}&search=${encodeURIComponent(search)}`,
+          { token, suppressErrorLog: true }
+        );
+        const conversations = result.data || [];
+        if (conversations.length === 0) continue;
+
+        const exact = conversations.find((c) => {
+          const convDigits = normalizePhoneDigits(c.waUserPhone);
+          return !!phoneDigits && !!convDigits && convDigits === phoneDigits;
+        });
+
+        foundConversationId = exact?.id || conversations[0].id;
+        break;
+      }
+
+      if (!foundConversationId) {
+        toast.error('Conversa não encontrada para este número.');
+        return;
+      }
+
+      setDetailsDialogOpen(false);
+      router.push(`/${locale}/dashboard/conversations/${foundConversationId}`);
+    } catch (error: any) {
+      toast.error(error?.message || 'Falha ao abrir conversa.');
+    } finally {
+      setOpeningConversation(false);
     }
   };
 
@@ -495,7 +552,7 @@ export default function AppointmentsPage() {
 
       {/* Appointment Details Dialog */}
       <Dialog open={detailsDialogOpen} onOpenChange={setDetailsDialogOpen}>
-        <DialogContent>
+        <DialogContent className="w-[96vw] sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>{t('appointmentsPage.appointmentDetails')}</DialogTitle>
             <DialogDescription>
@@ -508,29 +565,29 @@ export default function AppointmentsPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <p className="text-sm text-muted-foreground">{t('appointmentsPage.patient')}</p>
-                  <p className="font-medium">{selectedAppointment.patientName}</p>
+                  <p className="font-normal text-gray-900">{selectedAppointment.patientName}</p>
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">{t('appointmentsPage.phone')}</p>
-                  <p className="font-medium">{selectedAppointment.patientPhone || '-'}</p>
+                  <p className="font-normal text-gray-900">{selectedAppointment.patientPhone || '-'}</p>
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">{t('appointmentsPage.professional')}</p>
-                  <p className="font-medium">{selectedAppointment.professionalName}</p>
+                  <p className="font-normal text-gray-900">{selectedAppointment.professionalName}</p>
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">{t('appointmentsPage.service')}</p>
-                  <p className="font-medium">{selectedAppointment.serviceName || '-'}</p>
+                  <p className="font-normal text-gray-900">{selectedAppointment.serviceName || '-'}</p>
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">{t('appointmentsPage.date')}</p>
-                  <p className="font-medium">
+                  <p className="font-normal text-gray-900">
                     {format(parseISO(selectedAppointment.date), "d 'de' MMMM 'de' yyyy", { locale: ptBR })}
                   </p>
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">{t('appointmentsPage.time')}</p>
-                  <p className="font-medium">{selectedAppointment.time} ({selectedAppointment.duration}min)</p>
+                  <p className="font-normal text-gray-900">{selectedAppointment.time} ({selectedAppointment.duration}min)</p>
                 </div>
               </div>
 
@@ -579,6 +636,25 @@ export default function AppointmentsPage() {
           )}
 
           <DialogFooter className="flex-col sm:flex-row gap-2">
+            {selectedAppointment?.patientPhone && (
+              <Button
+                variant="outline"
+                onClick={handleOpenConversation}
+                disabled={openingConversation}
+              >
+                {openingConversation ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Abrindo conversa...
+                  </>
+                ) : (
+                  <>
+                    <MessageSquare className="w-4 h-4 mr-2" />
+                    Abrir conversa
+                  </>
+                )}
+              </Button>
+            )}
             {selectedAppointment && selectedAppointment.status === 'pending' && !isPendingPaymentAppointment(selectedAppointment) && (
               <Button onClick={() => handleStatusChange(selectedAppointment.id, 'confirmed')}>
                 <CheckCircle className="w-4 h-4 mr-2" />

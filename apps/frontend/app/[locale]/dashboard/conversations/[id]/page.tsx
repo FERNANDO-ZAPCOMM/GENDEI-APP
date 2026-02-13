@@ -113,6 +113,8 @@ export default function ConversationDetailPage() {
         return t('conversations.state.awaiting_greeting_response');
       case 'awaiting_appointment_action':
         return t('conversations.state.awaiting_appointment_action');
+      case 'in_patient_info_flow':
+        return t('conversations.state.in_patient_info_flow');
       default:
         return state.replace(/_/g, ' ');
     }
