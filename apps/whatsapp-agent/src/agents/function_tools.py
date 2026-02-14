@@ -792,8 +792,19 @@ async def _enable_human_takeover_impl(phone: str, reason: str, runtime: Optional
             runtime = get_runtime()
         phone = ensure_phone_has_plus(phone)
 
-        # Enable human takeover in Firestore
-        runtime.db.enable_human_takeover(runtime.clinic_id, phone, reason)
+        # Enable human takeover in Firestore.
+        # Compatibility: some DB adapters expose `set_human_takeover` instead.
+        enabled = False
+        if hasattr(runtime.db, "enable_human_takeover"):
+            runtime.db.enable_human_takeover(runtime.clinic_id, phone, reason)
+            enabled = True
+        elif hasattr(runtime.db, "set_human_takeover"):
+            enabled = bool(runtime.db.set_human_takeover(runtime.clinic_id, phone, True, reason))
+        else:
+            raise AttributeError("Database adapter missing human takeover methods")
+
+        if not enabled:
+            raise RuntimeError("Failed to enable human takeover state")
 
         # Log the handoff
         runtime.db.log_conversation_message(

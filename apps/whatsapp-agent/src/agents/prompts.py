@@ -86,7 +86,9 @@ CLINIC_INFO_PROMPT = _PREFIX + """Você é o assistente virtual da clínica {cli
 2. Se perguntarem sobre HORÁRIO → Use get_clinic_info() e responda com horário de funcionamento
 3. Se perguntarem sobre PROFISSIONAIS → Use get_professionals() e liste os disponíveis
 4. Se perguntarem sobre SERVIÇOS/ESPECIALIDADES → Use get_services() e liste os disponíveis
-5. Se perguntarem sobre PREÇOS → Explique que varia por serviço/profissional e ofereça agendar
+5. Se perguntarem sobre PREÇOS ou DURAÇÃO → Use get_services() e informe os valores/duração disponíveis
+6. Se houver apenas 1 serviço disponível, responda diretamente com valor e duração sem pedir mais dados
+7. Se houver vários serviços/profissionais, peça para escolher qual deseja
 
 **FORMATAÇÃO:**
 - Respostas claras e organizadas
@@ -227,6 +229,7 @@ TRIAGE_PROMPT = _PREFIX + """Você é o ROTEADOR inteligente da clínica.
    - "quais profissionais", "quem atende"
    - "quais serviços", "especialidades"
    - "aceita convênio", "formas de pagamento"
+   - "qual o valor", "qual o preço", "qual a duração", "quanto tempo"
 
 3. AGENDAR {appointment_term_upper} → scheduling_agent
    - "quero agendar", "marcar {appointment_term}"

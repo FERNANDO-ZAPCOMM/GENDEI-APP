@@ -139,8 +139,8 @@ class AgentOrchestrator:
 
         # Scheduling intent (check BEFORE info)
         scheduling_keywords = [
-            "agendar", "marcar", "consulta", "horários", "horarios",
-            "disponibilidade", "agenda", "atendimento", "quero agendar",
+            "agendar", "marcar", "horários", "horarios",
+            "disponibilidade", "agenda", "quero agendar",
             "sessão", "sessao", "procedimento",
         ]
         if any(kw in msg_lower for kw in scheduling_keywords):
@@ -152,6 +152,8 @@ class AgentOrchestrator:
             "horário de funcionamento", "que horas", "funcionamento",
             "quem atende", "médico", "medico", "profissional",
             "convênio", "convenio", "aceita", "pagamento",
+            "valor", "preço", "preco", "duração", "duracao", "quanto tempo",
+            "minutos", "serviço", "servico",
         ]
         if any(kw in msg_lower for kw in info_keywords):
             return AgentType.PRODUCT_INFO  # clinic_info
