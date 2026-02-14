@@ -39,6 +39,118 @@ class GendeiDatabase:
             logger.error(f"❌ Failed to initialize Firestore: {e}")
             raise
 
+    @staticmethod
+    def _is_active(value: Any) -> bool:
+        """Normalize active flags that may be stored as bool/string/int."""
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            return value.strip().lower() in {"true", "1", "yes", "sim", "active", "ativo"}
+        return bool(value) if value is not None else True
+
+    @staticmethod
+    def _price_to_cents(value: Any) -> int:
+        """Normalize price values that may be in BRL or cents."""
+        if value is None:
+            return 0
+        try:
+            if isinstance(value, float):
+                return int(round(value * 100))
+            if isinstance(value, int):
+                return value if value >= 1000 else value * 100
+            if isinstance(value, str):
+                cleaned = value.strip().replace("R$", "").replace(".", "").replace(",", ".")
+                if not cleaned:
+                    return 0
+                parsed = float(cleaned)
+                return int(round(parsed * 100))
+        except Exception:
+            return 0
+        return 0
+
+    def _build_fallback_services_from_professionals(self, clinic_id: str) -> List[Service]:
+        """
+        Build synthetic services from professional default consultation data.
+        Used when clinic has no records in `services` collection.
+        """
+        services: List[Service] = []
+
+        try:
+            docs = self.db.collection(CLINICS).document(clinic_id).collection("professionals").get()
+        except Exception as e:
+            logger.error(f"Error loading professionals for service fallback in clinic {clinic_id}: {e}")
+            return services
+
+        for doc in docs:
+            data = doc.to_dict() or {}
+            if not self._is_active(data.get("active", True)):
+                continue
+
+            professional_id = doc.id
+            professional_name = (data.get("name") or "").strip()
+            if not professional_name:
+                continue
+
+            duration_raw = data.get("appointmentDuration", 30)
+            try:
+                duration_minutes = int(duration_raw or 30)
+            except (TypeError, ValueError):
+                duration_minutes = 30
+            if duration_minutes <= 0:
+                duration_minutes = 30
+
+            consultation_price_cents = self._price_to_cents(data.get("consultationPrice"))
+
+            services.append(
+                Service(
+                    id=f"auto_consulta_{professional_id}",
+                    clinic_id=clinic_id,
+                    name=f"Consulta com {professional_name}",
+                    description="Consulta principal configurada no profissional",
+                    price_cents=consultation_price_cents,
+                    duration_minutes=duration_minutes,
+                    professional_ids=[professional_id],
+                    active=True,
+                )
+            )
+
+            extra_services = data.get("services", [])
+            if not isinstance(extra_services, list):
+                continue
+
+            for index, entry in enumerate(extra_services):
+                if not isinstance(entry, dict):
+                    continue
+
+                extra_name = (entry.get("name") or "").strip()
+                if not extra_name:
+                    continue
+
+                extra_duration_raw = entry.get("duration", duration_minutes)
+                try:
+                    extra_duration = int(extra_duration_raw or duration_minutes)
+                except (TypeError, ValueError):
+                    extra_duration = duration_minutes
+                if extra_duration <= 0:
+                    extra_duration = duration_minutes
+
+                extra_price_cents = self._price_to_cents(entry.get("price"))
+
+                services.append(
+                    Service(
+                        id=f"auto_extra_{professional_id}_{index + 1}",
+                        clinic_id=clinic_id,
+                        name=extra_name,
+                        description="Serviço adicional configurado no profissional",
+                        price_cents=extra_price_cents,
+                        duration_minutes=extra_duration,
+                        professional_ids=[professional_id],
+                        active=True,
+                    )
+                )
+
+        return services
+
     # ============================================
     # CLINIC OPERATIONS
     # ============================================
@@ -120,17 +232,7 @@ class GendeiDatabase:
                 all_docs = professionals_ref.get()
                 for doc in all_docs:
                     data = doc.to_dict() or {}
-                    active_raw = data.get("active", True)
-                    if isinstance(active_raw, bool):
-                        is_active = active_raw
-                    elif isinstance(active_raw, str):
-                        is_active = active_raw.strip().lower() in {
-                            "true", "1", "yes", "sim", "active", "ativo"
-                        }
-                    else:
-                        is_active = bool(active_raw)
-
-                    if not is_active:
+                    if not self._is_active(data.get("active", True)):
                         continue
 
                     data["id"] = doc.id
@@ -199,9 +301,8 @@ class GendeiDatabase:
     def get_clinic_services(self, clinic_id: str) -> List[Service]:
         """Get all services for a clinic"""
         try:
-            docs = self.db.collection(CLINICS).document(clinic_id).collection(
-                "services"
-            ).where("active", "==", True).get()
+            services_ref = self.db.collection(CLINICS).document(clinic_id).collection("services")
+            docs = services_ref.where("active", "==", True).get()
 
             services = []
             for doc in docs:
@@ -209,6 +310,35 @@ class GendeiDatabase:
                 data["id"] = doc.id
                 data["clinicId"] = clinic_id
                 services.append(Service.from_dict(data))
+
+            # Backward-compatible fallback for legacy `active` values in services docs.
+            if not services:
+                all_docs = services_ref.get()
+                for doc in all_docs:
+                    data = doc.to_dict() or {}
+                    if not self._is_active(data.get("active", True)):
+                        continue
+                    data["id"] = doc.id
+                    data["clinicId"] = clinic_id
+                    services.append(Service.from_dict(data))
+
+                if services:
+                    logger.warning(
+                        "Fallback services loader used for clinic %s (count=%d). "
+                        "Consider normalizing `active` field to boolean true/false.",
+                        clinic_id,
+                        len(services),
+                    )
+
+            # If there are no service records, synthesize from professional default consultation.
+            if not services:
+                services = self._build_fallback_services_from_professionals(clinic_id)
+                if services:
+                    logger.info(
+                        "Using %d synthetic services derived from professionals for clinic %s",
+                        len(services),
+                        clinic_id,
+                    )
 
             return services
         except Exception as e:

@@ -66,6 +66,18 @@ def resolve_consultation_pricing(
                     chosen_price_cents = int(getattr(service, "price_cents", 0) or 0)
                     break
 
+        # Fallback: infer by service->professional association when serviceIds
+        # are not explicitly linked on professional docs.
+        if chosen_price_cents <= 0:
+            for service in services:
+                professional_ids = getattr(service, "professional_ids", []) or []
+                if professional_id not in professional_ids:
+                    continue
+                candidate = int(getattr(service, "price_cents", 0) or 0)
+                if candidate > 0:
+                    chosen_price_cents = candidate
+                    break
+
     if chosen_price_cents <= 0:
         for service in services:
             candidate = int(getattr(service, "price_cents", 0) or 0)

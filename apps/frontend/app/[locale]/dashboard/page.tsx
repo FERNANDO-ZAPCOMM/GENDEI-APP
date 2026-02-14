@@ -9,11 +9,11 @@ import {
   CheckCircle,
   XCircle,
   Users,
-  UserPlus,
   CalendarDays,
   ArrowRight,
   AlertCircle,
   Clock,
+  MessageSquare,
 } from 'lucide-react';
 
 
@@ -289,16 +289,16 @@ export default function DashboardPage() {
           <CardDescription>{t('dashboard.quickActionsDescription')}</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-3">
-          <Link href={`/${locale}/dashboard/professionals`}>
-            <Button variant="outline">
-              <UserPlus className="w-4 h-4 mr-2" />
-              Adicionar Profissional
-            </Button>
-          </Link>
           <Link href={`/${locale}/dashboard/appointments`}>
             <Button variant="outline">
               <Calendar className="w-4 h-4 mr-2" />
               Ver Agenda
+            </Button>
+          </Link>
+          <Link href={`/${locale}/dashboard/conversations`}>
+            <Button variant="outline">
+              <MessageSquare className="w-4 h-4 mr-2" />
+              Ver Conversas
             </Button>
           </Link>
         </CardContent>

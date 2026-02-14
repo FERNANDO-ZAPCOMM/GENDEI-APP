@@ -962,7 +962,7 @@
       "confirming": "Confirmando",
       "awaiting_greeting_response": "Aguardando resposta",
       "awaiting_appointment_action": "Aguardando ação no agendamento",
-      "in_patient_info_flow": "No fluxo de dados do paciente"
+      "in_patient_info_flow": "Agendando"
     },
     "handler": {
       "ai": "IA",
