@@ -1,270 +1,166 @@
-# Quickstart: Payment PIX
+# Quickstart: Payment System
 
 **Feature**: 008-payment-pix
 **Date**: 2026-02-04
+**Updated**: 2026-02-15
 
 ---
 
-## PIX Code Generation
-
-```typescript
-// apps/functions/src/services/pix.ts
-
-function calculateCRC16(str: string): string {
-  let crc = 0xFFFF;
-  for (let i = 0; i < str.length; i++) {
-    crc ^= str.charCodeAt(i) << 8;
-    for (let j = 0; j < 8; j++) {
-      if ((crc & 0x8000) !== 0) {
-        crc = (crc << 1) ^ 0x1021;
-      } else {
-        crc <<= 1;
-      }
-    }
-  }
-  return (crc & 0xFFFF).toString(16).toUpperCase().padStart(4, '0');
-}
-
-function tlv(id: string, value: string): string {
-  return `${id}${value.length.toString().padStart(2, '0')}${value}`;
-}
-
-export function generatePixCode(
-  pixKey: string,
-  amountCents: number,
-  txId: string,
-  merchantName: string = 'GENDEI',
-  city: string = 'SAO PAULO'
-): string {
-  const amount = (amountCents / 100).toFixed(2);
-
-  let payload = '';
-  payload += tlv('00', '01');                                      // Payload format
-  payload += tlv('01', '12');                                      // Static QR
-  payload += tlv('26', tlv('00', 'br.gov.bcb.pix') + tlv('01', pixKey));  // PIX account
-  payload += tlv('52', '0000');                                    // MCC
-  payload += tlv('53', '986');                                     // Currency (BRL)
-  payload += tlv('54', amount);                                    // Amount
-  payload += tlv('58', 'BR');                                      // Country
-  payload += tlv('59', merchantName.substring(0, 25));             // Merchant name
-  payload += tlv('60', city.substring(0, 15));                     // City
-  payload += tlv('62', tlv('05', txId.substring(0, 25)));          // TxID
-
-  const crcPayload = payload + '6304';
-  const crc = calculateCRC16(crcPayload);
-
-  return crcPayload + crc;
-}
-```
-
----
-
-## Payment Controller
-
-```typescript
-// apps/functions/src/controllers/paymentController.ts
-import { generatePixCode } from '../services/pix';
-
-export async function generatePixForAppointment(req: Request, res: Response) {
-  const clinicId = req.clinicId!;
-  const { appointmentId } = req.body;
-
-  // Get appointment
-  const appointmentDoc = await db.collection('gendei_appointments').doc(appointmentId).get();
-  if (!appointmentDoc.exists) {
-    return res.status(404).json({ error: 'Appointment not found' });
-  }
-
-  const appointment = appointmentDoc.data()!;
-
-  // Verify clinic owns appointment
-  if (appointment.clinicId !== clinicId) {
-    return res.status(403).json({ error: 'Forbidden' });
-  }
-
-  // Get clinic PIX config
-  const clinicDoc = await db.collection('gendei_clinics').doc(clinicId).get();
-  const paymentSettings = clinicDoc.data()?.paymentSettings;
-
-  if (!paymentSettings?.pix?.key) {
-    return res.status(400).json({ error: 'PIX not configured' });
-  }
-
-  // Generate PIX code
-  const txId = `GENDEI${appointmentId.substring(0, 15)}`;
-  const pixCode = generatePixCode(
-    paymentSettings.pix.key,
-    appointment.depositAmount,
-    txId
-  );
-
-  // Update appointment with PIX code
-  await appointmentDoc.ref.update({
-    pixCode,
-    pixCodeGeneratedAt: FieldValue.serverTimestamp(),
-  });
-
-  return res.json({
-    pixCode,
-    amount: appointment.depositAmount,
-    amountFormatted: formatPrice(appointment.depositAmount),
-  });
-}
-
-export async function confirmPayment(req: Request, res: Response) {
-  const { appointmentId, method = 'pix' } = req.body;
-
-  const appointmentRef = db.collection('gendei_appointments').doc(appointmentId);
-
-  await appointmentRef.update({
-    depositPaid: true,
-    depositPaidAt: FieldValue.serverTimestamp(),
-    depositPaymentMethod: method,
-    updatedAt: FieldValue.serverTimestamp(),
-  });
-
-  return res.json({ success: true });
-}
-```
-
----
-
-## Payment Settings Form
-
-```typescript
-// apps/web/src/components/settings/PaymentSettingsForm.tsx
-'use client';
-
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { paymentSettingsSchema } from '@/schemas/payment.schema';
-import { Slider } from '@/components/ui/slider';
-import { Switch } from '@/components/ui/switch';
-import { Input } from '@/components/ui/input';
-
-export function PaymentSettingsForm({ defaultValues, onSubmit }) {
-  const form = useForm({
-    resolver: zodResolver(paymentSettingsSchema),
-    defaultValues,
-  });
-
-  return (
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-        {/* Deposit settings */}
-        <FormField
-          control={form.control}
-          name="requiresDeposit"
-          render={({ field }) => (
-            <FormItem className="flex items-center justify-between">
-              <FormLabel>Exigir sinal (depósito)</FormLabel>
-              <FormControl>
-                <Switch checked={field.value} onCheckedChange={field.onChange} />
-              </FormControl>
-            </FormItem>
-          )}
-        />
-
-        {form.watch('requiresDeposit') && (
-          <FormField
-            control={form.control}
-            name="depositPercentage"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Porcentagem do sinal: {field.value}%</FormLabel>
-                <FormControl>
-                  <Slider
-                    value={[field.value]}
-                    onValueChange={([v]) => field.onChange(v)}
-                    min={10}
-                    max={100}
-                    step={5}
-                  />
-                </FormControl>
-              </FormItem>
-            )}
-          />
-        )}
-
-        {/* PIX configuration */}
-        <div className="space-y-4">
-          <h3 className="font-medium">Chave PIX</h3>
-
-          <FormField
-            control={form.control}
-            name="pix.type"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Tipo de chave</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="cpf">CPF</SelectItem>
-                    <SelectItem value="cnpj">CNPJ</SelectItem>
-                    <SelectItem value="email">E-mail</SelectItem>
-                    <SelectItem value="phone">Telefone</SelectItem>
-                    <SelectItem value="random">Chave aleatória</SelectItem>
-                  </SelectContent>
-                </Select>
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="pix.key"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Chave PIX</FormLabel>
-                <FormControl>
-                  <Input {...field} />
-                </FormControl>
-              </FormItem>
-            )}
-          />
-        </div>
-
-        <Button type="submit">Salvar configurações</Button>
-      </form>
-    </Form>
-  );
-}
-```
-
----
-
-## Send PIX to WhatsApp
+## PagSeguro PIX Payment (WhatsApp Agent)
 
 ```python
-# apps/agent/src/utils/payment.py
-async def send_pix_payment_request(
+# apps/whatsapp-agent/src/utils/payment.py
+
+async def create_pagseguro_pix_order(
+    amount_cents: int,
+    patient_name: str,
+    patient_phone: str,
+    appointment_id: str,
+    clinic_id: str,
+) -> dict:
+    """Generate PIX order via PagSeguro Orders API."""
+    url = "https://api.pagseguro.com/orders"
+    headers = {
+        "Authorization": f"Bearer {PAGSEGURO_TOKEN}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "reference_id": appointment_id,
+        "customer": {
+            "name": patient_name,
+            "phones": [{"type": "MOBILE", "number": patient_phone}],
+        },
+        "items": [{
+            "name": "Sinal - Consulta",
+            "quantity": 1,
+            "unit_amount": amount_cents,
+        }],
+        "qr_codes": [{
+            "amount": {"value": amount_cents},
+            "expiration_date": "...",  # 15 min from now
+        }],
+    }
+    # Returns: { id, qr_codes[0].text (copia e cola), qr_codes[0].links[0].href (QR image) }
+```
+
+---
+
+## Send Payment via WhatsApp Button
+
+```python
+# apps/whatsapp-agent/src/utils/payment.py
+
+async def send_pix_payment_to_customer(
     phone_number_id: str,
     access_token: str,
     to: str,
     amount_cents: int,
-    pix_code: str,
+    payment_url: str,
     appointment_date: str,
     appointment_time: str,
 ):
-    """Send PIX payment request via WhatsApp."""
+    """Send PIX payment as WhatsApp button message."""
     amount_formatted = f"R$ {amount_cents / 100:.2f}".replace('.', ',')
 
-    message = f"""💰 *Sinal para Consulta*
+    body = f"Para confirmar seu agendamento ({appointment_date} as {appointment_time}), "
+    body += f"realize o pagamento do sinal de *{amount_formatted}*."
 
-Para confirmar seu agendamento:
-📅 {appointment_date} às {appointment_time}
-
-Valor do sinal: *{amount_formatted}*
-
-Copie o código PIX abaixo e cole no seu app de banco:
-
-```
-{pix_code}
+    # Sends as interactive button message (not plain text)
+    await send_button_message(
+        phone_number_id, access_token, to,
+        body=body,
+        buttons=[{"type": "url", "url": payment_url, "title": "Pagar com PIX"}],
+    )
 ```
 
-Após o pagamento, sua consulta será confirmada automaticamente. ✅"""
+---
 
-    await send_text_message(phone_number_id, access_token, to, message)
+## Payment Hold Cleanup
+
+```typescript
+// apps/functions/src/services/payment-holds.ts
+
+export async function cleanupExpiredPaymentHolds(): Promise<PaymentHoldCleanupResult> {
+  // Query all pending appointments across clinics
+  const docs = await db.collectionGroup('appointments')
+    .where('status', '==', 'pending')
+    .get();
+
+  // For each: check if signalCents > 0 && !signalPaid && createdAt + 15min elapsed
+  // If expired: cancel with reason, sync to conversation context
+  return processPendingHoldDocs(docs.docs);
+}
+```
+
+---
+
+## Stripe Connect Onboarding
+
+```typescript
+// apps/functions/src/routes/payments.ts
+
+// 1. Create Express account
+const account = await stripeRequest<{ id: string }>('/accounts', {
+  method: 'POST',
+  body: new URLSearchParams({
+    type: 'express',
+    country: 'BR',
+    'capabilities[card_payments][requested]': 'true',
+    'capabilities[transfers][requested]': 'true',
+    'metadata[clinicId]': clinicId,
+  }),
+});
+
+// 2. Generate onboarding link
+const link = await stripeRequest<{ url: string }>('/account_links', {
+  method: 'POST',
+  body: new URLSearchParams({
+    account: account.id,
+    type: 'account_onboarding',
+    refresh_url: `${frontendUrl}/payments?stripe=refresh`,
+    return_url: `${frontendUrl}/payments?stripe=success`,
+  }),
+});
+
+// 3. Redirect clinic owner to link.url
+```
+
+---
+
+## Frontend Stripe Hook
+
+```typescript
+// apps/frontend/hooks/use-stripe-connect.ts
+
+export function useStripeConnect(clinicId: string) {
+  // statusQuery: GET /payments/stripe-connect/:clinicId/status (30s stale)
+  // startMutation: POST /payments/stripe-connect/:clinicId/start
+  // refreshMutation: POST /payments/stripe-connect/:clinicId/refresh
+  // All mutations invalidate status query on success
+  return {
+    ...statusQuery,
+    startOnboarding: startMutation.mutateAsync,
+    refreshOnboarding: refreshMutation.mutateAsync,
+    isStarting: startMutation.isPending,
+    isRefreshing: refreshMutation.isPending,
+  };
+}
+```
+
+---
+
+## Environment Setup
+
+```bash
+# Firebase Functions (.env)
+STRIPE_SECRET_KEY=sk_live_...
+STRIPE_CONNECT_CLIENT_ID=ca_...
+GENDEI_FRONTEND_URL=https://app.gendei.com
+PAYMENT_HOLD_MINUTES=15
+
+# WhatsApp Agent (.env)
+PAGSEGURO_TOKEN=...
+PAGSEGURO_EMAIL=...
+PAGSEGURO_ENVIRONMENT=production
+PAGSEGURO_WEBHOOK_SECRET=...
 ```

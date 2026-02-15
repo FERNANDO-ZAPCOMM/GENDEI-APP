@@ -308,48 +308,56 @@ Patient Schema:
 
 ---
 
-## 008 - Payment PIX
+## 008 - Payment System (PIX + Stripe Connect)
 
 ```
 /speckit.plan 008-payment-pix
 
 Tech Stack:
 - Backend: Firebase Functions (Node.js 20, Express.js)
+- Agent: Python 3.11+, FastAPI (Cloud Run)
 - Database: Firestore
-- Payment Provider: PagSeguro/Other PIX provider
+- Payment Providers: PagSeguro (PIX + Checkout), Stripe Connect Express
+- Scheduler: Cloud Scheduler (every 5 min for payment hold cleanup)
 - Currency: BRL (Brazilian Real)
 
 Key Features:
-- PIX key configuration (double-entry verification)
-- Deposit percentage setting (10-100%)
-- Deposit requirement toggle
-- Health insurance (convênio) support
-- Payment tracking on appointments
-- PIX copy-paste code generation
+- PagSeguro PIX order creation (Orders API) with auto-confirm via webhook
+- PagSeguro Checkout fallback for card payments
+- Stripe Connect Express onboarding for split payments
+- Payment hold auto-cancellation (15-min default)
+- Deposit (signal) percentage setting (10-100%)
+- Health insurance (convenio) support
+- WhatsApp button messages for payment links
+- Transaction history (orders subcollection)
+- Vertical-aware deposit visibility (has_deposit feature flag)
 
-Payment Flow:
-1. Service configured with signalPercentage
-2. Appointment created with depositAmount calculated
-3. PIX code generated and sent via WhatsApp
-4. Patient pays deposit
-5. depositPaid flag updated
-6. Appointment confirmed
+Payment Flows:
+1. PagSeguro PIX: create order -> send copia-e-cola via WhatsApp button -> webhook confirms -> update appointment
+2. PagSeguro Card: create checkout -> send checkout URL via WhatsApp button -> webhook confirms
+3. Payment Hold: pending appointment + signalCents > 0 + !signalPaid -> auto-cancel after 15 min
+4. Stripe Connect: create Express account -> generate onboarding link -> clinic completes onboarding
 
-Clinic Payment Settings:
-- acceptsConvenio: boolean
-- convenioList: string[]
-- acceptsParticular: boolean
-- requiresDeposit: boolean
-- depositPercentage: number (10-100%)
-- pixKey: string (encrypted)
+API Endpoints (Functions):
+- GET /payments/clinic/:clinicId (list transactions from orders subcollection)
+- GET /payments/stripe-connect/:clinicId/status (Stripe Connect state with refresh)
+- POST /payments/stripe-connect/:clinicId/start (create account + onboarding URL)
+- POST /payments/stripe-connect/:clinicId/refresh (new onboarding link)
+- POST /reminders/cleanup-payment-holds (manual hold cleanup)
 
-API Endpoints:
-- PUT /clinics/:id/settings/paymentSettings
-- GET /clinics/:id/settings
+Agent Endpoints:
+- POST /pagseguro/webhook (PagSeguro payment confirmation with HMAC verification)
 
 Firestore Collections:
-- gendei_clinics/{clinicId} (paymentSettings embedded)
-- gendei_appointments/{id} (depositAmount, depositPaid)
+- gendei_clinics/{clinicId} (paymentSettings with stripeConnect)
+- gendei_clinics/{clinicId}/orders/{orderId} (PaymentTransaction)
+- gendei_appointments/{id} (signalCents, signalPaid, signalPaidAt, signalPaymentId, totalCents)
+
+Clinic Payment Settings:
+- acceptsConvenio, convenioList, acceptsParticular
+- requiresDeposit, depositPercentage (10-100%)
+- pixKey, pixKeyType (cpf/cnpj/email/phone/random)
+- stripeConnect: { accountId, onboardingComplete, chargesEnabled, payoutsEnabled, ... }
 ```
 
 ---
@@ -402,39 +410,46 @@ Conversation Schema:
 /speckit.plan 010-reminder-system
 
 Tech Stack:
-- Backend: Firebase Functions (Node.js 20)
+- Backend: Firebase Functions (Node.js 20, Express.js)
 - Scheduler: Google Cloud Scheduler (every 15 minutes)
-- Agent: Python 3.11+, FastAPI
-- Database: Firestore
+- Agent: WhatsApp Agent (Python FastAPI on Cloud Run) at /api/send-reminder
+- Database: Firestore (flags on appointment documents, no separate collection)
+- Vertical Config: getVerticalTerms() for terminology per vertical
 
 Key Features:
-- 24-hour advance reminders
-- 2-hour advance reminders
-- Deduplication flags (reminder24hSent, reminder2hSent)
-- Confirmation/cancellation handling
-- Cloud Scheduler trigger via HTTP
-- Batch processing
+- 24h reminder (23-25h window) with confirmation request
+- 2h reminder (1.5-2.5h window) with optional arrive-early tip
+- Vertical-aware terminology (consulta/sessao, emoji, arrival tips)
+- Deduplication via boolean flags (reminder24hSent, reminder2hSent)
+- Status transition to awaiting_confirmation after 24h reminder
+- Manual single-reminder endpoint for testing
+- Sends via WhatsApp Agent (not direct WhatsApp API)
 
 Reminder Flow:
-1. Cloud Scheduler triggers /reminders/trigger every 15 minutes
-2. Query appointments in time window
-3. Check deduplication flags
-4. Send reminder via WhatsApp
-5. Update status to awaiting_confirmation
-6. Set reminder flag to prevent duplicates
-
-Scheduled Tasks:
-- /reminders/trigger (every 15 minutes)
-- Queries: 24h window and 2h window
+1. Cloud Scheduler triggers POST /reminders/trigger every 15 minutes
+2. Calculate time windows: 24h (now+23h to now+25h), 2h (now+1.5h to now+2.5h)
+3. Query gendei_appointments by date range + status in [confirmed, confirmed_presence]
+4. Filter: skip appointments where reminder flag already set
+5. For each: get clinic info, format message with getVerticalTerms(), send via WhatsApp Agent
+6. Update: set reminder flag + timestamp (+ status for 24h -> awaiting_confirmation)
 
 API Endpoints:
-- POST /reminders/trigger (called by Cloud Scheduler)
-- POST /reminders/send/:appointmentId (manual trigger, type: 24h or 2h)
+- POST /reminders/trigger (Cloud Scheduler entry point, every 15 min)
+- POST /reminders/send/:appointmentId (manual send, body: { type: '24h' | '2h' })
 
-Firestore Fields:
-- gendei_appointments.reminder24hSent: boolean
-- gendei_appointments.reminder2hSent: boolean
-- gendei_appointments.status: awaiting_confirmation (after reminder)
+Firestore Fields (on gendei_appointments):
+- reminder24hSent: boolean
+- reminder24hAt: Timestamp
+- reminder2hSent: boolean
+- reminder2hAt: Timestamp
+- status: 'awaiting_confirmation' (set after 24h reminder)
+
+Vertical Terms (5 configured + defaults):
+- med: consulta, doctor emoji, arrive early
+- dental: consulta, tooth emoji, arrive early
+- psi: sessao, brain emoji, no arrive tip
+- nutri: consulta, salad emoji, no arrive tip
+- fisio: sessao, muscle emoji, arrive early
 ```
 
 ---

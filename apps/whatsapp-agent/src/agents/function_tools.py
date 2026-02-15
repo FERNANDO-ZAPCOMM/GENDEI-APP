@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional
 from agents import function_tool, RunContextWrapper  # type: ignore
 
 from src.runtime.context import Runtime, get_runtime
-from src.vertical_config import get_vertical_config
+from src.vertical_config import get_vertical_config, get_specialty_name
 from src.utils.helpers import ensure_phone_has_plus
 
 logger = logging.getLogger(__name__)
@@ -220,7 +220,11 @@ def _get_professionals_impl(service_id: Optional[str] = None, runtime: Optional[
         for prof in professionals:
             name = prof.full_name if hasattr(prof, 'full_name') else prof.name
             specialties = getattr(prof, 'specialties', []) or []
-            specialty = ", ".join(specialties) if specialties else getattr(prof, 'specialty', '')
+            if not specialties:
+                legacy_specialty = getattr(prof, 'specialty', '') or ''
+                specialties = [legacy_specialty] if legacy_specialty else []
+            specialty_display = [get_specialty_name(getattr(runtime, 'vertical_slug', None), s) for s in specialties if s]
+            specialty = ", ".join(dict.fromkeys(specialty_display))
             line = f"• *{name}*"
             if specialty:
                 line += f" - {specialty}"

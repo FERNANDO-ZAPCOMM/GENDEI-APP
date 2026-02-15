@@ -1,14 +1,15 @@
 # Plan: Reminder System
 
 **Feature**: 010-reminder-system
-**Status**: Planning
+**Status**: Implemented
 **Date**: 2026-02-04
+**Updated**: 2026-02-15
 
 ---
 
 ## Overview
 
-Implement automated appointment reminders via WhatsApp, including configurable reminder schedules, confirmation requests, no-show follow-ups, and smart retry logic.
+Automated appointment reminders sent via WhatsApp at 24 hours and 2 hours before confirmed appointments. Uses boolean flags on appointment documents (no separate reminders collection) and vertical-aware message formatting.
 
 ---
 
@@ -16,51 +17,49 @@ Implement automated appointment reminders via WhatsApp, including configurable r
 
 | Layer | Technology |
 |-------|------------|
-| Scheduler | Firebase Cloud Scheduler |
-| Queue | Firestore + Cloud Functions |
-| Messaging | WhatsApp Cloud API |
-| Processing | Cloud Functions (Node.js) |
+| Scheduler | Cloud Scheduler (every 15 minutes) |
+| Processing | Firebase Cloud Functions (Node.js/Express) |
+| Messaging | WhatsApp Agent (Python FastAPI on Cloud Run) |
+| Storage | Boolean flags on `gendei_appointments` documents |
+| Vertical Config | `getVerticalTerms()` in `apps/functions/src/services/verticals.ts` |
 
 ---
 
 ## Key Features
 
-1. Configurable reminder schedules (24h, 2h before)
-2. Appointment confirmation requests
-3. No-show follow-up messages
-4. Birthday and follow-up reminders
-5. Smart retry with exponential backoff
-6. Reminder templates per clinic
-7. Analytics and delivery tracking
+1. Automated 24h reminder with confirmation request
+2. Automated 2h reminder with optional arrive-early tip
+3. Vertical-aware terminology (consulta/sessao, emoji, arrival tips)
+4. Deduplication via boolean flags on appointment documents
+5. Status transition to `awaiting_confirmation` after 24h reminder
+6. Manual single-reminder endpoint for testing
 
 ---
 
 ## Reminder Types
 
-| Type | Timing | Purpose |
-|------|--------|---------|
-| REMINDER_24H | 24 hours before | Initial reminder |
-| REMINDER_2H | 2 hours before | Final reminder |
-| CONFIRMATION | After scheduling | Request deposit/confirm |
-| NO_SHOW | After missed appt | Re-engagement |
-| FOLLOW_UP | X days after visit | Satisfaction/return |
-| BIRTHDAY | On patient birthday | Engagement |
+| Type | Window | Purpose | Status Change |
+|------|--------|---------|---------------|
+| 24h | 23-25h before | Reminder + confirmation request | `confirmed` -> `awaiting_confirmation` |
+| 2h | 1.5-2.5h before | Final reminder + arrival tip | None |
 
 ---
 
 ## System Architecture
 
 ```
-┌─────────────────┐    ┌──────────────────┐    ┌───────────────┐
-│ Cloud Scheduler │───▶│ Reminder Worker  │───▶│ WhatsApp API  │
-│ (every 5 min)   │    │ (Cloud Function) │    │               │
-└─────────────────┘    └──────────────────┘    └───────────────┘
-                              │
-                              ▼
-                       ┌──────────────────┐
-                       │    Firestore     │
-                       │ gendei_reminders │
-                       └──────────────────┘
++-----------------+    +--------------------+    +-----------------+
+| Cloud Scheduler |----| Firebase Functions  |----| WhatsApp Agent  |
+| (every 15 min)  |    | /reminders/trigger |    | /api/send-      |
++-----------------+    +--------------------+    |  reminder       |
+                              |                  +-----------------+
+                              v                         |
+                       +----------------+               v
+                       | Firestore      |        +-------------+
+                       | gendei_        |        | WhatsApp    |
+                       | appointments   |        | Cloud API   |
+                       | (flags update) |        +-------------+
+                       +----------------+
 ```
 
 ---
@@ -68,50 +67,21 @@ Implement automated appointment reminders via WhatsApp, including configurable r
 ## Processing Flow
 
 ```
-1. Scheduler triggers every 5 minutes
-2. Query reminders where scheduledFor <= now AND status = 'pending'
-3. Process in batches (max 50)
-4. For each reminder:
-   a. Check appointment still valid
-   b. Send WhatsApp message
-   c. Update status to 'sent' or 'failed'
-   d. Log delivery attempt
-5. Retry failed with backoff
-```
-
----
-
-## Data Model
-
-### Reminder Document
-
-```typescript
-interface Reminder {
-  id: string;
-  clinicId: string;
-  appointmentId?: string;
-  patientId: string;
-
-  // Type and scheduling
-  type: ReminderType;
-  scheduledFor: Timestamp;
-
-  // Status tracking
-  status: 'pending' | 'sent' | 'failed' | 'cancelled';
-  attempts: number;
-  lastAttemptAt?: Timestamp;
-  sentAt?: Timestamp;
-  errorMessage?: string;
-
-  // Message content
-  templateId?: string;
-  variables: Record<string, string>;
-
-  // WhatsApp tracking
-  waMessageId?: string;
-
-  createdAt: Timestamp;
-}
+1. Cloud Scheduler triggers POST /reminders/trigger every 15 minutes
+2. Calculate time windows:
+   - 24h window: now + 23h to now + 25h
+   - 2h window: now + 1.5h to now + 2.5h
+3. Query gendei_appointments:
+   - date in window range
+   - status in ['confirmed', 'confirmed_presence']
+   - reminder flag not yet set
+4. For each appointment:
+   a. Get clinic info (WhatsApp connection, address, vertical)
+   b. Get access token from gendei_tokens
+   c. Format message with getVerticalTerms()
+   d. Send via WhatsApp Agent POST /api/send-reminder
+   e. Update appointment: set flag + timestamp (+ status for 24h)
+5. Return summary: { sent24h, sent2h, errors }
 ```
 
 ---
@@ -120,17 +90,22 @@ interface Reminder {
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | /reminders | List clinic reminders |
-| POST | /reminders | Create manual reminder |
-| DELETE | /reminders/:id | Cancel reminder |
-| PUT | /clinics/:id/settings/reminderSettings | Update settings |
-| GET | /reminders/analytics | Delivery stats |
+| POST | /reminders/trigger | Cloud Scheduler entry point (every 15 min) |
+| POST | /reminders/send/:appointmentId | Manual send for testing |
+
+---
+
+## Environment Variables
+
+```bash
+# Firebase Functions
+WHATSAPP_AGENT_URL=https://gendei-whatsapp-agent-....run.app  # WhatsApp Agent Cloud Run URL
+```
 
 ---
 
 ## Success Metrics
 
-- 95%+ delivery rate
-- < 30 second processing time
+- Reminders processed within 15-minute scheduler interval
 - Zero duplicate sends
-- Configurable in < 2 minutes
+- Vertical-correct terminology

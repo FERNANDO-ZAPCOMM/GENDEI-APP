@@ -1,47 +1,47 @@
 {
   "openapi": "3.0.0",
-  "info": { "title": "Gendei Payment PIX API", "version": "1.0.0" },
+  "info": { "title": "Gendei Payment System API", "version": "2.0.0" },
   "paths": {
-    "/clinics/{clinicId}/settings/paymentSettings": {
-      "put": {
-        "summary": "Update Payment Settings",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": { "$ref": "#/components/schemas/PaymentSettings" }
-            }
-          }
-        },
-        "responses": { "200": { "description": "Settings updated" } }
-      }
-    },
-    "/payments/generate-pix": {
-      "post": {
-        "summary": "Generate PIX Code",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "required": ["appointmentId"],
-                "properties": {
-                  "appointmentId": { "type": "string" }
+    "/payments/clinic/{clinicId}": {
+      "get": {
+        "summary": "List Payment Transactions",
+        "description": "Returns payment orders for a clinic from the orders subcollection",
+        "parameters": [
+          { "name": "clinicId", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 200, "maximum": 500 } }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of payment transactions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/PaymentTransaction" }
                 }
               }
             }
           }
-        },
+        }
+      }
+    },
+    "/payments/stripe-connect/{clinicId}/status": {
+      "get": {
+        "summary": "Get Stripe Connect Status",
+        "description": "Returns Stripe Connect state, refreshing capabilities from Stripe API",
+        "parameters": [
+          { "name": "clinicId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
         "responses": {
           "200": {
-            "description": "PIX code generated",
+            "description": "Stripe Connect status",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "pixCode": { "type": "string" },
-                    "amount": { "type": "integer" },
-                    "amountFormatted": { "type": "string" }
+                    "stripeConfigured": { "type": "boolean" },
+                    "state": { "$ref": "#/components/schemas/StripeConnectState" }
                   }
                 }
               }
@@ -50,24 +50,101 @@
         }
       }
     },
-    "/payments/confirm": {
+    "/payments/stripe-connect/{clinicId}/start": {
       "post": {
-        "summary": "Confirm Payment",
+        "summary": "Start Stripe Connect Onboarding",
+        "description": "Creates Express account (if needed) and returns onboarding URL",
+        "parameters": [
+          { "name": "clinicId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["appointmentId"],
                 "properties": {
-                  "appointmentId": { "type": "string" },
-                  "method": { "type": "string", "enum": ["pix", "card", "cash", "other"] }
+                  "frontendBaseUrl": { "type": "string", "description": "Frontend origin for return/refresh URLs" }
                 }
               }
             }
           }
         },
-        "responses": { "200": { "description": "Payment confirmed" } }
+        "responses": {
+          "200": {
+            "description": "Onboarding started",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "accountId": { "type": "string" },
+                    "onboardingUrl": { "type": "string", "format": "uri" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/payments/stripe-connect/{clinicId}/refresh": {
+      "post": {
+        "summary": "Refresh Stripe Onboarding Link",
+        "description": "Generates a new account link for resuming onboarding",
+        "parameters": [
+          { "name": "clinicId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "frontendBaseUrl": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "New onboarding link",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "accountId": { "type": "string" },
+                    "onboardingUrl": { "type": "string", "format": "uri" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reminders/cleanup-payment-holds": {
+      "post": {
+        "summary": "Cleanup Expired Payment Holds",
+        "description": "Manual trigger to cancel pending appointments with unpaid signals past hold period",
+        "responses": {
+          "200": {
+            "description": "Cleanup result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "result": { "$ref": "#/components/schemas/PaymentHoldCleanupResult" },
+                    "timestamp": { "type": "string", "format": "date-time" }
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     }
   },
@@ -81,14 +158,50 @@
           "acceptsParticular": { "type": "boolean" },
           "requiresDeposit": { "type": "boolean" },
           "depositPercentage": { "type": "integer", "minimum": 10, "maximum": 100 },
-          "pix": { "$ref": "#/components/schemas/PixKeyConfig" }
+          "pixKey": { "type": "string" },
+          "pixKeyType": { "type": "string", "enum": ["cpf", "cnpj", "email", "phone", "random"] },
+          "stripeConnect": { "$ref": "#/components/schemas/StripeConnectState" }
         }
       },
-      "PixKeyConfig": {
+      "StripeConnectState": {
         "type": "object",
         "properties": {
-          "type": { "type": "string", "enum": ["cpf", "cnpj", "email", "phone", "random"] },
-          "key": { "type": "string" }
+          "accountId": { "type": "string" },
+          "onboardingComplete": { "type": "boolean" },
+          "chargesEnabled": { "type": "boolean" },
+          "payoutsEnabled": { "type": "boolean" },
+          "detailsSubmitted": { "type": "boolean" },
+          "country": { "type": "string" },
+          "defaultCurrency": { "type": "string" },
+          "updatedAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "PaymentTransaction": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "clinicId": { "type": "string" },
+          "appointmentId": { "type": "string" },
+          "patientPhone": { "type": "string" },
+          "patientName": { "type": "string" },
+          "amountCents": { "type": "integer" },
+          "paymentStatus": { "type": "string", "enum": ["pending", "completed", "failed"] },
+          "paymentMethod": { "type": "string", "enum": ["pix", "card"] },
+          "paymentSource": { "type": "string", "enum": ["pagseguro", "stripe"] },
+          "transferMode": { "type": "string", "enum": ["automatic", "manual"] },
+          "paymentId": { "type": "string" },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time" },
+          "paidAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "PaymentHoldCleanupResult": {
+        "type": "object",
+        "properties": {
+          "scanned": { "type": "integer" },
+          "expired": { "type": "integer" },
+          "skipped": { "type": "integer" },
+          "errors": { "type": "integer" }
         }
       }
     }

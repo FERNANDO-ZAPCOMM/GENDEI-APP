@@ -7,7 +7,11 @@ import os
 import logging
 import requests  # type: ignore
 from typing import Optional, Dict, Any, List
-from src.utils.helpers import validate_and_format_phone
+from src.utils.helpers import (
+    validate_and_format_phone,
+    format_button_title,
+    format_outgoing_text,
+)
 from src.runtime.context import get_runtime_safe
 
 logger = logging.getLogger(__name__)
@@ -118,6 +122,7 @@ async def send_whatsapp_text(phone: str, text: str) -> str:
     # clean text formatting
     text = text.replace("**", "*")  # convert markdown bold to WhatsApp bold
     text = text.encode("utf-8").decode("utf-8")
+    text = format_outgoing_text(text)
 
     url = f"https://graph.facebook.com/{WHATSAPP_API_VERSION}/{phone_number_id}/messages"
     payload = {
@@ -357,6 +362,8 @@ async def send_whatsapp_buttons(
         logger.error("Missing WhatsApp credentials")
         return "Error: Missing WhatsApp credentials"
 
+    body_text = format_outgoing_text(body_text)
+
     # WhatsApp allows max 3 buttons
     if len(buttons) > 3:
         buttons = buttons[:3]
@@ -370,7 +377,7 @@ async def send_whatsapp_buttons(
             "type": "reply",
             "reply": {
                 "id": btn.get('id', f"btn_{len(button_list)}"),
-                "title": btn.get('title', 'Button')[:20]  # Max 20 chars
+                "title": format_button_title(btn.get('title', 'Button'))  # Max 20 chars
             }
         })
 
@@ -391,12 +398,12 @@ async def send_whatsapp_buttons(
     if header_text:
         payload["interactive"]["header"] = {
             "type": "text",
-            "text": header_text
+            "text": format_outgoing_text(header_text)
         }
 
     if footer_text:
         payload["interactive"]["footer"] = {
-            "text": footer_text
+            "text": format_outgoing_text(footer_text)
         }
 
     try:

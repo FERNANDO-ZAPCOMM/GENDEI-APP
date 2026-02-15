@@ -1,92 +1,85 @@
-# Tasks: Payment PIX
+# Tasks: Payment System
 
 **Input**: Design documents from `/specs/008-payment-pix/`
 **Prerequisites**: plan.md, spec.md, data-model.md
+**Updated**: 2026-02-15
 
 ## Phase 1: Setup (Shared Infrastructure)
 
-**Purpose**: Payment data model and PIX utilities
+**Purpose**: Payment data model and utility types
 
-- [ ] T001 Define PaymentSettings and PixKeyConfig TypeScript interfaces in `apps/frontend/types/payment.ts`
-- [ ] T002 [P] Create Zod validation schemas for payment settings and PIX key verification
-- [ ] T003 [P] Create PIX key validation utility (per-type format checking)
-- [ ] T004 [P] Create PIX EMV code generation utility in `apps/functions/src/services/pix.ts`
-
----
-
-## Phase 2: Foundational (Blocking Prerequisites)
-
-**Purpose**: Payment settings API — blocks UI and appointment integration
-
-- [ ] T005 Add payment settings fields to clinic model
-- [ ] T006 Implement PUT /clinics/:id/settings/paymentSettings endpoint
-- [ ] T007 [P] Add deposit fields to Appointment interface (depositAmount, depositPaid, depositPaidAt, pixCode)
-- [ ] T008 Implement deposit calculation logic in appointment creation
-
-**Checkpoint**: Payment settings save and deposit calculates on appointment creation
+- [x] T001 Define PaymentSettings, StripeConnectState, PaymentTransaction TypeScript interfaces in `apps/frontend/lib/clinic-types.ts`
+- [x] T002 [P] Add signal fields to Appointment interface (`signalCents`, `signalPaid`, `signalPaidAt`, `signalPaymentId`, `totalCents`)
+- [x] T003 [P] Maintain backward compat with legacy deposit fields (`depositAmount`, `depositPaid`, `depositPaidAt`)
 
 ---
 
-## Phase 3: User Story 1 - PIX Key Configuration (Priority: P1)
+## Phase 2: PagSeguro PIX Integration (Priority: P1)
 
-**Goal**: Clinic owners can configure PIX key with double-entry verification and payment settings.
+**Purpose**: Primary payment method via PagSeguro Orders API
 
-**Independent Test**: Set PIX key → confirm → save → reload → verify settings persist.
+- [x] T004 Implement PagSeguro PIX order creation (`create_pagseguro_pix_order()`) in `apps/whatsapp-agent/src/utils/payment.py`
+- [x] T005 [P] Implement PagSeguro Checkout fallback (`create_pagseguro_checkout()`)
+- [x] T006 Implement WhatsApp button message sending for PIX payments (`send_pix_payment_to_customer()`)
+- [x] T007 [P] Implement WhatsApp button message sending for card payments (`send_card_payment_to_customer()`)
+- [x] T008 Implement PagSeguro webhook handler with signature verification
+- [x] T009 Implement payment confirmation processing (`process_payment_confirmation()`)
+- [x] T010 Send automatic confirmation message to patient after successful payment
 
-### Implementation
-
-- [ ] T009 [US1] Build PIX key type selector (CPF/CNPJ/email/phone/random)
-- [ ] T010 [US1] Build PIX key input with adaptive mask per type
-- [ ] T011 [US1] Implement double-entry verification (key + confirmation must match)
-- [ ] T012 [US1] Build deposit percentage slider (10-100%)
-- [ ] T013 [P] [US1] Build convenio toggle with pre-populated provider list
-- [ ] T014 [US1] Create payment settings page in `apps/frontend/app/[locale]/dashboard/payments/page.tsx`
-- [ ] T015 [US1] Wire form to PUT /clinics/:id/settings/paymentSettings API
-
-**Checkpoint**: Payment settings fully configurable from dashboard
+**Checkpoint**: PagSeguro PIX payments work end-to-end via WhatsApp
 
 ---
 
-## Phase 4: User Story 2 - Deposit Calculation (Priority: P1)
+## Phase 3: Payment Holds (Priority: P1)
 
-**Goal**: Deposits auto-calculate on appointment creation.
+**Purpose**: Auto-cancel pending appointments with unpaid signals
 
-**Independent Test**: Create appointment → verify depositAmount = service price * deposit %.
+- [x] T011 Implement `needsPendingPaymentRelease()` check in `apps/functions/src/services/payment-holds.ts`
+- [x] T012 Implement `cleanupExpiredPaymentHolds()` with batched writes (max 400/batch)
+- [x] T013 Implement conversation context sync on cancellation (`syncCancelledAppointmentContext()`)
+- [x] T014 Add Cloud Scheduler job (every 5 min) to trigger cleanup
+- [x] T015 Add manual cleanup endpoint (`POST /reminders/cleanup-payment-holds`)
+- [x] T016 [P] Support configurable hold period via `PAYMENT_HOLD_MINUTES` env var (default 15)
 
-### Implementation
-
-- [ ] T016 [US2] Integrate deposit calculation into POST /appointments endpoint
-- [ ] T017 [US2] Display deposit amount on appointment form (preview before submission)
-- [ ] T018 [US2] Track depositPaid status with manual toggle on appointment detail
-
-**Checkpoint**: Deposits calculate and track correctly
-
----
-
-## Phase 5: User Story 3 - PIX Code Generation (Priority: P2)
-
-**Goal**: Generate EMV-format PIX codes and send to patients via WhatsApp.
-
-**Independent Test**: Create appointment with deposit → verify PIX code generated → verify code is valid EMV format.
-
-### Implementation
-
-- [ ] T019 [US3] Implement EMV-format PIX code generation with CRC16 checksum
-- [ ] T020 [US3] Implement POST /payments/generate-pix endpoint
-- [ ] T021 [US3] Store pixCode and pixCodeGeneratedAt on appointment document
-- [ ] T022 [US3] Send PIX code to patient via WhatsApp after appointment creation
-- [ ] T023 [US3] Display PIX code on appointment detail in dashboard
-
-**Checkpoint**: PIX codes generate and send correctly
+**Checkpoint**: Pending appointments with unpaid signals auto-cancel after hold period
 
 ---
 
-## Phase 6: Polish & Cross-Cutting Concerns
+## Phase 4: Stripe Connect Onboarding (Priority: P1)
 
-- [ ] T024 [P] Add i18n translations for payment labels
-- [ ] T025 [P] Add loading states to payment settings form
-- [ ] T026 Add common convenio providers list (Unimed, Bradesco Saude, SulAmerica, Amil, etc.)
-- [ ] T027 Run quickstart.md validation
+**Purpose**: Enable clinic Stripe accounts for split payments
+
+- [x] T017 Implement Stripe Express account creation in `apps/functions/src/routes/payments.ts`
+- [x] T018 Implement account link generation for onboarding
+- [x] T019 Implement status refresh from Stripe API with Firestore sync
+- [x] T020 [P] Implement `sanitizeFrontendBaseUrl()` for URL validation
+- [x] T021 [P] Add clinic-scoped access verification on all payment endpoints
+
+**Checkpoint**: Clinic owners can start and complete Stripe Connect onboarding
+
+---
+
+## Phase 5: Frontend Payment Page (Priority: P1)
+
+**Purpose**: Payment settings and transaction history UI
+
+- [x] T022 Create `useStripeConnect` hook in `apps/frontend/hooks/use-stripe-connect.ts`
+- [x] T023 [P] Create `usePayments` hook for transaction history
+- [x] T024 Build payment settings page (`apps/frontend/app/[locale]/dashboard/payments/page.tsx`)
+- [x] T025 Build deposit percentage selector (10-100%)
+- [x] T026 Build Stripe Connect expandable card with status badges and onboarding buttons
+- [x] T027 [P] Build PIX expandable card (disabled with "Em breve" badge)
+- [x] T028 Build transactions table with status, method, source, transfer mode columns
+
+**Checkpoint**: Payment settings and history fully functional in dashboard
+
+---
+
+## Phase 6: Polish & Cross-Cutting
+
+- [x] T029 [P] Add i18n translations for payment labels
+- [x] T030 [P] Add loading states and error handling
+- [x] T031 Onboarding step integration (`getNextStepUrl('payments', locale)`)
 
 ---
 
@@ -95,15 +88,16 @@
 ### Phase Dependencies
 
 - **Setup (Phase 1)**: No dependencies
-- **Foundational (Phase 2)**: Depends on Phase 1
-- **US1 PIX Config (Phase 3)**: Depends on Phase 2
-- **US2 Deposit Calc (Phase 4)**: Depends on Phase 2 + requires appointments (006)
-- **US3 PIX Code (Phase 5)**: Depends on Phase 3 + Phase 4
+- **PagSeguro (Phase 2)**: Depends on Phase 1, requires WhatsApp integration (004)
+- **Payment Holds (Phase 3)**: Depends on Phase 1, requires appointments (006)
+- **Stripe Connect (Phase 4)**: Depends on Phase 1
+- **Frontend (Phase 5)**: Depends on Phase 4
 - **Polish (Phase 6)**: Depends on all
 
 ### Parallel Opportunities
 
-- T002, T003, T004 (schemas and utils)
-- T007 (deposit fields parallel to settings API)
-- T013 (convenio parallel to PIX key input)
-- Phase 3 and Phase 4 can partially overlap
+- T002, T003 (signal fields parallel to settings types)
+- T005, T007 (checkout fallback parallel to PIX)
+- T020, T021 (URL validation parallel to access checks)
+- T023 (payments hook parallel to Stripe hook)
+- Phase 2 and Phase 4 can run in parallel

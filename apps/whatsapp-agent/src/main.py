@@ -60,7 +60,7 @@ try:
         handle_payment_type_selection as orchestrated_handle_payment_type_selection,
         handle_scheduling_intent as orchestrated_handle_scheduling_intent,
     )
-    from src.vertical_config import get_vertical_config, ALL_SPECIALTIES
+    from src.vertical_config import get_vertical_config, get_specialty_name, ALL_SPECIALTIES
     from src.flows.manager import send_whatsapp_flow, send_booking_flow, generate_flow_token
     from src.flows.crypto import handle_encrypted_flow_request, prepare_flow_response, is_encryption_configured
     from src.agents.orchestrator import get_orchestrator
@@ -80,6 +80,7 @@ try:
         process_buffered_messages as orchestrated_process_buffered_messages,
         handle_voice_message as orchestrated_handle_voice_message,
     )
+    from src.utils.helpers import format_outgoing_text, format_button_title
     logger.info("✅ Gendei modules imported successfully")
     if is_encryption_configured():
         logger.info("🔐 WhatsApp Flows encryption is configured")
@@ -94,6 +95,9 @@ WHATSAPP_TOKEN = os.getenv("META_BISU_ACCESS_TOKEN", "")
 VERIFY_TOKEN = os.getenv("META_WEBHOOK_VERIFY_TOKEN", "gendei_verify_token")
 META_API_VERSION = os.getenv("META_API_VERSION", "v24.0")
 DOMAIN = os.getenv("GENDEI_DOMAIN", "https://gendei.com")
+ENABLE_WHATSAPP_CONTACT_CARDS = os.getenv("ENABLE_WHATSAPP_CONTACT_CARDS", "false").strip().lower() in {
+    "1", "true", "yes", "on"
+}
 
 # WhatsApp Flows - Firestore-driven per clinic/phone
 # Flow 1: Patient Info (ESPECIALIDADE → TIPO_ATENDIMENTO → INFO_CONVENIO → DADOS_PACIENTE)
@@ -257,9 +261,14 @@ def _clinic_greeting_blurb(clinic: Any) -> str:
     description = (getattr(clinic, "description", "") or "").strip()
     if description:
         compact = " ".join(description.split())
-        first_sentence = re.split(r"(?<=[.!?])\s+", compact)[0].strip()
-        if first_sentence:
-            return first_sentence[:220].rstrip()
+        sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", compact) if s.strip()]
+        for sentence in sentences:
+            # Avoid trivial fragments such as "Dr."
+            if len(sentence) < 12:
+                continue
+            if sentence.lower() in {"dr.", "dra.", "dr", "dra"}:
+                continue
+            return sentence[:220].rstrip()
         return compact[:220].rstrip()
 
     summary = (getattr(clinic, "greeting_summary", "") or "").strip()
@@ -289,6 +298,16 @@ def _format_faq_topics_for_greeting(clinic: Any, limit: int = 3) -> str:
         return ""
 
     return "Posso te ajudar com: " + "; ".join(topics) + "."
+
+
+def _get_professional_specialties_display(prof: Any, vertical_slug: Optional[str]) -> str:
+    """Map specialty ids to human-friendly names."""
+    specialties = getattr(prof, "specialties", []) or []
+    if not specialties:
+        legacy_specialty = getattr(prof, "specialty", "") or ""
+        specialties = [legacy_specialty] if legacy_specialty else []
+    display = [get_specialty_name(vertical_slug, s) for s in specialties if s]
+    return ", ".join(dict.fromkeys(display))
 
 
 def _adaptive_buffer_seconds(first_message_text: str) -> float:
@@ -474,6 +493,7 @@ EXEMPLOS:
 def load_clinic_context(clinic_id: str) -> Dict[str, Any]:
     """Load clinic context for AI prompts."""
     context: Dict[str, Any] = {}
+    vertical_slug = ""
 
     if not db:
         return context
@@ -515,8 +535,12 @@ def load_clinic_context(clinic_id: str) -> Dict[str, Any]:
                     "id": p.id,
                     "name": p.name,
                     "full_name": getattr(p, 'full_name', p.name),
-                    "specialty": getattr(p, 'specialty', ''),  # Kept for backward compatibility
-                    "specialties": getattr(p, 'specialties', []),  # Multiple specialties
+                    "specialty": _get_professional_specialties_display(p, vertical_slug),
+                    "specialties": [
+                        get_specialty_name(vertical_slug, s)
+                        for s in ((getattr(p, 'specialties', []) or []) or [getattr(p, 'specialty', '')])
+                        if s
+                    ],
                 }
                 for p in professionals
             ]
@@ -1295,6 +1319,7 @@ async def send_whatsapp_message(
 ) -> bool:
     """Send WhatsApp text message and optionally log to database."""
     url = f"https://graph.facebook.com/{META_API_VERSION}/{phone_number_id}/messages"
+    message = format_outgoing_text(message)
 
     # Ensure phone has + prefix for consistent storage
     to_normalized = ensure_phone_has_plus(to)
@@ -1339,9 +1364,10 @@ async def send_whatsapp_buttons(
 ) -> bool:
     """Send WhatsApp interactive buttons message."""
     url = f"https://graph.facebook.com/{META_API_VERSION}/{phone_number_id}/messages"
+    body_text = format_outgoing_text(body_text)
 
     button_list = [
-        {"type": "reply", "reply": {"id": btn["id"], "title": btn["title"]}}
+        {"type": "reply", "reply": {"id": btn["id"], "title": format_button_title(btn["title"])}}
         for btn in buttons[:3]  # Max 3 buttons
     ]
 
@@ -1556,6 +1582,10 @@ async def send_whatsapp_contact_card(
     access_token: str
 ) -> bool:
     """Send WhatsApp contact card with clinic details."""
+    if not ENABLE_WHATSAPP_CONTACT_CARDS:
+        logger.info("ℹ️ Contact cards are disabled by configuration; skipping send.")
+        return False
+
     url = f"https://graph.facebook.com/{META_API_VERSION}/{phone_number_id}/messages"
 
     to_normalized = ensure_phone_has_plus(to)
@@ -1942,20 +1972,30 @@ async def send_initial_greeting(
         if blurb:
             greeting_message += f"{blurb}\n\n"
 
-        # Add professionals/specialties if available
-        if db and not blurb:
-            professionals = db.get_clinic_professionals(clinic_id)
+        professionals = db.get_clinic_professionals(clinic_id) if db else []
+
+        # Always include at least one professional name when available.
+        if professionals:
+            featured_professional = professionals[0]
+            featured_name = getattr(featured_professional, "full_name", None) or featured_professional.name
+            featured_specialties = _get_professional_specialties_display(featured_professional, vertical_slug)
+            greeting_message += f"*PROFISSIONAL:* {featured_name}"
+            if featured_specialties:
+                greeting_message += f" - {featured_specialties}"
+            greeting_message += "\n\n"
+
+        # Add specialty summary when no custom blurb was configured.
+        if professionals and not blurb:
             if professionals:
                 # Group by specialty (handles both old and new format)
                 specialties = {}
                 for p in professionals:
-                    # Get all specialties for this professional
-                    prof_specialties = getattr(p, 'specialties', []) or []
-                    if not prof_specialties:
-                        # Fallback to old format
-                        prof_specialties = [getattr(p, 'specialty', '') or 'Geral']
-                    for spec in prof_specialties:
+                    raw_specialties = getattr(p, 'specialties', []) or []
+                    if not raw_specialties:
+                        raw_specialties = [getattr(p, 'specialty', '') or 'Geral']
+                    for spec in raw_specialties:
                         spec = spec or 'Geral'
+                        spec = get_specialty_name(vertical_slug, spec)
                         if spec not in specialties:
                             specialties[spec] = []
                         if p.name not in specialties[spec]:
@@ -1974,6 +2014,7 @@ async def send_initial_greeting(
         # Configure buttons based on workflow mode
         if workflow_mode == 'info':
             buttons = [
+                {"id": "greeting_sim", "title": "AGENDAR"},
                 {"id": "greeting_nao", "title": "TIRAR DÚVIDAS"},
                 {"id": "greeting_contato", "title": "FALAR COM ATENDENTE"},
             ]
@@ -1981,6 +2022,7 @@ async def send_initial_greeting(
             buttons = [
                 {"id": "greeting_sim", "title": "AGENDAR"},
                 {"id": "greeting_nao", "title": "TIRAR DÚVIDAS"},
+                {"id": "greeting_contato", "title": "FALAR COM ATENDENTE"},
             ]
 
         # Save state for greeting response handling
@@ -2041,13 +2083,15 @@ async def send_followup_buttons_if_no_response(
         # Configure buttons based on workflow mode
         if workflow_mode == 'info':
             buttons = [
-                {"id": "greeting_nao", "title": "Informações"},
-                {"id": "greeting_contato", "title": "Falar com atendente"},
+                {"id": "greeting_sim", "title": "AGENDAR"},
+                {"id": "greeting_nao", "title": "TIRAR DÚVIDAS"},
+                {"id": "greeting_contato", "title": "FALAR COM ATENDENTE"},
             ]
         else:
             buttons = [
-                {"id": "greeting_sim", "title": "Agendar"},
-                {"id": "greeting_nao", "title": "Dúvida"},
+                {"id": "greeting_sim", "title": "AGENDAR"},
+                {"id": "greeting_nao", "title": "TIRAR DÚVIDAS"},
+                {"id": "greeting_contato", "title": "FALAR COM ATENDENTE"},
             ]
 
         # Send gentle follow-up with buttons
@@ -2072,6 +2116,7 @@ async def handle_greeting_response_duvida(
 ) -> None:
     """Handle when user clicks 'Dúvida' - show clinic info with professionals and ask what they need."""
     clinic = db.get_clinic(clinic_id) if db else None
+    vertical_slug = getattr(clinic, 'vertical', '') if clinic else ''
 
     # Update state to general chat
     if db:
@@ -2079,42 +2124,37 @@ async def handle_greeting_response_duvida(
         state["state"] = "general_chat"
         db.save_conversation_state(clinic_id, phone, state)
 
-    # Build comprehensive info message
-    info_parts = ["Claro! Vou te ajudar. 😊\n"]
+    # Build comprehensive info message with clear sections.
+    info_parts = ["CLARO! VOU TE AJUDAR.\n"]
 
     if clinic:
         clinic_name = getattr(clinic, 'name', None) or "Clínica"
-        info_parts.append(f"Aqui estão algumas informações da *{clinic_name}*:\n")
+        info_parts.append(f"AQUI ESTÃO ALGUMAS INFORMAÇÕES DA *{clinic_name}*:\n")
 
         if hasattr(clinic, 'address') and clinic.address:
-            info_parts.append(f"📍 *Endereço:* {clinic.address}")
+            info_parts.append(f"*ENDEREÇO:* {clinic.address}")
 
         if hasattr(clinic, 'opening_hours') and clinic.opening_hours:
-            info_parts.append(f"🕐 *Horário:* {clinic.opening_hours}")
+            info_parts.append(f"*HORÁRIO:* {clinic.opening_hours}")
 
         if hasattr(clinic, 'phone') and clinic.phone:
-            info_parts.append(f"📞 *Telefone:* {clinic.phone}")
+            info_parts.append(f"*TELEFONE:* {clinic.phone}")
 
         # Add professionals/specialties
         if db:
             professionals = db.get_clinic_professionals(clinic_id)
             if professionals:
                 info_parts.append("")
-                info_parts.append("👨‍⚕️ *Nossa equipe:*")
+                info_parts.append("*NOSSA EQUIPE:*")
                 for p in professionals[:5]:  # Max 5 professionals
-                    name = p.name
-                    # Handle both old and new specialties format
-                    specialties = getattr(p, 'specialties', []) or []
-                    if specialties:
-                        specialty_display = ", ".join(specialties)
-                    else:
-                        specialty_display = getattr(p, 'specialty', '')
+                    name = getattr(p, 'full_name', None) or p.name
+                    specialty_display = _get_professional_specialties_display(p, vertical_slug)
                     if specialty_display:
                         info_parts.append(f"• {name} - {specialty_display}")
                     else:
                         info_parts.append(f"• {name}")
 
-    info_parts.append("\n\nO que você gostaria de saber?")
+    info_parts.append("\nO que você gostaria de saber?")
 
     await send_whatsapp_message(
         phone_number_id, phone,
@@ -2122,21 +2162,18 @@ async def handle_greeting_response_duvida(
         access_token
     )
 
-    # Send contact card if clinic has phone
-    if clinic:
-        clinic_name = getattr(clinic, 'name', None) or "Clínica"
-        clinic_phone = getattr(clinic, 'phone', None)
-        clinic_email = getattr(clinic, 'email', None)
-
-        if clinic_phone:
-            await send_whatsapp_contact_card(
-                phone_number_id, phone,
-                contact_name=clinic_name,
-                contact_phone=clinic_phone,
-                contact_email=clinic_email,
-                organization=clinic_name,
-                access_token=access_token
-            )
+    # Offer quick actions using buttons whenever possible.
+    await send_whatsapp_buttons(
+        phone_number_id,
+        phone,
+        "COMO POSSO TE AJUDAR AGORA?",
+        [
+            {"id": "greeting_sim", "title": "AGENDAR"},
+            {"id": "greeting_nao", "title": "TIRAR DÚVIDAS"},
+            {"id": "greeting_contato", "title": "FALAR COM ATENDENTE"},
+        ],
+        access_token,
+    )
 
 
 async def escalate_to_human(
@@ -2163,11 +2200,16 @@ async def escalate_to_human(
         db.save_conversation_state(clinic_id, phone, state)
 
     # Send escalation message
+    escalation_message = (
+        "Entendo! Vou encaminhar seu caso para nossa equipe.\n\n"
+        "Um de nossos atendentes entrará em contato em breve."
+    )
+    if ENABLE_WHATSAPP_CONTACT_CARDS:
+        escalation_message += "\n\nSe preferir, você pode entrar em contato diretamente:"
+
     await send_whatsapp_message(
         phone_number_id, phone,
-        "Entendo! Vou encaminhar seu caso para nossa equipe. 🙋‍♀️\n\n"
-        "Um de nossos atendentes entrará em contato em breve.\n\n"
-        "Se preferir, você pode entrar em contato diretamente:",
+        escalation_message,
         access_token
     )
 

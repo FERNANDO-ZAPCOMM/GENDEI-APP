@@ -1,7 +1,8 @@
-# Data Model: Payment PIX
+# Data Model: Payment System
 
 **Feature**: 008-payment-pix
 **Date**: 2026-02-04
+**Updated**: 2026-02-15
 
 ---
 
@@ -16,102 +17,78 @@ interface PaymentSettings {
   // Private payment
   acceptsParticular: boolean;
 
-  // Deposit
+  // Deposit (signal)
   requiresDeposit: boolean;
   depositPercentage: number;  // 10-100
 
-  // PIX
-  pix?: PixKeyConfig;
+  // PIX key (planned for self-service config)
+  pixKey?: string;
+  pixKeyType?: 'cpf' | 'cnpj' | 'email' | 'phone' | 'random';
+
+  // Stripe Connect
+  stripeConnect?: StripeConnectState;
 }
 
-interface PixKeyConfig {
-  type: PixKeyType;
-  key: string;
-  verifiedAt?: Timestamp;
+interface StripeConnectState {
+  accountId?: string;
+  onboardingComplete?: boolean;
+  chargesEnabled?: boolean;
+  payoutsEnabled?: boolean;
+  detailsSubmitted?: boolean;
+  country?: string;            // e.g. 'BR'
+  defaultCurrency?: string;    // e.g. 'brl'
+  updatedAt?: string;          // ISO date
 }
-
-type PixKeyType = 'cpf' | 'cnpj' | 'email' | 'phone' | 'random';
 ```
 
 > **Vertical Feature Flags**: The `has_deposit` feature flag from `vertical_config.py` controls deposit visibility. Verticals like `psi` and `nutri` set `has_deposit: false`, meaning deposit fields are hidden in the UI.
 
 ---
 
-## Appointment Payment Fields
+## Appointment Signal Fields
 
 ```typescript
-// Fields on gendei_appointments
-interface AppointmentPaymentFields {
-  // Calculated from service
-  depositAmount: number;  // cents
+// Current fields on gendei_appointments
+interface AppointmentSignalFields {
+  // Payment type
+  paymentType: 'particular' | 'convenio';
 
-  // Payment status
-  depositPaid: boolean;
-  depositPaidAt?: Timestamp;
-  depositPaymentMethod?: 'pix' | 'card' | 'cash' | 'other';
+  // Signal (deposit) tracking
+  totalCents: number;          // Full service price in cents
+  signalCents: number;         // Signal amount in cents
+  signalPaid: boolean;
+  signalPaidAt?: Timestamp;
+  signalPaymentId?: string;    // External payment reference
 
-  // PIX specific
-  pixCode?: string;
-  pixCodeGeneratedAt?: Timestamp;
-  pixTransactionId?: string;
-
-  /** Payment gateway identifier */
-  paymentGateway: string;     // 'pagseguro'
-
-  /** PagSeguro API token */
-  pagseguroToken?: string;
+  // Legacy fields (backward compatibility)
+  depositAmount?: number;      // Replaced by signalCents
+  depositPaid?: boolean;       // Replaced by signalPaid
+  depositPaidAt?: Timestamp;   // Replaced by signalPaidAt
 }
 ```
 
 ---
 
-## Zod Schemas
+## Payment Transaction (Orders Subcollection)
+
+**Collection**: `gendei_clinics/{clinicId}/orders/{orderId}`
 
 ```typescript
-import { z } from 'zod';
-
-const pixKeyTypeSchema = z.enum(['cpf', 'cnpj', 'email', 'phone', 'random']);
-
-export const pixKeySchema = z.object({
-  type: pixKeyTypeSchema,
-  key: z.string().min(1),
-});
-
-export const paymentSettingsSchema = z.object({
-  acceptsConvenio: z.boolean(),
-  convenioList: z.array(z.string()),
-  acceptsParticular: z.boolean(),
-  requiresDeposit: z.boolean(),
-  depositPercentage: z.number().min(10).max(100),
-  pix: pixKeySchema.optional(),
-});
-
-// Double-entry verification for PIX key
-export const pixKeyVerificationSchema = z.object({
-  pixKey: z.string().min(1),
-  pixKeyConfirm: z.string().min(1),
-  type: pixKeyTypeSchema,
-}).refine(data => data.pixKey === data.pixKeyConfirm, {
-  message: 'As chaves PIX não conferem',
-  path: ['pixKeyConfirm'],
-});
-```
-
----
-
-## PIX Key Validation
-
-```typescript
-const PIX_KEY_VALIDATORS: Record<PixKeyType, RegExp> = {
-  cpf: /^\d{3}\.\d{3}\.\d{3}-\d{2}$/,
-  cnpj: /^\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}$/,
-  email: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
-  phone: /^\+55\d{10,11}$/,
-  random: /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i,
-};
-
-function validatePixKey(type: PixKeyType, key: string): boolean {
-  return PIX_KEY_VALIDATORS[type].test(key);
+interface PaymentTransaction {
+  id: string;
+  clinicId: string;
+  appointmentId: string;
+  patientPhone: string;
+  patientName: string;
+  amountCents: number;
+  paymentStatus: 'pending' | 'completed' | 'failed';
+  paymentMethod: 'pix' | 'card';
+  paymentSource: 'pagseguro' | 'stripe';
+  transferMode: 'automatic' | 'manual';
+  paymentId: string;           // External payment/order ID
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+  paidAt?: Timestamp;
 }
 ```
 
@@ -122,12 +99,12 @@ function validatePixKey(type: PixKeyType, key: string): boolean {
 ```typescript
 const COMMON_CONVENIOS = [
   'Unimed',
-  'Bradesco Saúde',
-  'SulAmérica',
+  'Bradesco Saude',
+  'SulAmerica',
   'Amil',
-  'NotreDame Intermédica',
+  'NotreDame Intermedica',
   'Hapvida',
-  'São Francisco',
+  'Sao Francisco',
   'Porto Seguro',
   'Cassi',
   'Caixa Seguradora',
@@ -141,19 +118,72 @@ const COMMON_CONVENIOS = [
 
 ---
 
-## Example Payment Settings
+## Example Documents
+
+### Payment Settings on Clinic
 
 ```json
 {
-  "acceptsConvenio": true,
-  "convenioList": ["Unimed", "Bradesco Saúde", "SulAmérica"],
-  "acceptsParticular": true,
-  "requiresDeposit": true,
-  "depositPercentage": 30,
-  "pix": {
-    "type": "cnpj",
-    "key": "12.345.678/0001-90",
-    "verifiedAt": "2026-02-04T10:00:00Z"
+  "paymentSettings": {
+    "acceptsConvenio": true,
+    "convenioList": ["Unimed", "Bradesco Saude", "SulAmerica"],
+    "acceptsParticular": true,
+    "requiresDeposit": true,
+    "depositPercentage": 30,
+    "pixKey": "12345678901",
+    "pixKeyType": "cpf",
+    "stripeConnect": {
+      "accountId": "acct_1234567890",
+      "onboardingComplete": true,
+      "chargesEnabled": true,
+      "payoutsEnabled": true,
+      "detailsSubmitted": true,
+      "country": "BR",
+      "defaultCurrency": "brl",
+      "updatedAt": "2026-02-15T10:00:00Z"
+    }
   }
+}
+```
+
+### Payment Transaction (Order)
+
+```json
+{
+  "id": "order_abc123",
+  "clinicId": "clinic_xyz",
+  "appointmentId": "apt_456",
+  "patientPhone": "+5511999998888",
+  "patientName": "Maria Silva",
+  "amountCents": 6000,
+  "paymentStatus": "completed",
+  "paymentMethod": "pix",
+  "paymentSource": "pagseguro",
+  "transferMode": "manual",
+  "paymentId": "PAG_ORD_123456",
+  "createdAt": "2026-02-15T10:00:00Z",
+  "updatedAt": "2026-02-15T10:05:00Z",
+  "paidAt": "2026-02-15T10:05:00Z"
+}
+```
+
+### Appointment with Signal
+
+```json
+{
+  "id": "apt_456",
+  "clinicId": "clinic_xyz",
+  "patientPhone": "+5511999998888",
+  "patientName": "Maria Silva",
+  "professionalId": "prof_001",
+  "date": "2026-02-20",
+  "time": "14:00",
+  "status": "confirmed",
+  "paymentType": "particular",
+  "totalCents": 20000,
+  "signalCents": 6000,
+  "signalPaid": true,
+  "signalPaidAt": "2026-02-15T10:05:00Z",
+  "signalPaymentId": "PAG_ORD_123456"
 }
 ```

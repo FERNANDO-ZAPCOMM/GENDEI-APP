@@ -1,126 +1,100 @@
-# Research: Payment PIX
+# Research: Payment System
 
 **Feature**: 008-payment-pix
 **Date**: 2026-02-04
-
----
-
-## PIX Overview
-
-PIX is Brazil's instant payment system launched by the Central Bank. Key characteristics:
-- 24/7/365 availability
-- Instant settlement (< 10 seconds)
-- Free for individuals
-- Low cost for businesses
+**Updated**: 2026-02-15
 
 ---
 
 ## Technology Decisions
 
-### 1. PIX Implementation
+### 1. Primary Payment Provider
 
-**Decision**: Static PIX codes (copy-paste)
+**Decision**: PagSeguro (PIX Orders API + Checkout API)
 
 **Options**:
 | Approach | Pros | Cons | Decision |
 |----------|------|------|----------|
-| Static PIX | Simple, no API | Manual confirmation | **Selected** |
-| Dynamic PIX (PSP) | Auto-confirm | Cost, integration | Future |
-| Payment gateway | Full solution | Cost | Rejected |
+| Static PIX (EMV code) | Simple, no API needed | Manual confirmation | Rejected |
+| PagSeguro Orders API | Auto-confirm via webhook, PIX "copia e cola" | API integration | **Selected (primary)** |
+| PagSeguro Checkout API | Full payment page, card support | Redirect-based | **Selected (fallback)** |
+| Stripe Payments | Global, well-documented | PIX support limited in BR | Future (via Connect) |
 
-**Why Static**:
-- No PSP integration needed
-- Works with any PIX key
-- Patient copies code and pays in their bank app
-- Manual confirmation is acceptable for healthcare
+**Why PagSeguro**:
+- Native PIX support with automatic confirmation via webhooks
+- Orders API generates "copia e cola" codes directly (no redirect needed)
+- Checkout API provides card payment fallback
+- Well-established in Brazilian market
+- Webhook signature verification for security
 
-### 2. Deposit Calculation
+### 2. Split Payment Provider
 
-**Decision**: Percentage of service price
+**Decision**: Stripe Connect Express
 
-```typescript
-function calculateDeposit(servicePriceCents: number, depositPercentage: number): number {
-  return Math.round((servicePriceCents * depositPercentage) / 100);
-}
+**Why Stripe Connect**:
+- Express accounts minimize onboarding friction for clinics
+- Automatic commission splitting between Gendei and clinic
+- Card payment capabilities enabled via Connect
+- Account capabilities (`charges_enabled`, `payouts_enabled`) trackable via API
+- Future: Can be used for card payments when ready
 
-// Example: R$ 200,00 service, 30% deposit
-// calculateDeposit(20000, 30) = 6000 cents = R$ 60,00
-```
+### 3. Payment Hold Strategy
 
-### 3. PIX Code Format
-
-**Decision**: EMV-style copy-paste code (BR Code)
-
-```typescript
-function generatePixCode(
-  pixKey: string,
-  amount: number,
-  txId: string
-): string {
-  // Simplified EMV format
-  const payload = buildEmvPayload({
-    pixKey,
-    merchantName: 'GENDEI',
-    merchantCity: 'SAO PAULO',
-    amount: amount / 100,  // Convert cents to reais
-    txId,
-  });
-
-  return payload;
-}
-
-function buildEmvPayload(data: PixPayloadData): string {
-  const tlv = (id: string, value: string) => {
-    const len = value.length.toString().padStart(2, '0');
-    return `${id}${len}${value}`;
-  };
-
-  let payload = '';
-  payload += tlv('00', '01');  // Payload format
-  payload += tlv('01', '12');  // Static QR
-  payload += tlv('26', tlv('00', 'br.gov.bcb.pix') + tlv('01', data.pixKey));
-  payload += tlv('52', '0000');  // MCC
-  payload += tlv('53', '986');   // Currency (BRL)
-
-  if (data.amount > 0) {
-    payload += tlv('54', data.amount.toFixed(2));
-  }
-
-  payload += tlv('58', 'BR');
-  payload += tlv('59', data.merchantName.substring(0, 25));
-  payload += tlv('60', data.merchantCity.substring(0, 15));
-  payload += tlv('62', tlv('05', data.txId));
-
-  // CRC16
-  const crcPayload = payload + '6304';
-  const crc = calculateCRC16(crcPayload);
-  return crcPayload + crc.toString(16).toUpperCase().padStart(4, '0');
-}
-```
-
-### 4. Payment Confirmation
-
-**Decision**: Manual confirmation via dashboard
+**Decision**: Auto-cancel after configurable hold period (default 15 minutes)
 
 **Flow**:
-1. Clinic receives PIX payment notification in bank app
-2. Clinic marks payment as received in Gendei dashboard
-3. Appointment status updates
+```
+1. Appointment created with pending status + signalCents > 0
+2. Cloud Scheduler runs cleanupExpiredPaymentHolds every 5 minutes
+3. Checks: status == 'pending' AND signalCents > 0 AND !signalPaid
+4. If createdAt + PAYMENT_HOLD_MINUTES elapsed -> cancel appointment
+5. Sync cancellation to conversation context for agent awareness
+```
 
-**Future Enhancement**: PSP integration for automatic confirmation
+**Why 15 minutes**:
+- Short enough to prevent slot hoarding
+- Long enough for PIX processing (typically < 30 seconds)
+- Configurable via `PAYMENT_HOLD_MINUTES` env var
+
+### 4. Signal vs Deposit Naming
+
+**Decision**: Migrate from `deposit*` to `signal*` field naming
+
+| Legacy Field | Current Field | Notes |
+|-------------|---------------|-------|
+| `depositAmount` | `signalCents` | Amount in cents |
+| `depositPaid` | `signalPaid` | Boolean flag |
+| `depositPaidAt` | `signalPaidAt` | Timestamp |
+| -- | `signalPaymentId` | New: external reference |
+| -- | `totalCents` | New: full service price |
+
+**Backward Compatibility**: Payment holds service checks both `signalCents`/`signalPaid` AND `depositAmount`/`depositPaid` for backward compat.
+
+### 5. WhatsApp Payment Message Format
+
+**Decision**: WhatsApp button messages (not plain text)
+
+**Why Buttons**:
+- Better UX: patient taps button to open payment
+- Higher conversion than copy-paste PIX codes
+- Separate buttons for PIX and card options
+- PagSeguro provides URL for both methods
 
 ---
 
 ## Security Considerations
 
-1. **PIX Key Storage**: Stored in Firestore (not sensitive, but verified)
-2. **Double-Entry**: Require key to be entered twice
-3. **Amount Validation**: Always recalculate from service price
-4. **Audit Trail**: Log all payment confirmations
+1. **PagSeguro Webhook**: HMAC-SHA256 signature verification before processing
+2. **Stripe API Key**: Stored as environment variable in Cloud Functions
+3. **Frontend URL Sanitization**: `sanitizeFrontendBaseUrl()` validates protocol and extracts origin
+4. **Clinic Scoping**: All payment endpoints verify `user.clinicId === clinicId`
+5. **Amount Validation**: Always recalculated from service price, never trusted from client
 
 ---
 
 ## References
 
-- [PIX - Banco Central](https://www.bcb.gov.br/estabilidadefinanceira/pix)
-- [EMV QR Code Specification](https://www.emvco.com/emv-technologies/qrcodes/)
+- [PagSeguro Orders API](https://developer.pagbank.com.br/reference/criar-pedido)
+- [PagSeguro Checkout API](https://developer.pagbank.com.br/reference/criar-checkout)
+- [Stripe Connect Express](https://stripe.com/docs/connect/express-accounts)
+- [Stripe Account Links](https://stripe.com/docs/api/account_links)

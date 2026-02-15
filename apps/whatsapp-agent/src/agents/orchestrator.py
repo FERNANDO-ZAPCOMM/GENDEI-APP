@@ -11,7 +11,7 @@ from src.providers.openai.factory import OpenAIAgentFactory, OpenAIAgent
 from src.agents.definitions import get_all_agent_definitions
 from src.agents.function_tools import get_tools_for_agent
 from src.runtime.context import Runtime
-from src.vertical_config import get_vertical_config
+from src.vertical_config import get_vertical_config, get_specialty_name
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +43,7 @@ class AgentOrchestrator:
             return self._clinic_context
 
         context: Dict[str, Any] = {}
+        vertical_slug = "geral"
 
         try:
             # Load clinic info
@@ -89,12 +90,20 @@ class AgentOrchestrator:
             # Load professionals
             professionals = self.db.get_clinic_professionals(self.clinic_id)
             if professionals:
+                def _specialty_display(prof: Any) -> str:
+                    raw_specialties = getattr(prof, 'specialties', []) or []
+                    if not raw_specialties:
+                        legacy = getattr(prof, 'specialty', '') or ''
+                        raw_specialties = [legacy] if legacy else []
+                    display = [get_specialty_name(vertical_slug, s) for s in raw_specialties if s]
+                    return ", ".join(dict.fromkeys(display))
+
                 context["professionals"] = [
                     {
                         "id": p.id,
                         "name": p.name,
                         "full_name": getattr(p, 'full_name', p.name),
-                        "specialty": getattr(p, 'specialty', ''),
+                        "specialty": _specialty_display(p),
                     }
                     for p in professionals
                 ]
