@@ -2,6 +2,7 @@
 
 **Feature Branch**: `004-whatsapp-integration`
 **Created**: 2026-02-04
+**Updated**: 2026-02-16
 **Status**: Implemented
 
 ## User Scenarios & Testing
@@ -17,7 +18,7 @@ A clinic owner connects their WhatsApp Business account to Gendei using Meta's E
 **Acceptance Scenarios**:
 
 1. **Given** a clinic owner on the WhatsApp setup page, **When** they click "Connect WhatsApp", **Then** Meta's Embedded Signup popup opens.
-2. **Given** the user completes Meta authorization, **When** the OAuth callback returns, **Then** the access token is exchanged, encrypted (AES-256-GCM), and stored in Firestore.
+2. **Given** the user completes Meta authorization, **When** the OAuth callback returns, **Then** the access token is exchanged and stored in the `gendei_tokens` collection in Firestore.
 3. **Given** a successful token exchange, **When** the WABA details are fetched, **Then** the clinic's `whatsappConnected` field is set to `true` and phone number info is saved.
 
 ---
@@ -54,18 +55,19 @@ The system receives incoming WhatsApp messages via Meta's webhook and routes the
 
 ---
 
-### User Story 4 - Send Test Message (Priority: P2)
+### User Story 4 - Manage WhatsApp Business Profile (Priority: P2)
 
-A clinic owner sends a test message from the dashboard to verify the WhatsApp connection is working.
+A clinic owner manages their WhatsApp Business profile, display name, and QR code from the dashboard.
 
-**Why this priority**: Testing gives confidence that the setup is correct before going live.
+**Why this priority**: Professional WhatsApp presence builds patient trust.
 
-**Independent Test**: Can be tested by entering a phone number, sending a test message, and verifying delivery status.
+**Independent Test**: Can be tested by updating business profile info and verifying it reflects on WhatsApp.
 
 **Acceptance Scenarios**:
 
-1. **Given** a connected and verified WhatsApp account, **When** the owner enters a phone number and clicks "Send Test", **Then** a test message is sent via the WhatsApp Cloud API.
-2. **Given** a sent test message, **When** the delivery status updates, **Then** the dashboard shows "Sent", "Delivered", or "Read" status.
+1. **Given** a connected WhatsApp account, **When** the owner opens WhatsApp settings, **Then** they can view and update their business profile (description, address, email, website).
+2. **Given** the display name section, **When** the owner submits a new display name, **Then** it is sent to Meta for approval.
+3. **Given** the QR code section, **When** the owner views it, **Then** a scannable QR code is generated that opens a WhatsApp chat with the clinic.
 
 ---
 
@@ -79,7 +81,7 @@ A clinic owner can view their WhatsApp connection health: status, quality rating
 
 **Acceptance Scenarios**:
 
-1. **Given** a connected WhatsApp account, **When** the owner visits the WhatsApp page, **Then** they see: connection status (green/red), quality rating, messaging tier, and last webhook timestamp.
+1. **Given** a connected WhatsApp account, **When** the owner visits the WhatsApp page, **Then** they see: connection status (DISCONNECTED/CONNECTED/NEEDS_VERIFICATION/READY), quality rating, messaging tier, and last webhook timestamp.
 2. **Given** a disconnected account, **When** the owner visits the page, **Then** a "Reconnect" button is displayed.
 
 ---
@@ -96,21 +98,23 @@ A clinic owner can view their WhatsApp connection health: status, quality rating
 ### Functional Requirements
 
 - **FR-001**: System MUST implement Meta Embedded Signup OAuth flow for WhatsApp Business API
-- **FR-002**: System MUST encrypt access tokens using AES-256-GCM before storing in Firestore
+- **FR-002**: System MUST store access tokens in the `gendei_tokens` Firestore collection
 - **FR-003**: System MUST verify webhook signatures using X-Hub-Signature-256 header
 - **FR-004**: System MUST support phone number verification via SMS and Voice methods
 - **FR-005**: System MUST forward incoming messages to the AI agent service (Cloud Run)
 - **FR-006**: System MUST handle message status updates (sent, delivered, read, failed)
-- **FR-007**: System MUST display connection status, quality rating, and messaging limits in dashboard
+- **FR-007**: System MUST display connection status (DISCONNECTED, CONNECTED, NEEDS_VERIFICATION, READY), quality rating, and messaging limits in dashboard
 - **FR-008**: System MUST support sending test messages from the dashboard
 - **FR-009**: System MUST subscribe to webhook events: messages, message_template_status_update, phone_number_quality_update
-- **FR-010**: System MUST store App Secret in Google Cloud Secret Manager, not environment variables
+- **FR-010**: System MUST support WhatsApp Business profile management (description, address, email, website)
+- **FR-011**: System MUST support display name management with Meta approval flow
+- **FR-012**: System MUST generate scannable QR codes for patient-initiated chats
 
 ### Key Entities
 
 - **WhatsApp Connection** (`gendei_whatsapp/{clinicId}`): WABA ID, phone number ID, display phone, quality rating, messaging tier, webhook status
-- **Encrypted Tokens** (`gendei_tokens/{clinicId}`): Encrypted access token, token type, expiration, scopes
-- **Clinic WhatsApp Fields**: Connected flag, phone number ID, WABA ID, display phone, quality rating
+- **Tokens** (`gendei_tokens/{clinicId}`): Access token, token type, BISU token, expiration, scopes
+- **Clinic WhatsApp Fields**: Connected flag, phone number ID, WABA ID, display phone, quality rating, connection status
 
 ## Success Criteria
 
@@ -119,4 +123,4 @@ A clinic owner can view their WhatsApp connection health: status, quality rating
 - **SC-001**: WhatsApp connection success rate > 95%
 - **SC-002**: Webhook delivery rate > 99.9%
 - **SC-003**: Message send latency < 2 seconds
-- **SC-004**: Token encryption/decryption adds < 50ms overhead
+- **SC-004**: QR code generation < 1 second

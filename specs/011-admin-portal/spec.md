@@ -2,128 +2,140 @@
 
 **Feature Branch**: `011-admin-portal`
 **Created**: 2026-02-04
-**Status**: Implemented
+**Updated**: 2026-02-16
+**Status**: Partially Implemented
 
 ## User Scenarios & Testing
 
-### User Story 1 - Clinic Lifecycle Management (Priority: P1)
+### User Story 1 - Clinic Overview and Monitoring (Priority: P1) — Implemented
 
-A super-admin manages clinic accounts: approving new clinics, viewing clinic details, suspending problematic accounts, and deleting inactive clinics.
+A super-admin views the list of all clinics on the platform with basic information: name, plan, status, and usage metrics.
 
-**Why this priority**: Clinic lifecycle management is the core function of the admin portal — without it, there is no way to manage the platform.
+**Why this priority**: Clinic visibility is the core function of the admin portal — understanding the platform state.
 
-**Independent Test**: Login as admin → view clinic list → approve a pending clinic → suspend a clinic → verify status changes persist.
+**Independent Test**: Login as admin → view clinic list → click on a clinic → verify clinic details load.
 
 **Acceptance Scenarios**:
 
 1. **Given** the admin portal, **When** a super-admin views the clinic list, **Then** all clinics are shown with name, plan, status, creation date, and usage metrics.
-2. **Given** a pending clinic, **When** the admin approves it, **Then** `admin.verified` is set to `true` and the clinic gains full access.
-3. **Given** an active clinic, **When** the admin suspends it with a reason, **Then** `admin.suspended` is set to `true`, `suspendedReason` is stored, and the clinic loses access.
-4. **Given** a suspended clinic, **When** the admin unsuspends it, **Then** `admin.suspended` is set to `false` and the clinic regains access.
+2. **Given** a clinic in the list, **When** the admin clicks on it, **Then** the clinic detail page shows full information including appointments, revenue, and team members.
 
 ---
 
-### User Story 2 - Platform Analytics (Priority: P1)
+### User Story 2 - Appointment and Payment Overview (Priority: P1) — Implemented
 
-A super-admin views platform-wide metrics including total clinics, appointments, revenue, messages, and system health.
+A super-admin views platform-wide appointments and payment information for monitoring and support purposes.
 
-**Why this priority**: Analytics are essential for understanding platform growth and identifying issues.
+**Why this priority**: Operational visibility helps with platform support and issue resolution.
 
-**Independent Test**: Open analytics dashboard → verify metrics match actual data → check date range filters work.
+**Independent Test**: Open appointments page → verify appointments across clinics are displayed → open payments page → verify payment data.
 
 **Acceptance Scenarios**:
 
-1. **Given** the analytics overview, **When** the admin loads it, **Then** key metrics are displayed: total clinics (by plan, by status), total appointments, total messages, total revenue.
-2. **Given** the analytics dashboard, **When** the admin selects a date range, **Then** all metrics update to reflect the selected period.
-3. **Given** system health section, **When** the admin views it, **Then** API error rates, average response times, and usage trends are shown.
+1. **Given** the appointments page, **When** the admin views it, **Then** recent appointments across all clinics are shown with status, clinic, patient, and professional.
+2. **Given** the payments page, **When** the admin views it, **Then** payment transactions are shown with amounts, statuses, and Stripe references.
 
 ---
 
-### User Story 3 - Feature Flags (Priority: P2)
+### User Story 3 - System Health Monitoring (Priority: P2) — Implemented
+
+A super-admin monitors platform health: API status, error rates, and service connectivity.
+
+**Why this priority**: Health monitoring enables proactive issue detection and resolution.
+
+**Independent Test**: Open health page → verify service status indicators show current state.
+
+**Acceptance Scenarios**:
+
+1. **Given** the health page, **When** the admin views it, **Then** service status indicators are shown for key platform components.
+2. **Given** a service issue, **When** detected, **Then** the health page highlights the affected component.
+
+---
+
+### User Story 4 - Support Tools (Priority: P2) — Implemented
+
+A support admin uses the admin portal to look up clinic information and assist with customer issues.
+
+**Why this priority**: Support tools reduce resolution time for customer issues.
+
+**Independent Test**: Open support page → search for a clinic → verify relevant information is displayed.
+
+**Acceptance Scenarios**:
+
+1. **Given** the support page, **When** the admin searches for a clinic by name or ID, **Then** the clinic's information and recent activity are shown.
+2. **Given** a clinic's detail page, **When** the admin reviews it, **Then** they can see recent appointments, conversations, and configuration.
+
+---
+
+### User Story 5 - Clinic Lifecycle Management (Priority: P1) — Planned
+
+A super-admin manages clinic accounts: approving new clinics, suspending problematic accounts, and deleting inactive clinics.
+
+**Acceptance Scenarios**:
+
+1. **Given** a pending clinic, **When** the admin approves it, **Then** `admin.verified` is set to `true` and the clinic gains full access.
+2. **Given** an active clinic, **When** the admin suspends it with a reason, **Then** `admin.suspended` is set to `true`, `suspendedReason` is stored, and the clinic loses access.
+
+---
+
+### User Story 6 - Feature Flags (Priority: P2) — Planned
 
 A super-admin creates and manages feature flags to control feature rollouts to specific clinics, plans, or percentages of users.
-
-**Why this priority**: Feature flags enable safe, incremental rollouts without code deploys.
-
-**Independent Test**: Create feature flag → target specific clinic → verify clinic sees the feature → disable → verify feature hidden.
 
 **Acceptance Scenarios**:
 
 1. **Given** the feature flags page, **When** the admin creates a flag with targeting type `clinicIds`, **Then** only specified clinics see the feature.
-2. **Given** a percentage-based flag at 50%, **When** clinics load, **Then** approximately 50% of clinics have the feature enabled.
-3. **Given** an active flag, **When** the admin disables it, **Then** all clinics immediately lose the feature.
+2. **Given** an active flag, **When** the admin disables it, **Then** all clinics immediately lose the feature.
 
 ---
 
-### User Story 4 - Impersonation for Support (Priority: P2)
+### User Story 7 - Impersonation for Support (Priority: P2) — Planned
 
 A support staff member impersonates a clinic to troubleshoot issues, seeing exactly what the clinic sees without needing their credentials.
-
-**Why this priority**: Impersonation dramatically reduces support resolution time by allowing direct investigation.
-
-**Independent Test**: Start impersonation session → verify clinic dashboard loads with clinic data → verify audit trail created → end session.
 
 **Acceptance Scenarios**:
 
 1. **Given** a clinic with a support ticket, **When** the support admin clicks "Impersonate", **Then** a time-limited session starts and the admin sees the clinic's dashboard.
-2. **Given** an active impersonation session, **When** the admin performs actions, **Then** all actions are logged to the audit trail with `impersonating: clinicId`.
-3. **Given** a session, **When** the session expires or admin clicks "End Session", **Then** the session is terminated and logged.
-
----
-
-### User Story 5 - Audit Logging (Priority: P1)
-
-All admin actions are automatically logged with actor, action, resource, timestamp, IP address, and changes made.
-
-**Why this priority**: Audit logging is a security and compliance requirement — every admin action must be traceable.
-
-**Independent Test**: Perform admin action → view audit logs → verify action recorded with all metadata.
-
-**Acceptance Scenarios**:
-
-1. **Given** any admin action (create, update, delete, suspend), **When** the action completes, **Then** an audit log entry is created with actorId, action, resource, resourceId, description, ipAddress, and timestamp.
-2. **Given** an update action, **When** fields change, **Then** the audit log includes `changes` array with field, oldValue, and newValue.
-3. **Given** the audit log viewer, **When** the admin filters by action type or date range, **Then** matching logs are displayed in chronological order.
+2. **Given** an active impersonation session, **When** the admin performs actions, **Then** all actions are logged to the audit trail.
 
 ---
 
 ### Edge Cases
 
-- What if a super-admin tries to delete themselves? (Prevent — at least one super-admin must exist)
-- What about impersonation session timeout? (Sessions expire after 1 hour by default; extendable)
-- What if a feature flag targets a deleted clinic? (Flag still evaluates but has no effect on deleted clinics)
-- What about concurrent admin actions on the same clinic? (Last-write-wins with audit trail for reconciliation)
-- What about 2FA for super-admins? (Required for super_admin role; optional for admin/support)
+- What about concurrent admin access? (Read-only operations are safe; write operations are limited)
+- What about authentication for admin portal? (Separate admin authentication, not shared with clinic users)
 
 ## Requirements
 
-### Functional Requirements
+### Functional Requirements (Implemented)
 
-- **FR-001**: System MUST support clinic lifecycle management (approve, suspend, unsuspend, delete)
-- **FR-002**: System MUST display platform-wide analytics with configurable date ranges
-- **FR-003**: System MUST support feature flags with targeting (all, none, percentage, clinicIds, plans, rules)
-- **FR-004**: System MUST support clinic impersonation for support staff with time-limited sessions
-- **FR-005**: System MUST log all admin actions in an immutable audit trail
-- **FR-006**: System MUST enforce role-based access: super_admin, admin, support
-- **FR-007**: System MUST require 2FA for super_admin role
-- **FR-008**: System MUST support IP allowlisting per admin user
-- **FR-009**: System MUST track clinic quotas (professionals, appointments, messages, WhatsApp numbers)
-- **FR-010**: System MUST support subscription plan management (starter, professional, enterprise)
+- **FR-001**: System MUST display a list of all clinics with name, plan, status, and usage metrics
+- **FR-002**: System MUST display clinic detail pages with appointments, revenue, and team info
+- **FR-003**: System MUST display platform-wide appointment data
+- **FR-004**: System MUST display payment transaction overview with Stripe references
+- **FR-005**: System MUST display system health monitoring indicators
+- **FR-006**: System MUST support clinic search and lookup for support purposes
+
+### Functional Requirements (Planned — Not Yet Implemented)
+
+- **FR-P01**: System SHOULD support clinic lifecycle management (approve, suspend, unsuspend, delete)
+- **FR-P02**: System SHOULD support feature flags with targeting (all, none, percentage, clinicIds, plans, rules)
+- **FR-P03**: System SHOULD support clinic impersonation for support staff with time-limited sessions
+- **FR-P04**: System SHOULD log all admin actions in an immutable audit trail
+- **FR-P05**: System SHOULD enforce role-based access: super_admin, admin, support
+- **FR-P06**: System SHOULD require 2FA for super_admin role
+- **FR-P07**: System SHOULD support IP allowlisting per admin user
+- **FR-P08**: System SHOULD track clinic quotas (professionals, appointments, messages, WhatsApp numbers)
 
 ### Key Entities
 
-- **AdminUser**: Email, name, role, permissions, active flag, 2FA requirement, IP allowlist
-- **AuditLog**: Actor, action, resource, changes, IP address, user agent, timestamp
-- **FeatureFlag**: Name, description, enabled, targeting rules (type, percentage, clinicIds, plans)
-- **PlatformAnalytics**: Daily snapshots of clinics, appointments, messages, revenue, system health
-- **ImpersonationSession**: Admin, clinic, token, start/end times, reason, actions performed
+- **AdminUser**: Email, name, role, active flag
+- **PlatformOverview**: Aggregated stats — total clinics, appointments, revenue, messages
 
 ## Success Criteria
 
 ### Measurable Outcomes
 
-- **SC-001**: Admin task completion < 30 seconds
-- **SC-002**: Zero unauthorized access incidents
-- **SC-003**: 100% audit trail coverage for all admin actions
-- **SC-004**: Platform analytics load < 3 seconds
-- **SC-005**: Feature flag propagation < 5 seconds
+- **SC-001**: Admin portal load time < 3 seconds
+- **SC-002**: Clinic list load time < 2 seconds
+- **SC-003**: Clinic detail load time < 2 seconds

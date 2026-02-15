@@ -18,83 +18,11 @@ export type {
   WorkflowPresetCategory,
 } from './workflow_contract';
 
-export interface CreatorProfile {
-  displayName?: string;
-  voiceStyle?: 'friendly_coach' | 'professional_expert' | 'casual_friend' | 'formal_consultant';
-  speakingPerspective?: 'first_person' | 'third_person';
-  language?: string;
-  // AI persona fields (set during onboarding)
-  niche?: string;
-  sampleResponses?: string;
-  welcomeMessage?: string;
-  isOnboardingComplete?: boolean;
-  // Clone page fields
-  productTypes?: ('ebook' | 'mentoring' | 'community')[];
-  leadTemperature?: number;
-  showProductsInGreeting?: boolean;
-}
-
-export interface Creator {
-  id: string;
-  name: string;
-  phoneNumber?: string;
-  status: 'active' | 'inactive' | 'suspended';
-  country?: string;
-  currency?: string;
-  currencyLocale?: string;
-  profile?: CreatorProfile;
-  isNewUser?: boolean;
-}
-
 export interface WhatsAppChannel {
   phone_number_id?: string;
   phone_e164?: string;
   business_name?: string;
   status: 'connected' | 'not_connected' | 'pending';
-}
-
-export type ProductType = 'ebook' | 'course' | 'mentorship' | 'community' | 'consulting' | 'template' | 'software' | 'service' | 'other';
-
-export interface Product {
-  id: string;
-  creatorId: string;
-  title: string;
-  description: string;
-  price: number;
-  currency: string;
-  type?: ProductType | string;  // Optional for form compatibility
-  fileUrl?: string;
-  thumbnailUrl?: string;
-  active: boolean;      // API returns this for frontend compatibility
-  isActive?: boolean;   // Backend field (also returned for consistency)
-  salesCount: number;
-  totalRevenue: number;
-  // AI Sales Agent fields
-  mainBenefit?: string;
-  targetAudience?: string;
-  tone?: 'friendly' | 'professional' | 'empathetic' | 'casual' | 'urgent';
-  objections?: string[];
-  objectionResponses?: Record<string, string>;
-  // RAG context for AI conversations
-  ragContext?: {
-    summary?: string;
-    topics?: string[];
-    benefits?: string[];
-    contentDetails?: string;
-  };
-  // Delivery configuration for free products
-  delivery?: {
-    url?: string;
-    message?: string;
-  };
-  // Meta Catalog sync status - product is ready for WhatsApp SPM templates when synced
-  metaCatalog?: {
-    catalogId?: string;
-    retailerId?: string;
-    syncedAt?: string;
-  };
-  createdAt: string;
-  updatedAt: string;
 }
 
 export interface PaymentSettings {
