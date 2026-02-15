@@ -12,14 +12,38 @@ const CLINICS = 'gendei_clinics';
 const TOKENS = 'gendei_tokens';
 const MAX_MESSAGES_PER_CONVERSATION = 250;
 
-// Conversation state enum
+// Conversation state enum (booking journey categories)
 enum ConversationState {
   NOVO = 'novo',
-  QUALIFICADO = 'qualificado',
-  NEGOCIANDO = 'negociando',
-  CHECKOUT = 'checkout',
-  FECHADO = 'fechado',
+  EM_ATENDIMENTO = 'em_atendimento',
+  AGENDANDO = 'agendando',
+  CONFIRMANDO = 'confirmando',
+  CONCLUIDO = 'concluido',
 }
+
+// Map booking journey categories to the agent workflow states they include.
+// The WhatsApp agent writes granular states (general_chat, selecting_slot, etc.)
+// but the dashboard filter uses journey categories (novo, em_atendimento, etc.).
+const STATE_GROUPS: Record<string, string[]> = {
+  [ConversationState.NOVO]: [
+    'novo', 'new', 'general_chat', 'idle', 'greeting',
+    'awaiting_greeting_response', 'escalated',
+  ],
+  [ConversationState.EM_ATENDIMENTO]: [
+    'em_atendimento', 'qualificado', 'engaged', 'selecting_slot',
+    'in_patient_info_flow', 'awaiting_professional_after_availability',
+  ],
+  [ConversationState.AGENDANDO]: [
+    'agendando', 'negociando', 'negotiating', 'in_booking_flow', 'scheduling',
+    'selecting_product', 'workflow_ativo',
+    'awaiting_appointment_action', 'rescheduling', 'cancellation_requested',
+  ],
+  [ConversationState.CONFIRMANDO]: [
+    'confirmando', 'checkout', 'confirming',
+    'awaiting_payment_type', 'awaiting_payment_method',
+  ],
+  [ConversationState.CONCLUIDO]: ['concluido', 'fechado', 'closed', 'purchased'],
+};
 
 type MessageDirection = 'in' | 'out';
 
@@ -332,9 +356,14 @@ router.get('/', verifyAuth, async (req: Request, res: Response) => {
       .orderBy('lastMessageAt', 'desc')
       .limit(limit);
 
-    // Apply filters
+    // Apply filters — expand funnel category to all matching agent states
     if (state) {
-      query = query.where('state', '==', state);
+      const stateGroup = STATE_GROUPS[state];
+      if (stateGroup) {
+        query = query.where('state', 'in', stateGroup);
+      } else {
+        query = query.where('state', '==', state);
+      }
     }
 
     if (isHumanTakeover !== undefined) {
@@ -399,11 +428,13 @@ router.get('/stats', verifyAuth, async (req: Request, res: Response) => {
     let humanTakeoverConversations = 0;
     let closedConversations = 0;
 
+    const closedStates = STATE_GROUPS[ConversationState.CONCLUIDO] || ['concluido'];
+
     snapshot.docs.forEach(doc => {
       const data = doc.data();
       totalConversations++;
 
-      if (data.state === ConversationState.FECHADO) {
+      if (closedStates.includes(data.state)) {
         closedConversations++;
       } else {
         activeConversations++;

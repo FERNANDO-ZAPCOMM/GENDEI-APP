@@ -266,9 +266,7 @@ export default function ProfessionalsPage() {
                 </div>
               ) : filteredProfessionals.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-8 text-center">
-                  <User className="w-10 h-10 text-muted-foreground mb-3" />
-                  <p className="text-muted-foreground">{t('professionalsPage.noneFound')}</p>
-                  <p className="text-xs text-muted-foreground mt-1">{t('professionalsPage.adjustFilters')}</p>
+                  <User className="w-10 h-10 text-muted-foreground" />
                 </div>
               ) : (
                 <div className="space-y-2">

@@ -951,23 +951,17 @@
     },
     "state": {
       "novo": "New",
-      "qualificado": "Qualified",
-      "negociando": "Negotiating",
-      "fechado": "Closed",
-      "checkout": "Checkout",
-      "greeting": "Greeting",
-      "engaged": "Engaged",
-      "awaiting_greeting_response": "Awaiting response",
-      "confirming": "Confirming",
-      "new": "New",
-      "scheduling": "Scheduling",
-      "selecting_slot": "Selecting time",
-      "awaiting_appointment_action": "Awaiting appointment action",
-      "in_patient_info_flow": "In patient info flow"
+      "em_atendimento": "In Service",
+      "agendando": "Scheduling",
+      "confirmando": "Confirming",
+      "concluido": "Completed"
     },
     "handler": {
       "ai": "AI",
       "human": "Human"
+    },
+    "badge": {
+      "patient": "Patient"
     },
     "list": {
       "title": "Conversation List",
@@ -1516,7 +1510,7 @@
     "withAppointments": "With Appointments",
     "new": "New",
     "listTitle": "Patient List",
-    "noneFound": "No patients found",
+    "noneFound": "{count} patients found",
     "searchPlaceholder": "Search...",
     "byProfessional": "By Professional",
     "selectToFilter": "Select to filter",
@@ -1531,7 +1525,7 @@
       "actions": "Actions"
     },
     "appointmentCount": "{count} appointment(s)",
-    "patientCount": "{count} patient(s)",
+    "patientCount": "{count} patients found",
     "delete": "Delete",
     "deleteConfirm": "Are you sure you want to delete this patient?",
     "deleteSuccess": "Patient deleted!",

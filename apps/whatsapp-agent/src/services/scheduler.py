@@ -645,11 +645,12 @@ class SchedulerService:
 
         if context.get("stage"):
             stage_labels = {
-                "novo": "Novo cliente",
-                "qualificado": "Cliente qualificado",
-                "negociando": "Em negociação",
-                "checkout": "Aguardando pagamento",
-                "cliente": "Cliente ativo"
+                "novo": "Novo contato",
+                "em_atendimento": "Em atendimento",
+                "agendando": "Agendando consulta",
+                "confirmando": "Confirmando agendamento",
+                "concluido": "Concluido",
+                "cliente": "Cliente ativo",
             }
             lines.append(f"Status: {stage_labels.get(context['stage'], context['stage'])}")
 
@@ -682,11 +683,11 @@ class SchedulerService:
         try:
             cutoff = datetime.now() - timedelta(hours=hours_threshold)
 
-            # query conversations in 'checkout' or 'negociando' state
+            # query conversations in 'confirmando' or 'agendando' state
             # that haven't been updated since cutoff
             query = self.db.db.collection(
                 self._col("conversations")
-            ).where("state", "in", ["checkout", "negociando"]).where(
+            ).where("state", "in", ["confirmando", "agendando", "checkout", "negociando"]).where(
                 "updatedAt", "<=", cutoff
             )
 

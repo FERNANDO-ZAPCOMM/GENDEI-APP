@@ -199,9 +199,7 @@ export default function PatientsPage() {
               <div>
                 <CardTitle className="text-base">{t('patientsPage.listTitle')}</CardTitle>
                 <CardDescription>
-                  {patients.length === 0
-                    ? t('patientsPage.noneFound')
-                    : t('patientsPage.patientCount', { count: patients.length })}
+                  {t('patientsPage.patientCount', { count: patients.length })}
                 </CardDescription>
               </div>
               {/* Search */}
@@ -225,12 +223,9 @@ export default function PatientsPage() {
               </div>
             ) : patients.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-center">
-                <div className="w-16 h-16 rounded-full bg-muted/50 flex items-center justify-center mb-4">
+                <div className="w-16 h-16 rounded-full bg-muted/50 flex items-center justify-center">
                   <Users className="w-8 h-8 text-muted-foreground/50" />
                 </div>
-                <p className="text-muted-foreground text-sm">
-                  {t('patientsPage.noneFound')}
-                </p>
               </div>
             ) : (
               <Table>
@@ -351,9 +346,7 @@ export default function PatientsPage() {
               <div>
                 <CardTitle className="text-base">{t('patientsPage.listTitle')}</CardTitle>
                 <CardDescription>
-                  {patients.length === 0
-                    ? t('patientsPage.noneFound')
-                    : t('patientsPage.patientCount', { count: patients.length })}
+                  {t('patientsPage.patientCount', { count: patients.length })}
                 </CardDescription>
               </div>
               <div className="relative w-full">
@@ -376,12 +369,9 @@ export default function PatientsPage() {
               </div>
             ) : patients.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-center">
-                <div className="w-16 h-16 rounded-full bg-muted/50 flex items-center justify-center mb-4">
+                <div className="w-16 h-16 rounded-full bg-muted/50 flex items-center justify-center">
                   <Users className="w-8 h-8 text-muted-foreground/50" />
                 </div>
-                <p className="text-muted-foreground text-sm">
-                  {t('patientsPage.noneFound')}
-                </p>
               </div>
             ) : (
               <div className="space-y-3">

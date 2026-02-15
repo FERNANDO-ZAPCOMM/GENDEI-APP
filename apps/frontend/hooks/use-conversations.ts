@@ -4,10 +4,10 @@ import { apiClient } from '@/lib/api';
 
 export enum ConversationState {
   NOVO = 'novo',
-  QUALIFICADO = 'qualificado',
-  NEGOCIANDO = 'negociando',
-  CHECKOUT = 'checkout',
-  FECHADO = 'fechado',
+  EM_ATENDIMENTO = 'em_atendimento',
+  AGENDANDO = 'agendando',
+  CONFIRMANDO = 'confirmando',
+  CONCLUIDO = 'concluido',
 }
 
 export interface ConversationDocument {
@@ -34,6 +34,7 @@ export interface ConversationDocument {
   takenOverAt?: Date;
   takenOverBy?: string;
   professionalId?: string;
+  patientId?: string;
   createdAt: Date;
   updatedAt: Date;
 }

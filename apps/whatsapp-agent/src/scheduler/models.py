@@ -63,6 +63,7 @@ class Clinic:
     phone: str
     email: Optional[str] = None
     address: str = ""
+    address_data: Dict[str, Any] = field(default_factory=dict)
     city: str = ""
     state: str = ""
     zip_code: str = ""
@@ -108,6 +109,7 @@ class Clinic:
             "phone": self.phone,
             "email": self.email,
             "address": self.address,
+            "addressData": self.address_data,
             "city": self.city,
             "state": self.state,
             "zipCode": self.zip_code,
@@ -143,6 +145,7 @@ class Clinic:
             phone=data.get("phone", ""),
             email=data.get("email"),
             address=data.get("address", ""),
+            address_data=data.get("addressData", {}) if isinstance(data.get("addressData", {}), dict) else {},
             city=data.get("city", ""),
             state=data.get("state", ""),
             zip_code=data.get("zipCode", ""),

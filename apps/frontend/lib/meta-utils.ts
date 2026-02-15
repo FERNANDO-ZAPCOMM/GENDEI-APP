@@ -303,17 +303,42 @@ export function validateVerificationCode(code: string): boolean {
  * @param state - Conversation state
  * @returns Tailwind color classes
  */
+/**
+ * Map any agent workflow state to its booking journey category.
+ * The WhatsApp agent writes granular states (general_chat, selecting_slot, etc.)
+ * but the dashboard groups them into journey categories.
+ */
+export function getFunnelCategory(state: string): string {
+  const NOVO_STATES = ['novo', 'new', 'general_chat', 'idle', 'greeting', 'awaiting_greeting_response', 'escalated'];
+  const EM_ATENDIMENTO_STATES = ['em_atendimento', 'qualificado', 'engaged', 'selecting_slot', 'in_patient_info_flow', 'awaiting_professional_after_availability'];
+  const AGENDANDO_STATES = [
+    'agendando', 'negociando', 'negotiating', 'in_booking_flow', 'scheduling',
+    'selecting_product', 'workflow_ativo',
+    'awaiting_appointment_action', 'rescheduling', 'cancellation_requested',
+  ];
+  const CONFIRMANDO_STATES = ['confirmando', 'checkout', 'confirming', 'awaiting_payment_type', 'awaiting_payment_method'];
+  const CONCLUIDO_STATES = ['concluido', 'fechado', 'closed', 'purchased'];
+
+  if (NOVO_STATES.includes(state)) return 'novo';
+  if (EM_ATENDIMENTO_STATES.includes(state)) return 'em_atendimento';
+  if (AGENDANDO_STATES.includes(state)) return 'agendando';
+  if (CONFIRMANDO_STATES.includes(state)) return 'confirmando';
+  if (CONCLUIDO_STATES.includes(state)) return 'concluido';
+  return 'novo'; // default unmapped states to novo
+}
+
 export function getConversationStateColor(state: string): string {
-  switch (state) {
+  const category = getFunnelCategory(state);
+  switch (category) {
     case 'novo':
       return 'bg-blue-50 text-blue-600 border-blue-200';
-    case 'qualificado':
+    case 'em_atendimento':
       return 'bg-yellow-50 text-yellow-600 border-yellow-200';
-    case 'negociando':
+    case 'agendando':
       return 'bg-orange-50 text-orange-600 border-orange-200';
-    case 'checkout':
+    case 'confirmando':
       return 'bg-purple-50 text-purple-600 border-purple-200';
-    case 'fechado':
+    case 'concluido':
       return 'bg-green-50 text-green-600 border-green-200';
     default:
       return 'bg-gray-50 text-gray-600 border-gray-200';

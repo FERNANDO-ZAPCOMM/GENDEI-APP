@@ -443,6 +443,17 @@ async def _create_appointment_impl(
         )
 
         if appointment:
+            # Link patient to conversation
+            patient_id = phone.replace("+", "").replace("-", "").replace(" ", "")
+            try:
+                runtime.db.save_conversation_state(
+                    runtime.clinic_id,
+                    phone,
+                    {"patientId": patient_id}
+                )
+            except Exception as link_err:
+                logger.warning(f"Failed to link patient to conversation: {link_err}")
+
             # Get vertical config for terminology
             vc = get_vertical_config(getattr(runtime, 'vertical_slug', None))
             term = vc.terminology

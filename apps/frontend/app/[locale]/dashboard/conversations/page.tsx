@@ -3,14 +3,14 @@
 import { useState, useMemo } from 'react';
 import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
-import { Search, MessageCircle, Zap, CalendarDays, Eye, MoreVertical, Archive, Trash2 } from 'lucide-react';
+import { Search, MessageCircle, Zap, CalendarDays, Eye, MoreVertical, Archive, Trash2, UserCheck } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 
 import { useClinic } from '@/hooks/use-clinic';
 import { useProfessionals } from '@/hooks/use-professionals';
 import { getSpecialtyNames, getProfessionalSpecialties } from '@/lib/specialties';
-import { getConversationStateColor } from '@/lib/meta-utils';
+import { getConversationStateColor, getFunnelCategory } from '@/lib/meta-utils';
 import {
   useConversations,
   useConversationStats,
@@ -107,37 +107,21 @@ function ConversationsPageContent() {
   const [conversationToDelete, setConversationToDelete] = useState<ConversationDocument | null>(null);
 
   const getConversationStateLabel = (state: string): string => {
-    switch (state) {
+    // Map agent workflow states to booking journey category labels
+    const category = getFunnelCategory(state);
+    switch (category) {
       case 'novo':
         return t('conversations.state.novo');
-      case 'new':
-        return t('conversations.state.new');
-      case 'qualificado':
-        return t('conversations.state.qualificado');
-      case 'negociando':
-        return t('conversations.state.negociando');
-      case 'fechado':
-        return t('conversations.state.fechado');
-      case 'checkout':
-        return t('conversations.state.checkout');
-      case 'greeting':
-        return t('conversations.state.greeting');
-      case 'engaged':
-        return t('conversations.state.engaged');
-      case 'selecting_slot':
-        return t('conversations.state.selecting_slot');
-      case 'scheduling':
-        return t('conversations.state.scheduling');
-      case 'confirming':
-        return t('conversations.state.confirming');
-      case 'awaiting_greeting_response':
-        return t('conversations.state.awaiting_greeting_response');
-      case 'awaiting_appointment_action':
-        return t('conversations.state.awaiting_appointment_action');
-      case 'in_patient_info_flow':
-        return t('conversations.state.in_patient_info_flow');
+      case 'em_atendimento':
+        return t('conversations.state.em_atendimento');
+      case 'agendando':
+        return t('conversations.state.agendando');
+      case 'confirmando':
+        return t('conversations.state.confirmando');
+      case 'concluido':
+        return t('conversations.state.concluido');
       default:
-        return state.replace(/_/g, ' ');
+        return t('conversations.state.novo');
     }
   };
 
@@ -344,9 +328,10 @@ function ConversationsPageContent() {
                   <SelectContent>
                     <SelectItem value="all">Todos</SelectItem>
                     <SelectItem value="novo">{t('conversations.state.novo')}</SelectItem>
-                    <SelectItem value="qualificado">{t('conversations.state.qualificado')}</SelectItem>
-                    <SelectItem value="negociando">{t('conversations.state.negociando')}</SelectItem>
-                    <SelectItem value="fechado">{t('conversations.state.fechado')}</SelectItem>
+                    <SelectItem value="em_atendimento">{t('conversations.state.em_atendimento')}</SelectItem>
+                    <SelectItem value="agendando">{t('conversations.state.agendando')}</SelectItem>
+                    <SelectItem value="confirmando">{t('conversations.state.confirmando')}</SelectItem>
+                    <SelectItem value="concluido">{t('conversations.state.concluido')}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -361,12 +346,9 @@ function ConversationsPageContent() {
               </div>
             ) : conversations.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-center">
-                <div className="w-16 h-16 rounded-full bg-muted/50 flex items-center justify-center mb-4">
+                <div className="w-16 h-16 rounded-full bg-muted/50 flex items-center justify-center">
                   <Eye className="w-8 h-8 text-muted-foreground/50" />
                 </div>
-                <p className="text-muted-foreground text-sm">
-                  Nenhuma conversa encontrada
-                </p>
               </div>
             ) : (
               <div className="space-y-2">
@@ -403,6 +385,12 @@ function ConversationsPageContent() {
                           {conversation.isHumanTakeover && (
                             <Badge variant="outline" className="text-xs text-blue-600 border-blue-600">
                               {t('conversations.handler.human')}
+                            </Badge>
+                          )}
+                          {conversation.patientId && (
+                            <Badge variant="outline" className="text-xs bg-emerald-50 text-emerald-600 border-emerald-200">
+                              <UserCheck className="h-3 w-3 mr-1" />
+                              {t('conversations.badge.patient')}
                             </Badge>
                           )}
                         </div>
@@ -531,12 +519,9 @@ function ConversationsPageContent() {
               </div>
             ) : conversations.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-center">
-                <div className="w-16 h-16 rounded-full bg-muted/50 flex items-center justify-center mb-4">
+                <div className="w-16 h-16 rounded-full bg-muted/50 flex items-center justify-center">
                   <Eye className="w-8 h-8 text-muted-foreground/50" />
                 </div>
-                <p className="text-muted-foreground text-sm">
-                  Nenhuma conversa encontrada
-                </p>
               </div>
             ) : (
               <div className="space-y-3">
@@ -602,6 +587,12 @@ function ConversationsPageContent() {
                           {conversation.isHumanTakeover && (
                             <Badge variant="outline" className="text-xs text-blue-600 border-blue-600">
                               {t('conversations.handler.human')}
+                            </Badge>
+                          )}
+                          {conversation.patientId && (
+                            <Badge variant="outline" className="text-xs bg-emerald-50 text-emerald-600 border-emerald-200">
+                              <UserCheck className="h-3 w-3 mr-1" />
+                              {t('conversations.badge.patient')}
                             </Badge>
                           )}
                         </div>

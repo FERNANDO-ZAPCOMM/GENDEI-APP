@@ -10,7 +10,7 @@ import { toast } from 'sonner';
 import { useClinic } from '@/hooks/use-clinic';
 import { useAuth } from '@/hooks/use-auth';
 import { useMessagingWindow } from '@/hooks/use-messaging-window';
-import { getConversationStateColor } from '@/lib/meta-utils';
+import { getConversationStateColor, getFunnelCategory } from '@/lib/meta-utils';
 import {
   useConversation,
   useConversationMessages,
@@ -86,37 +86,20 @@ export default function ConversationDetailPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const getConversationStateLabel = (state: string): string => {
-    switch (state) {
+    const category = getFunnelCategory(state);
+    switch (category) {
       case 'novo':
         return t('conversations.state.novo');
-      case 'new':
-        return t('conversations.state.new');
-      case 'qualificado':
-        return t('conversations.state.qualificado');
-      case 'negociando':
-        return t('conversations.state.negociando');
-      case 'fechado':
-        return t('conversations.state.fechado');
-      case 'checkout':
-        return t('conversations.state.checkout');
-      case 'greeting':
-        return t('conversations.state.greeting');
-      case 'engaged':
-        return t('conversations.state.engaged');
-      case 'selecting_slot':
-        return t('conversations.state.selecting_slot');
-      case 'scheduling':
-        return t('conversations.state.scheduling');
-      case 'confirming':
-        return t('conversations.state.confirming');
-      case 'awaiting_greeting_response':
-        return t('conversations.state.awaiting_greeting_response');
-      case 'awaiting_appointment_action':
-        return t('conversations.state.awaiting_appointment_action');
-      case 'in_patient_info_flow':
-        return t('conversations.state.in_patient_info_flow');
+      case 'em_atendimento':
+        return t('conversations.state.em_atendimento');
+      case 'agendando':
+        return t('conversations.state.agendando');
+      case 'confirmando':
+        return t('conversations.state.confirmando');
+      case 'concluido':
+        return t('conversations.state.concluido');
       default:
-        return state.replace(/_/g, ' ');
+        return t('conversations.state.novo');
     }
   };
 
@@ -278,7 +261,8 @@ export default function ConversationDetailPage() {
   }
 
   const isHumanControl = conversation.isHumanTakeover;
-  const canSendMessages = isHumanControl && conversation.state !== 'fechado';
+  const isConcluded = getFunnelCategory(conversation.state) === 'concluido';
+  const canSendMessages = isHumanControl && !isConcluded;
   const appointmentTag = getAppointmentTagConfig(conversation.appointmentContext?.status);
 
   return (
@@ -394,7 +378,7 @@ export default function ConversationDetailPage() {
           )}
         </div>
 
-        {conversation.state !== 'fechado' && (
+        {!isConcluded && (
           <div>
             {isHumanControl ? (
               <Button
@@ -547,7 +531,7 @@ export default function ConversationDetailPage() {
           </CardContent>
         )}
 
-        {!canSendMessages && conversation.state !== 'fechado' && (
+        {!canSendMessages && !isConcluded && (
           <CardContent className="border-t p-4 bg-muted/50 flex-shrink-0">
             <p className="text-sm text-muted-foreground text-center">
               {t('conversations.messages.takeoverRequired')}
@@ -555,7 +539,7 @@ export default function ConversationDetailPage() {
           </CardContent>
         )}
 
-        {conversation.state === 'fechado' && (
+        {isConcluded && (
           <CardContent className="border-t p-4 bg-muted/50 flex-shrink-0">
             <p className="text-sm text-muted-foreground text-center">
               {t('conversations.messages.conversationClosed')}

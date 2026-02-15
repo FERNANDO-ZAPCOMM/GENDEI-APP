@@ -54,21 +54,27 @@ class FirestoreAdapter:
             raise
 
     # ===== STATE NORMALIZATION =====
-    # Canonical conversation states are pt-BR (stored in Firestore).
+    # Canonical conversation states (booking journey categories stored in Firestore).
     _STATE_CANONICAL_MAP: Dict[str, str] = {
-        # Funnel stages (canonical)
+        # Booking journey stages (canonical)
         "novo": "novo",
-        "qualificado": "qualificado",
-        "negociando": "negociando",
-        "checkout": "checkout",
-        "fechado": "fechado",
+        "em_atendimento": "em_atendimento",
+        "agendando": "agendando",
+        "confirmando": "confirmando",
+        "concluido": "concluido",
 
-        # Legacy/internal values (normalize to pt-BR canonical)
+        # Legacy funnel names (normalize to new canonical)
+        "qualificado": "em_atendimento",
+        "negociando": "agendando",
+        "checkout": "confirmando",
+        "fechado": "concluido",
+
+        # Legacy/internal values (normalize to canonical)
         "new": "novo",
-        "engaged": "qualificado",
-        "negotiating": "negociando",
-        "purchased": "fechado",
-        "closed": "fechado",
+        "engaged": "em_atendimento",
+        "negotiating": "agendando",
+        "purchased": "concluido",
+        "closed": "concluido",
         "workflow_active": "workflow_ativo",
         "selecting_product": "selecionando_produto",
         "browsing": "navegando",

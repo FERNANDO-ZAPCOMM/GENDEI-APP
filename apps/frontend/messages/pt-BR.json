@@ -950,28 +950,22 @@
     },
     "state": {
       "novo": "Novo",
-      "new": "Novo",
-      "qualificado": "Qualificado",
-      "negociando": "Negociando",
-      "fechado": "Fechado",
-      "checkout": "Checkout",
-      "greeting": "Saudação",
-      "engaged": "Engajado",
-      "selecting_slot": "Selecionando horário",
-      "scheduling": "Agendando",
-      "confirming": "Confirmando",
-      "awaiting_greeting_response": "Aguardando resposta",
-      "awaiting_appointment_action": "Aguardando ação no agendamento",
-      "in_patient_info_flow": "Agendando"
+      "em_atendimento": "Em Atendimento",
+      "agendando": "Agendando",
+      "confirmando": "Confirmando",
+      "concluido": "Concluído"
     },
     "handler": {
       "ai": "IA",
       "human": "Humano"
     },
+    "badge": {
+      "patient": "Paciente"
+    },
     "list": {
       "title": "Lista de Conversas",
       "description": "{count} conversas encontradas",
-      "empty": "Nenhuma conversa encontrada"
+      "empty": "nenhuma conversa encontrada"
     },
     "noConversationsFound": "0 conversas encontradas",
     "control": {
@@ -1515,7 +1509,7 @@
     "withAppointments": "Com Consultas",
     "new": "Novos",
     "listTitle": "Lista de Pacientes",
-    "noneFound": "Nenhum paciente encontrado",
+    "noneFound": "{count} pacientes encontrados",
     "searchPlaceholder": "Buscar...",
     "byProfessional": "Por Profissional",
     "selectToFilter": "Selecione para filtrar",
@@ -1530,7 +1524,7 @@
       "actions": "Ações"
     },
     "appointmentCount": "{count} consulta(s)",
-    "patientCount": "{count} paciente(s)",
+    "patientCount": "{count} pacientes encontrados",
     "delete": "Excluir",
     "deleteConfirm": "Tem certeza que deseja excluir este paciente?",
     "deleteSuccess": "Paciente excluído!",

@@ -30,6 +30,7 @@ class MessageProcessorDeps:
     detect_frustrated_sentiment: Callable[[str], bool]
     detect_human_escalation_request: Callable[[str], bool]
     send_whatsapp_location_request: Callable[..., Awaitable[bool]]
+    send_clinic_location_message: Callable[..., Awaitable[bool]]
     send_whatsapp_message: Callable[[str, str, str, str], Awaitable[Any]]
     is_simple_greeting: Callable[[str], bool]
     send_initial_greeting: Callable[..., Awaitable[Any]]
@@ -290,6 +291,31 @@ async def process_incoming_message(
                 access_token,
             )
         return
+
+    address_keywords = [
+        "onde fica",
+        "onde vocês ficam",
+        "onde voces ficam",
+        "qual o endereço",
+        "qual endereco",
+        "qual é o endereço",
+        "qual e o endereco",
+        "endereço",
+        "endereco",
+        "localização",
+        "localizacao",
+        "como chegar",
+        "mapa",
+    ]
+    if any(kw in msg_lower for kw in address_keywords):
+        sent = await deps.send_clinic_location_message(
+            clinic_id,
+            phone_number_id,
+            phone,
+            access_token,
+        )
+        if sent:
+            return
 
     if deps.is_simple_greeting(message):
         logger.info(f"Greeting detected, sending greeting buttons for {phone}")

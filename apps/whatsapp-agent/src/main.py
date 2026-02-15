@@ -117,6 +117,17 @@ flows_handler: Optional[FlowsHandler] = None
 # Note: Message deduplication and conversation state are now Firestore-backed
 # See db.is_message_processed() and db.load_conversation_state()
 
+_GREETING_BUTTONS: List[Dict[str, str]] = [
+    {"id": "greeting_sim", "title": "AGENDAR"},
+    {"id": "greeting_nao", "title": "TIRAR DÚVIDAS"},
+    {"id": "greeting_contato", "title": "FALAR COM ATENDENTE"},
+]
+
+
+def _get_greeting_buttons() -> List[Dict[str, str]]:
+    """Return a fresh copy of the canonical greeting buttons."""
+    return [dict(button) for button in _GREETING_BUTTONS]
+
 
 async def run_agent_response(
     clinic_id: str,
@@ -1060,6 +1071,7 @@ def _get_message_processor_deps() -> MessageProcessorDeps:
         detect_frustrated_sentiment=detect_frustrated_sentiment,
         detect_human_escalation_request=detect_human_escalation_request,
         send_whatsapp_location_request=send_whatsapp_location_request,
+        send_clinic_location_message=send_clinic_location_message,
         send_whatsapp_message=send_whatsapp_message,
         is_simple_greeting=is_simple_greeting,
         send_initial_greeting=send_initial_greeting,
@@ -1296,6 +1308,39 @@ def ensure_phone_has_plus(phone: str) -> str:
     return phone
 
 
+def _parse_coordinate(value: Any) -> Optional[float]:
+    """Parse coordinates coming from Firestore payloads."""
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _extract_clinic_location(clinic: Any) -> Optional[Dict[str, Any]]:
+    """Extract clinic location payload for WhatsApp location message."""
+    if not clinic:
+        return None
+
+    address_data = getattr(clinic, "address_data", {}) or {}
+    latitude = _parse_coordinate(address_data.get("latitude"))
+    longitude = _parse_coordinate(address_data.get("longitude"))
+    if latitude is None or longitude is None:
+        return None
+    if not (-90 <= latitude <= 90 and -180 <= longitude <= 180):
+        return None
+
+    clinic_name = getattr(clinic, "name", "") or "Clínica"
+    address = address_data.get("formatted") or getattr(clinic, "address", "") or ""
+    return {
+        "latitude": latitude,
+        "longitude": longitude,
+        "name": clinic_name[:100],
+        "address": str(address)[:300] if address else "",
+    }
+
+
 def is_message_processed(message_id: str) -> bool:
     """Check if message was already processed (Firestore-backed)."""
     if not db:
@@ -1366,9 +1411,21 @@ async def send_whatsapp_buttons(
     url = f"https://graph.facebook.com/{META_API_VERSION}/{phone_number_id}/messages"
     body_text = format_outgoing_text(body_text)
 
+    sanitized_buttons = buttons[:3]
+    # Normalize greeting actions to always expose the 3 canonical options.
+    if any((btn.get("id", "") or "").startswith("greeting_") for btn in sanitized_buttons):
+        incoming_ids = sorted({btn.get("id", "") for btn in sanitized_buttons if btn.get("id")})
+        sanitized_buttons = _get_greeting_buttons()
+        logger.info(
+            "Normalizing greeting buttons for %s: incoming=%s outgoing=%s",
+            to,
+            incoming_ids,
+            [btn["id"] for btn in sanitized_buttons],
+        )
+
     button_list = [
         {"type": "reply", "reply": {"id": btn["id"], "title": format_button_title(btn["title"])}}
-        for btn in buttons[:3]  # Max 3 buttons
+        for btn in sanitized_buttons  # Max 3 buttons
     ]
 
     to_normalized = ensure_phone_has_plus(to)
@@ -1394,11 +1451,16 @@ async def send_whatsapp_buttons(
         )
 
         if response.status_code == 200:
-            logger.info(f"✅ Buttons sent to {to}")
+            logger.info(
+                "✅ Buttons sent to %s (count=%d, ids=%s)",
+                to,
+                len(sanitized_buttons),
+                [btn.get("id") for btn in sanitized_buttons],
+            )
             # Log outgoing message
             clinic_id = _current_clinic_id.get()
             if db and clinic_id:
-                button_titles = ", ".join([b["title"] for b in buttons[:3]])
+                button_titles = ", ".join([b["title"] for b in sanitized_buttons])
                 db.log_conversation_message(
                     clinic_id, to_normalized, "interactive",
                     f"{body_text}\n[Opções: {button_titles}]",
@@ -1457,7 +1519,108 @@ async def send_whatsapp_location_request(
             return True
 
         logger.error(f"❌ Failed to send location request: {response.text}")
+    return False
+
+
+async def send_whatsapp_location_message(
+    phone_number_id: str,
+    to: str,
+    latitude: float,
+    longitude: float,
+    access_token: str,
+    name: Optional[str] = None,
+    address: Optional[str] = None,
+) -> bool:
+    """Send WhatsApp location pin message."""
+    url = f"https://graph.facebook.com/{META_API_VERSION}/{phone_number_id}/messages"
+    to_normalized = ensure_phone_has_plus(to)
+
+    payload: Dict[str, Any] = {
+        "messaging_product": "whatsapp",
+        "to": to,
+        "type": "location",
+        "location": {
+            "latitude": latitude,
+            "longitude": longitude,
+        },
+    }
+    if name:
+        payload["location"]["name"] = name
+    if address:
+        payload["location"]["address"] = address
+
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            url,
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "application/json",
+                "Cache-Control": "no-cache",
+            },
+            json=payload,
+        )
+
+        if response.status_code == 200:
+            logger.info(
+                "📍 Location message sent to %s (lat=%s lng=%s)",
+                to,
+                latitude,
+                longitude,
+            )
+            clinic_id = _current_clinic_id.get()
+            if db and clinic_id:
+                db.log_conversation_message(
+                    clinic_id,
+                    to_normalized,
+                    "location",
+                    f"LOCALIZAÇÃO ENVIADA: {name or ''} {address or ''}".strip(),
+                    source="ai",
+                    phone_number_id=phone_number_id,
+                )
+            return True
+
+        logger.error(f"❌ Failed to send location message: {response.text}")
         return False
+
+
+async def send_clinic_location_message(
+    clinic_id: str,
+    phone_number_id: str,
+    to: str,
+    access_token: str,
+) -> bool:
+    """Send clinic location pin (and short context text) when user asks address."""
+    clinic = db.get_clinic(clinic_id) if db else None
+    location = _extract_clinic_location(clinic)
+    if not location:
+        return False
+
+    sent = await send_whatsapp_location_message(
+        phone_number_id=phone_number_id,
+        to=to,
+        latitude=location["latitude"],
+        longitude=location["longitude"],
+        access_token=access_token,
+        name=location.get("name"),
+        address=location.get("address"),
+    )
+    if not sent:
+        return False
+
+    maps_url = f"https://maps.google.com/?q={location['latitude']},{location['longitude']}"
+    await send_whatsapp_message(
+        phone_number_id,
+        to,
+        "AQUI ESTÁ NOSSA LOCALIZAÇÃO 👇",
+        access_token,
+    )
+    await send_whatsapp_message(
+        phone_number_id,
+        to,
+        f"MAPS\n{maps_url}",
+        access_token,
+    )
+    return True
 
 
 async def send_whatsapp_list(
@@ -2011,19 +2174,7 @@ async def send_initial_greeting(
 
         greeting_message += "O que você deseja?"
 
-        # Configure buttons based on workflow mode
-        if workflow_mode == 'info':
-            buttons = [
-                {"id": "greeting_sim", "title": "AGENDAR"},
-                {"id": "greeting_nao", "title": "TIRAR DÚVIDAS"},
-                {"id": "greeting_contato", "title": "FALAR COM ATENDENTE"},
-            ]
-        else:
-            buttons = [
-                {"id": "greeting_sim", "title": "AGENDAR"},
-                {"id": "greeting_nao", "title": "TIRAR DÚVIDAS"},
-                {"id": "greeting_contato", "title": "FALAR COM ATENDENTE"},
-            ]
+        buttons = _get_greeting_buttons()
 
         # Save state for greeting response handling
         if db:
@@ -2080,19 +2231,7 @@ async def send_followup_buttons_if_no_response(
         state["state"] = "awaiting_greeting_response"
         db.save_conversation_state(clinic_id, phone, state)
 
-        # Configure buttons based on workflow mode
-        if workflow_mode == 'info':
-            buttons = [
-                {"id": "greeting_sim", "title": "AGENDAR"},
-                {"id": "greeting_nao", "title": "TIRAR DÚVIDAS"},
-                {"id": "greeting_contato", "title": "FALAR COM ATENDENTE"},
-            ]
-        else:
-            buttons = [
-                {"id": "greeting_sim", "title": "AGENDAR"},
-                {"id": "greeting_nao", "title": "TIRAR DÚVIDAS"},
-                {"id": "greeting_contato", "title": "FALAR COM ATENDENTE"},
-            ]
+        buttons = _get_greeting_buttons()
 
         # Send gentle follow-up with buttons
         followup_message = "👋 Posso te ajudar com algo?"
@@ -2167,11 +2306,7 @@ async def handle_greeting_response_duvida(
         phone_number_id,
         phone,
         "COMO POSSO TE AJUDAR AGORA?",
-        [
-            {"id": "greeting_sim", "title": "AGENDAR"},
-            {"id": "greeting_nao", "title": "TIRAR DÚVIDAS"},
-            {"id": "greeting_contato", "title": "FALAR COM ATENDENTE"},
-        ],
+        _get_greeting_buttons(),
         access_token,
     )
 
