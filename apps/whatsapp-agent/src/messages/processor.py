@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Dict, Optional
 
@@ -296,6 +297,10 @@ async def process_incoming_message(
         "onde fica",
         "onde vocês ficam",
         "onde voces ficam",
+        "onde vocês estão",
+        "onde voces estao",
+        "onde estão",
+        "onde estao",
         "qual o endereço",
         "qual endereco",
         "qual é o endereço",
@@ -307,7 +312,19 @@ async def process_incoming_message(
         "como chegar",
         "mapa",
     ]
-    if any(kw in msg_lower for kw in address_keywords):
+    address_patterns = [
+        r"\bonde\b.*\bfic",
+        r"\bonde\b.*\best[aá]o\b",
+        r"\best[aá] localizado",
+        r"\blocaliza[çc][aã]o\b",
+        r"\bendere[cç]o\b",
+        r"\bcomo chegar\b",
+        r"\bmapa\b",
+    ]
+    has_address_intent = any(kw in msg_lower for kw in address_keywords) or any(
+        re.search(pattern, msg_lower) for pattern in address_patterns
+    )
+    if has_address_intent:
         sent = await deps.send_clinic_location_message(
             clinic_id,
             phone_number_id,

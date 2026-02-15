@@ -25,6 +25,9 @@ DOMAIN = os.getenv("DOMAIN", "https://gendei-whatsapp-agent-647402645066.us-cent
 GENDEI_FUNCTIONS_URL = os.getenv("GENDEI_FUNCTIONS_URL", "")
 GENDEI_SERVICE_SECRET = os.getenv("GENDEI_SERVICE_SECRET", "")
 
+# PIX payments toggle - set to "true" to enable PIX option alongside card
+PIX_ENABLED = os.getenv("PIX_ENABLED", "false").lower() == "true"
+
 # default Brazilian phone for PagSeguro API (avoids validation issues)
 DEFAULT_BRAZILIAN_PHONE = os.getenv("DEFAULT_BRAZILIAN_PHONE", "+5511999999999")
 
@@ -43,6 +46,19 @@ def is_pagseguro_configured() -> bool:
     check if PagSeguro is properly configured
     """
     return bool(PAGSEGURO_TOKEN)
+
+
+def get_payment_method_buttons() -> list[dict[str, str]]:
+    """Return available payment method buttons based on PIX_ENABLED flag."""
+    buttons = [{"id": "payment_method_card", "title": "Pagar com cartao"}]
+    if PIX_ENABLED and is_pagseguro_configured():
+        buttons.append({"id": "payment_method_pix", "title": "Pagar com PIX"})
+    return buttons
+
+
+def is_only_card() -> bool:
+    """True when card is the only available payment method (PIX disabled)."""
+    return not PIX_ENABLED or not is_pagseguro_configured()
 
 
 def generate_valid_cpf() -> str:

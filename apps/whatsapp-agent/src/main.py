@@ -2030,14 +2030,11 @@ async def send_initial_greeting(
                     phone,
                     (
                         "Seu link de pagamento anterior expirou. "
-                        "Como este horário ainda está disponível, reativei a reserva e vou enviar um novo PIX."
+                        "Como este horario ainda esta disponivel, reativei a reserva e vou enviar um novo link de pagamento."
                     ),
                     access_token,
                 )
-                sent = await _send_payment_link_for_appointment(
-                    clinic_id, phone, phone_number_id, access_token, recreated
-                )
-                if sent and db:
+                if db:
                     state = db.load_conversation_state(clinic_id, phone)
                     state["state"] = "awaiting_appointment_action"
                     state["clinic_id"] = clinic_id
@@ -2047,7 +2044,14 @@ async def send_initial_greeting(
                     state["current_appointment_professional"] = recreated.professional_name
                     state["current_appointment_professional_id"] = recreated.professional_id
                     db.save_conversation_state(clinic_id, phone, state)
-                    return
+                await send_payment_method_options(
+                    clinic_id=clinic_id,
+                    phone=phone,
+                    phone_number_id=phone_number_id,
+                    access_token=access_token,
+                    appointment=recreated,
+                )
+                return
         await send_whatsapp_message(
             phone_number_id,
             phone,
@@ -2253,9 +2257,7 @@ async def handle_greeting_response_duvida(
     phone_number_id: str,
     access_token: str
 ) -> None:
-    """Handle when user clicks 'Dúvida' - show clinic info with professionals and ask what they need."""
-    clinic = db.get_clinic(clinic_id) if db else None
-    vertical_slug = getattr(clinic, 'vertical', '') if clinic else ''
+    """Handle when user clicks 'TIRAR DÚVIDAS' and move to open AI Q&A mode."""
 
     # Update state to general chat
     if db:
@@ -2263,51 +2265,19 @@ async def handle_greeting_response_duvida(
         state["state"] = "general_chat"
         db.save_conversation_state(clinic_id, phone, state)
 
-    # Build comprehensive info message with clear sections.
-    info_parts = ["CLARO! VOU TE AJUDAR.\n"]
-
-    if clinic:
-        clinic_name = getattr(clinic, 'name', None) or "Clínica"
-        info_parts.append(f"AQUI ESTÃO ALGUMAS INFORMAÇÕES DA *{clinic_name}*:\n")
-
-        if hasattr(clinic, 'address') and clinic.address:
-            info_parts.append(f"*ENDEREÇO:* {clinic.address}")
-
-        if hasattr(clinic, 'opening_hours') and clinic.opening_hours:
-            info_parts.append(f"*HORÁRIO:* {clinic.opening_hours}")
-
-        if hasattr(clinic, 'phone') and clinic.phone:
-            info_parts.append(f"*TELEFONE:* {clinic.phone}")
-
-        # Add professionals/specialties
-        if db:
-            professionals = db.get_clinic_professionals(clinic_id)
-            if professionals:
-                info_parts.append("")
-                info_parts.append("*NOSSA EQUIPE:*")
-                for p in professionals[:5]:  # Max 5 professionals
-                    name = getattr(p, 'full_name', None) or p.name
-                    specialty_display = _get_professional_specialties_display(p, vertical_slug)
-                    if specialty_display:
-                        info_parts.append(f"• {name} - {specialty_display}")
-                    else:
-                        info_parts.append(f"• {name}")
-
-    info_parts.append("\nO que você gostaria de saber?")
-
     await send_whatsapp_message(
         phone_number_id, phone,
-        "\n".join(info_parts),
+        (
+            "CLARO! ESTOU PRONTO PARA TE AJUDAR.\n\n"
+            "VOCÊ PODE ME PERGUNTAR SOBRE:\n"
+            "• SERVIÇOS\n"
+            "• ESPECIALIDADES\n"
+            "• PROFISSIONAIS\n"
+            "• VALORES E PAGAMENTOS\n"
+            "• LOCALIZAÇÃO E HORÁRIOS\n\n"
+            "É SÓ ME ENVIAR SUA DÚVIDA QUE EU TE AJUDO."
+        ),
         access_token
-    )
-
-    # Offer quick actions using buttons whenever possible.
-    await send_whatsapp_buttons(
-        phone_number_id,
-        phone,
-        "COMO POSSO TE AJUDAR AGORA?",
-        _get_greeting_buttons(),
-        access_token,
     )
 
 
@@ -2639,6 +2609,9 @@ async def send_payment_method_options(
     access_token: str,
     appointment: Appointment,
 ) -> None:
+    from src.utils.payment import get_payment_method_buttons, is_only_card
+
+    state: Dict[str, Any] = {}
     if db:
         state = db.load_conversation_state(clinic_id, phone)
         state["state"] = "awaiting_payment_method"
@@ -2650,16 +2623,24 @@ async def send_payment_method_options(
         state["current_appointment_professional_id"] = appointment.professional_id
         db.save_conversation_state(clinic_id, phone, state)
 
-    await send_whatsapp_buttons(
-        phone_number_id,
-        phone,
-        "Escolha o método para pagar o sinal:",
-        [
-            {"id": "payment_method_card", "title": "Pagar com cartão"},
-            {"id": "payment_method_pix", "title": "Pagar com PIX"},
-        ],
-        access_token,
-    )
+    if is_only_card():
+        # Skip choice — go directly to card payment
+        await handle_payment_method_selection(
+            clinic_id=clinic_id,
+            phone=phone,
+            payment_method="card",
+            phone_number_id=phone_number_id,
+            access_token=access_token,
+            state=state,
+        )
+    else:
+        await send_whatsapp_buttons(
+            phone_number_id,
+            phone,
+            "Escolha o método para pagar o sinal:",
+            get_payment_method_buttons(),
+            access_token,
+        )
 
 
 async def handle_payment_method_selection(

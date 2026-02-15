@@ -239,7 +239,9 @@ gcloud run deploy "${SERVICE_NAME}" \
     --set-env-vars="DEFAULT_BRAZILIAN_PHONE=${DEFAULT_BRAZILIAN_PHONE:-}" \
     --set-env-vars="CLINICA_MEDICA_FORMULARIO_FLOW_ID=${CLINICA_MEDICA_FORMULARIO_FLOW_ID:-}" \
     --set-env-vars="CLINICA_MEDICA_AGENDAMENTO_FLOW_ID=${CLINICA_MEDICA_AGENDAMENTO_FLOW_ID:-}" \
-    --set-env-vars="FLOWS_PRIVATE_KEY=${FLOWS_PRIVATE_KEY:-}"
+    --set-env-vars="FLOWS_PRIVATE_KEY=${FLOWS_PRIVATE_KEY:-}" \
+    --set-env-vars="GENDEI_FUNCTIONS_URL=${GENDEI_FUNCTIONS_URL:-}" \
+    --set-env-vars="GENDEI_SERVICE_SECRET=${GENDEI_SERVICE_SECRET:-}"
 
 echo "Deployment complete!"
 echo "Use the URL below as your WhatsApp webhook:"

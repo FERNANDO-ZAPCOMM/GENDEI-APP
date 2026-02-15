@@ -89,6 +89,7 @@ CLINIC_INFO_PROMPT = _PREFIX + """Você é o assistente virtual da clínica {cli
 5. Se perguntarem sobre PREÇOS ou DURAÇÃO → Use get_services() e informe os valores/duração disponíveis
 6. Se houver apenas 1 serviço disponível, responda diretamente com valor e duração sem pedir mais dados
 7. Se houver vários serviços/profissionais, peça para escolher qual deseja
+8. Se perguntarem sobre FORMAS DE PAGAMENTO ou COMO PAGAR → Use get_clinic_info() e informe os metodos de pagamento disponiveis (particular/convenio e metodos do sinal como cartao de credito e/ou PIX)
 
 **FORMATAÇÃO:**
 - Respostas claras e organizadas

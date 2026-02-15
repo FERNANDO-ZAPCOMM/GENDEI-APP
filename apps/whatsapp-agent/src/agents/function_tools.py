@@ -174,6 +174,16 @@ def _get_clinic_info_impl(runtime: Optional['Runtime'] = None) -> str:
             if accepts:
                 lines.append(f"\n💳 *Formas de pagamento:* {', '.join(accepts)}")
 
+            # Show available payment methods for deposits
+            from src.utils.payment import is_stripe_configured, PIX_ENABLED, is_pagseguro_configured
+            methods = []
+            if is_stripe_configured():
+                methods.append("Cartao de credito")
+            if PIX_ENABLED and is_pagseguro_configured():
+                methods.append("PIX")
+            if methods:
+                lines.append(f"\n💳 *Metodos de pagamento do sinal:* {', '.join(methods)}")
+
         return "\n".join(lines)
 
     except Exception as e:
@@ -477,7 +487,7 @@ async def _create_appointment_impl(
             if payment_type == "particular" and requires_deposit:
                 signal_cents = int(total_cents * signal_percentage / 100)
                 if signal_cents >= 100:
-                    from src.utils.payment import format_payment_amount
+                    from src.utils.payment import format_payment_amount, get_payment_method_buttons, is_only_card
 
                     confirmation += (
                         f"\n*Sinal necessario:* {format_payment_amount(signal_cents)}\n"
@@ -498,15 +508,23 @@ async def _create_appointment_impl(
                     except Exception as state_err:
                         logger.warning(f"Failed to save payment method state: {state_err}")
 
-                    # Send payment method buttons
-                    await send_whatsapp_buttons(
-                        phone=phone,
-                        body_text="Escolha o metodo para pagar o sinal:",
-                        buttons=[
-                            {"id": "payment_method_card", "title": "Pagar com cartao"},
-                            {"id": "payment_method_pix", "title": "Pagar com PIX"},
-                        ],
-                    )
+                    if is_only_card():
+                        # Skip choice — go directly to card payment
+                        from src.main import handle_payment_method_selection as _handle_card
+                        await _handle_card(
+                            clinic_id=runtime.clinic_id,
+                            phone=phone,
+                            payment_method="card",
+                            phone_number_id=runtime.phone_number_id,
+                            access_token=runtime.access_token,
+                            state=conv_state,
+                        )
+                    else:
+                        await send_whatsapp_buttons(
+                            phone=phone,
+                            body_text="Escolha o metodo para pagar o sinal:",
+                            buttons=get_payment_method_buttons(),
+                        )
 
             if vc.features.show_arrive_early_tip:
                 confirmation += f"\n\nVocê receberá um lembrete antes da {term.appointment_term}."

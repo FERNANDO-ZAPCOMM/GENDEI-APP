@@ -281,17 +281,6 @@ async def handle_flow_completion(
                 )
                 await deps.send_whatsapp_message(phone_number_id, phone, confirmation_msg, access_token)
 
-                await deps.send_whatsapp_buttons(
-                    phone_number_id,
-                    phone,
-                    "Escolha o método de pagamento do sinal:",
-                    [
-                        {"id": "payment_method_card", "title": "Pagar com cartão"},
-                        {"id": "payment_method_pix", "title": "Pagar com PIX"},
-                    ],
-                    access_token,
-                )
-
                 if deps.db:
                     current_state = deps.db.load_conversation_state(clinic_id, phone)
                     current_state["state"] = "awaiting_payment_method"
@@ -302,6 +291,26 @@ async def handle_flow_completion(
                     current_state["current_appointment_professional"] = appointment.professional_name
                     current_state["current_appointment_professional_id"] = appointment.professional_id
                     deps.db.save_conversation_state(clinic_id, phone, current_state)
+
+                from src.utils.payment import get_payment_method_buttons, is_only_card
+                if is_only_card():
+                    from src.main import handle_payment_method_selection
+                    await handle_payment_method_selection(
+                        clinic_id=clinic_id,
+                        phone=phone,
+                        payment_method="card",
+                        phone_number_id=phone_number_id,
+                        access_token=access_token,
+                        state=current_state if deps.db else {},
+                    )
+                else:
+                    await deps.send_whatsapp_buttons(
+                        phone_number_id,
+                        phone,
+                        "Escolha o método de pagamento do sinal:",
+                        get_payment_method_buttons(),
+                        access_token,
+                    )
             else:
                 confirmation_msg = (
                     f"*Agendamento confirmado*\n\n"
