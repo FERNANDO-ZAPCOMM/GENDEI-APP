@@ -2486,37 +2486,62 @@ async def _send_payment_link_for_appointment(
         PAGSEGURO_MIN_PIX_AMOUNT_CENTS,
         create_pagseguro_checkout,
         create_pagseguro_pix_order,
+        create_stripe_checkout_session,
         is_pagseguro_configured,
+        is_stripe_configured,
         send_card_payment_to_customer,
         send_pix_payment_to_customer,
+        send_stripe_checkout_to_customer,
     )
 
     if appointment.signal_paid or appointment.signal_cents <= 0:
-        return False
-
-    if appointment.signal_cents < PAGSEGURO_MIN_PIX_AMOUNT_CENTS or not is_pagseguro_configured():
-        await send_whatsapp_message(
-            phone_number_id,
-            phone,
-            "No momento, não foi possível gerar o pagamento automático. "
-            "Nossa equipe pode te ajudar com o pagamento do sinal.",
-            access_token,
-        )
         return False
 
     payment_method = (payment_method or "card").lower()
     if payment_method not in {"card", "pix"}:
         payment_method = "card"
 
+    # For PIX, check PagSeguro config
+    if payment_method == "pix":
+        if appointment.signal_cents < PAGSEGURO_MIN_PIX_AMOUNT_CENTS or not is_pagseguro_configured():
+            await send_whatsapp_message(
+                phone_number_id,
+                phone,
+                "No momento, nao foi possivel gerar o pagamento automatico. "
+                "Nossa equipe pode te ajudar com o pagamento do sinal.",
+                access_token,
+            )
+            return False
+
+    payment_info = None
+    used_stripe = False
+
     if payment_method == "card":
-        payment_info = await create_pagseguro_checkout(
-            order_id=appointment.id,
-            amount=appointment.signal_cents,
-            customer_name=appointment.patient_name or "Paciente",
-            customer_phone=phone,
-            product_name=f"Sinal - Consulta {appointment.professional_name}",
-            payment_methods=["CREDIT_CARD"],
-        )
+        # Try Stripe first for card payments
+        if is_stripe_configured():
+            payment_info = await create_stripe_checkout_session(
+                clinic_id=clinic_id,
+                order_id=appointment.id,
+                appointment_id=appointment.id,
+                amount_cents=appointment.signal_cents,
+                patient_name=appointment.patient_name or "Paciente",
+                patient_phone=phone,
+                description=f"Sinal - Consulta {appointment.professional_name}",
+                total_cents=getattr(appointment, 'total_cents', 0) or 0,
+            )
+            if payment_info:
+                used_stripe = True
+
+        # Fallback to PagSeguro checkout if Stripe fails
+        if not payment_info and is_pagseguro_configured():
+            payment_info = await create_pagseguro_checkout(
+                order_id=appointment.id,
+                amount=appointment.signal_cents,
+                customer_name=appointment.patient_name or "Paciente",
+                customer_phone=phone,
+                product_name=f"Sinal - Consulta {appointment.professional_name}",
+                payment_methods=["CREDIT_CARD"],
+            )
     else:
         payment_info = await create_pagseguro_pix_order(
             order_id=appointment.id,
@@ -2527,6 +2552,13 @@ async def _send_payment_link_for_appointment(
         )
 
     if not payment_info:
+        await send_whatsapp_message(
+            phone_number_id,
+            phone,
+            "No momento, nao foi possivel gerar o pagamento automatico. "
+            "Nossa equipe pode te ajudar com o pagamento do sinal.",
+            access_token,
+        )
         return False
 
     if db:
@@ -2535,29 +2567,34 @@ async def _send_payment_link_for_appointment(
             {"signalPaymentId": payment_info.get("payment_id")},
             clinic_id=clinic_id,
         )
-        db.create_order(
-            appointment.id,
-            {
-                "id": appointment.id,
-                "clinicId": clinic_id,
-                "appointmentId": appointment.id,
-                "patientPhone": phone,
-                "patientName": appointment.patient_name or "",
-                "paymentId": payment_info.get("payment_id"),
-                "paymentStatus": "pending",
-                "status": "pending",
-                "amountCents": appointment.signal_cents,
-                "description": "Sinal de consulta",
-                "paymentMethod": payment_method,
-                "paymentSource": payment_info.get("provider") or "pagseguro",
-                "transferMode": "automatic" if payment_method == "card" else "manual",
-                "checkoutUrl": payment_info.get("payment_link"),
-                "pixCopiaCola": payment_info.get("qr_code_text"),
-                "qrCodeUrl": payment_info.get("qr_code"),
-                "expiresAt": payment_info.get("expires_at"),
-            },
-            clinic_id=clinic_id,
-        )
+
+        order_data = {
+            "id": appointment.id,
+            "clinicId": clinic_id,
+            "appointmentId": appointment.id,
+            "patientPhone": phone,
+            "patientName": appointment.patient_name or "",
+            "paymentId": payment_info.get("payment_id"),
+            "paymentStatus": "pending",
+            "status": "pending",
+            "amountCents": appointment.signal_cents,
+            "description": "Sinal de consulta",
+            "paymentMethod": payment_method,
+            "paymentSource": payment_info.get("provider") or "pagseguro",
+            "transferMode": "automatic" if payment_method == "card" else "manual",
+            "checkoutUrl": payment_info.get("payment_link"),
+            "expiresAt": payment_info.get("expires_at"),
+        }
+
+        if used_stripe:
+            order_data["stripeSessionId"] = payment_info.get("session_id")
+            order_data["stripePaymentIntentId"] = payment_info.get("payment_intent_id")
+            order_data["heldForConnect"] = payment_info.get("charge_type") == "platform_hold"
+        else:
+            order_data["pixCopiaCola"] = payment_info.get("qr_code_text")
+            order_data["qrCodeUrl"] = payment_info.get("qr_code")
+
+        db.create_order(appointment.id, order_data, clinic_id=clinic_id)
 
     clinic_obj = db.get_clinic(clinic_id) if db else None
     runtime_token = set_runtime(
@@ -2571,17 +2608,24 @@ async def _send_payment_link_for_appointment(
     )
     try:
         if payment_method == "card":
+            if used_stripe:
+                return await send_stripe_checkout_to_customer(
+                    phone=phone,
+                    payment_info=payment_info,
+                    amount=appointment.signal_cents,
+                    product_name="Confirmacao da sua consulta",
+                )
             return await send_card_payment_to_customer(
                 phone=phone,
                 payment_info=payment_info,
                 amount=appointment.signal_cents,
-                product_name="Confirmação da sua consulta",
+                product_name="Confirmacao da sua consulta",
             )
         return await send_pix_payment_to_customer(
             phone=phone,
             payment_info=payment_info,
             amount=appointment.signal_cents,
-            product_name="a confirmação da sua consulta",
+            product_name="a confirmacao da sua consulta",
             order_id=appointment.id,
         )
     finally:
@@ -3328,7 +3372,80 @@ async def pagseguro_webhook(request: Request, background_tasks: BackgroundTasks)
         return {"status": "error", "message": "Invalid JSON"}
 
     except Exception as e:
-        logger.error(f"❌ Error processing PagSeguro webhook: {e}")
+        logger.error(f"Error processing PagSeguro webhook: {e}")
+        return {"status": "error", "message": str(e)}
+
+
+@app.post("/stripe-payment-callback")
+async def stripe_payment_callback(request: Request):
+    """
+    Callback from Firebase Functions Stripe webhook.
+    Sends WhatsApp confirmation message to patient after successful Stripe payment.
+    """
+    service_secret = request.headers.get("X-Gendei-Service-Secret", "")
+    expected_secret = os.getenv("GENDEI_SERVICE_SECRET", "")
+    if not expected_secret or service_secret != expected_secret:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    data = await request.json()
+    clinic_id = data.get("clinicId")
+    appointment_id = data.get("appointmentId")
+    patient_phone = data.get("patientPhone")
+    payment_status = data.get("paymentStatus")
+
+    if payment_status != "completed" or not patient_phone or not clinic_id:
+        return {"status": "ignored"}
+
+    try:
+        clinic = db.get_clinic(clinic_id) if db else None
+        if not clinic or not clinic.whatsapp_phone_number_id:
+            logger.warning(f"Stripe callback: clinic {clinic_id} not found or no WhatsApp configured")
+            return {"status": "error", "message": "Clinic not configured"}
+
+        access_token = db.get_access_token(clinic_id) if db else None
+        if not access_token:
+            logger.warning(f"Stripe callback: no access token for clinic {clinic_id}")
+            return {"status": "error", "message": "No access token"}
+
+        appointment = (
+            db.get_appointment(appointment_id, clinic_id=clinic_id)
+            if db and appointment_id
+            else None
+        )
+
+        if appointment:
+            dt = datetime.strptime(appointment.date, "%Y-%m-%d")
+            formatted_date = dt.strftime("%d/%m/%Y")
+            message = (
+                "*Pagamento confirmado*\n\n"
+                "Seu pagamento com cartao foi aprovado.\n\n"
+                f"Data: *{formatted_date}*\n"
+                f"Hora: *{appointment.time}*\n"
+                f"Profissional: *{appointment.professional_name}*\n\n"
+                "Sua consulta esta *confirmada*.\n"
+                "Chegue com 15 minutos de antecedencia."
+            )
+        else:
+            message = (
+                "*Pagamento confirmado*\n\n"
+                "Seu pagamento com cartao foi aprovado.\n\n"
+                "Sua consulta esta *confirmada*.\n"
+                "Chegue com 15 minutos de antecedencia."
+            )
+
+        phone_clean = patient_phone.replace("+", "")
+        await send_whatsapp_message(
+            clinic.whatsapp_phone_number_id,
+            phone_clean,
+            message,
+            access_token,
+        )
+
+        logger.info(f"Stripe payment confirmation sent to {patient_phone} for clinic {clinic_id}")
+        return {"status": "ok"}
+
+    except Exception as e:
+        logger.error(f"Error in stripe payment callback: {e}", exc_info=True)
         return {"status": "error", "message": str(e)}
 
 

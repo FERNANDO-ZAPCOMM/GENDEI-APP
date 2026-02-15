@@ -27,7 +27,7 @@ import metaRouter from './routes/meta';
 import whatsappRouter from './routes/whatsapp';
 import remindersRouter from './routes/reminders';
 import teamRouter from './routes/team';
-import paymentsRouter from './routes/payments';
+import paymentsRouter, { handleStripeWebhook } from './routes/payments';
 
 // Import services
 import { sendScheduledReminders } from './services/reminders';
@@ -41,6 +41,10 @@ const app = express();
 
 // Middleware
 app.use(cors({ origin: true }));
+
+// Stripe webhook needs raw body for signature verification - must be before express.json()
+app.post('/payments/stripe-webhook', express.raw({ type: 'application/json' }), handleStripeWebhook);
+
 app.use(express.json());
 
 // Health check

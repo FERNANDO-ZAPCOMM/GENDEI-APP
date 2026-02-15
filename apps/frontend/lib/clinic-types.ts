@@ -219,7 +219,29 @@ export interface PaymentTransaction {
   paymentSource: string;
   transferMode: 'automatic' | 'manual' | string;
   paymentId?: string;
+  stripeSessionId?: string;
+  stripePaymentIntentId?: string;
+  applicationFeeAmount?: number;
+  heldForConnect?: boolean;
+  heldTransferredAt?: string;
   createdAt?: string | Date | Record<string, unknown>;
   updatedAt?: string | Date | Record<string, unknown>;
   paidAt?: string | Date | Record<string, unknown>;
+}
+
+export interface HeldPayment {
+  id: string;
+  paymentIntentId: string;
+  chargeId: string;
+  orderId: string;
+  appointmentId: string;
+  amountCents: number;
+  applicationFeeCents: number;
+  netAmountCents: number;
+  patientPhone: string;
+  patientName: string;
+  status: 'held' | 'transferred' | 'refunded';
+  createdAt: string;
+  transferredAt?: string;
+  stripeTransferId?: string;
 }

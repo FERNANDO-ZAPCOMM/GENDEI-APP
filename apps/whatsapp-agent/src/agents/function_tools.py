@@ -473,55 +473,40 @@ async def _create_appointment_impl(
                 f"👤 *{term.client_term.capitalize()}:* {patient_name}\n"
             )
 
-            # Send payment link if required
+            # Send payment method options if deposit required
             if payment_type == "particular" and requires_deposit:
                 signal_cents = int(total_cents * signal_percentage / 100)
                 if signal_cents >= 100:
-                    from src.utils.payment import (
-                        create_pagseguro_pix_order,
-                        send_pix_payment_to_customer,
-                        format_payment_amount,
-                        is_pagseguro_configured,
-                        PAGSEGURO_MIN_PIX_AMOUNT_CENTS
+                    from src.utils.payment import format_payment_amount
+
+                    confirmation += (
+                        f"\n*Sinal necessario:* {format_payment_amount(signal_cents)}\n"
+                        f"Escolha abaixo como deseja pagar o sinal."
                     )
 
-                    if signal_cents >= PAGSEGURO_MIN_PIX_AMOUNT_CENTS and is_pagseguro_configured():
-                        payment_info = await create_pagseguro_pix_order(
-                            order_id=appointment.id,
-                            amount=signal_cents,
-                            customer_name=patient_name,
-                            customer_phone=phone,
-                            product_name=f"Sinal - {apt_term_cap} {prof_name}"
-                        )
-                        if payment_info:
-                            runtime.db.update_appointment(appointment.id, {
-                                "signalPaymentId": payment_info.get("payment_id")
-                            })
-                            await send_pix_payment_to_customer(
-                                phone=phone,
-                                payment_info=payment_info,
-                                amount=signal_cents,
-                                product_name=f"a confirmação da sua {term.appointment_term}",
-                                order_id=appointment.id
-                            )
-                            confirmation += (
-                                f"\n💳 *Sinal necessário:* {format_payment_amount(signal_cents)}\n"
-                                f"Enviei o PIX para confirmar sua {term.appointment_term}. 👇"
-                            )
-                        else:
-                            confirmation += (
-                                f"\n💳 *Sinal necessário:* {format_payment_amount(signal_cents)}\n"
-                                "Não consegui gerar o PIX agora. Nossa equipe entrará em contato."
-                            )
-                    else:
-                        pix_key = payment_settings.get('pixKey') or getattr(clinic, 'pix_key', None)
-                        if pix_key:
-                            from src.utils.payment import format_payment_amount
-                            confirmation += (
-                                f"\n💳 *Sinal necessário:* {format_payment_amount(signal_cents)}\n"
-                                f"Chave PIX: `{pix_key}`\n"
-                                "Envie o comprovante após o pagamento."
-                            )
+                    # Save conversation state for payment method selection
+                    try:
+                        conv_state = runtime.db.load_conversation_state(runtime.clinic_id, phone)
+                        conv_state["state"] = "awaiting_payment_method"
+                        conv_state["clinic_id"] = runtime.clinic_id
+                        conv_state["current_appointment_id"] = appointment.id
+                        conv_state["current_appointment_date"] = date
+                        conv_state["current_appointment_time"] = time
+                        conv_state["current_appointment_professional"] = prof_name
+                        conv_state["current_appointment_professional_id"] = professional_id
+                        runtime.db.save_conversation_state(runtime.clinic_id, phone, conv_state)
+                    except Exception as state_err:
+                        logger.warning(f"Failed to save payment method state: {state_err}")
+
+                    # Send payment method buttons
+                    await send_whatsapp_buttons(
+                        phone=phone,
+                        body_text="Escolha o metodo para pagar o sinal:",
+                        buttons=[
+                            {"id": "payment_method_card", "title": "Pagar com cartao"},
+                            {"id": "payment_method_pix", "title": "Pagar com PIX"},
+                        ],
+                    )
 
             if vc.features.show_arrive_early_tip:
                 confirmation += f"\n\nVocê receberá um lembrete antes da {term.appointment_term}."

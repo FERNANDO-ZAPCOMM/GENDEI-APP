@@ -19,6 +19,7 @@ import { toast } from 'sonner';
 import { useClinic } from '@/hooks/use-clinic';
 import { usePayments } from '@/hooks/use-payments';
 import { useStripeConnect } from '@/hooks/use-stripe-connect';
+import { useHeldPayments } from '@/hooks/use-held-payments';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -120,12 +121,18 @@ export default function PaymentsPage() {
     isStarting,
     isRefreshing,
   } = useStripeConnect(currentClinic?.id || '');
+  const {
+    heldPayments,
+    isLoading: heldLoading,
+    transferHeld,
+    isTransferring,
+  } = useHeldPayments(currentClinic?.id || '');
 
   const [settings, setSettings] = useState<PaymentSettings>({
     acceptsConvenio: false,
     convenioList: [],
     acceptsParticular: true,
-    requiresDeposit: true, // Always enabled - business model charges 6% from signal
+    requiresDeposit: true, // Always enabled - Gendei retains 5% of total consultation value
     depositPercentage: 30,
     pixKey: '',
     pixKeyType: 'cpf',
@@ -527,6 +534,88 @@ export default function PaymentsPage() {
           </div>
         </ExpandableCard>
       </div>
+
+      {/* Held Payments Card - only show when there are held payments */}
+      {heldPayments.length > 0 && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4" />
+                  Pagamentos retidos ({heldPayments.filter(p => p.status === 'held').length})
+                </CardTitle>
+                <CardDescription>
+                  Pagamentos cobrados na conta Gendei aguardando transferencia para a clinica.
+                </CardDescription>
+              </div>
+              {stripeReadyForSplit && heldPayments.some(p => p.status === 'held') && (
+                <Button
+                  onClick={async () => {
+                    try {
+                      const result = await transferHeld();
+                      if (result.transferred > 0) {
+                        toast.success(`${result.transferred} pagamento(s) transferido(s) com sucesso!`);
+                      }
+                      if (result.failed > 0) {
+                        toast.error(`${result.failed} pagamento(s) falharam na transferencia.`);
+                      }
+                    } catch (error: any) {
+                      toast.error(error.message || 'Erro ao transferir pagamentos');
+                    }
+                  }}
+                  disabled={isTransferring}
+                  size="sm"
+                >
+                  {isTransferring ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Transferindo...
+                    </>
+                  ) : (
+                    'Transferir para clinica'
+                  )}
+                </Button>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent>
+            {!stripeReadyForSplit && (
+              <p className="text-sm text-amber-600 mb-4">
+                Complete o onboarding do Stripe Connect acima para transferir estes pagamentos para a clinica.
+              </p>
+            )}
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Paciente</TableHead>
+                  <TableHead>Valor total</TableHead>
+                  <TableHead>Taxa Gendei (5%)</TableHead>
+                  <TableHead>Valor clinica</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Data</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {heldPayments.map((held) => (
+                  <TableRow key={held.id}>
+                    <TableCell>{held.patientName || held.patientPhone || '-'}</TableCell>
+                    <TableCell>{formatMoney(held.amountCents)}</TableCell>
+                    <TableCell>{formatMoney(held.applicationFeeCents)}</TableCell>
+                    <TableCell className="font-medium">{formatMoney(held.netAmountCents)}</TableCell>
+                    <TableCell>
+                      <Badge variant={held.status === 'transferred' ? 'default' : 'secondary'}>
+                        {held.status === 'held' ? 'Retido' : held.status === 'transferred' ? 'Transferido' : 'Reembolsado'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>{formatDateTime(held.createdAt)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>

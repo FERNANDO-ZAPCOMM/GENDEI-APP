@@ -1,6 +1,6 @@
 """
-Payment Utilities - PagSeguro PIX Integration
-handles PIX payment creation and webhook processing using Orders API
+Payment Utilities - PagSeguro PIX + Stripe Card Integration
+handles PIX payment creation (PagSeguro), card payments (Stripe), and webhook processing
 """
 
 import os
@@ -20,6 +20,10 @@ PAGSEGURO_EMAIL = os.getenv("PAGSEGURO_EMAIL")
 PAGSEGURO_ENVIRONMENT = os.getenv("PAGSEGURO_ENVIRONMENT", "production")
 PAGSEGURO_WEBHOOK_SECRET = os.getenv("PAGSEGURO_WEBHOOK_SECRET")
 DOMAIN = os.getenv("DOMAIN", "https://gendei-whatsapp-agent-647402645066.us-central1.run.app")
+
+# Stripe / Gendei Functions Configuration
+GENDEI_FUNCTIONS_URL = os.getenv("GENDEI_FUNCTIONS_URL", "")
+GENDEI_SERVICE_SECRET = os.getenv("GENDEI_SERVICE_SECRET", "")
 
 # default Brazilian phone for PagSeguro API (avoids validation issues)
 DEFAULT_BRAZILIAN_PHONE = os.getenv("DEFAULT_BRAZILIAN_PHONE", "+5511999999999")
@@ -869,3 +873,124 @@ def get_pagseguro_config_status() -> dict:
         "api_url": PAGSEGURO_API_URL.get(PAGSEGURO_ENVIRONMENT),
         "default_phone": DEFAULT_BRAZILIAN_PHONE
     }
+
+
+# ============================================
+# Stripe Card Payment (via Firebase Functions)
+# ============================================
+
+def is_stripe_configured() -> bool:
+    """Check if Stripe integration is configured (functions URL + service secret)."""
+    return bool(GENDEI_FUNCTIONS_URL and GENDEI_SERVICE_SECRET)
+
+
+async def create_stripe_checkout_session(
+    clinic_id: str,
+    order_id: str,
+    appointment_id: str,
+    amount_cents: int,
+    patient_name: str,
+    patient_phone: str,
+    description: str = "Sinal de Consulta",
+    total_cents: int = 0,
+) -> Optional[Dict[str, Any]]:
+    """
+    Create a Stripe Checkout Session by calling Firebase Functions.
+    The Functions endpoint handles destination charges vs platform holds.
+
+    Args:
+        amount_cents: The deposit/signal amount the patient pays now.
+        total_cents: The full consultation price (Gendei's 5% commission is based on this).
+
+    Returns dict with payment_link, session_id, payment_intent_id, charge_type, provider.
+    """
+    if not is_stripe_configured():
+        logger.warning("Stripe not configured (missing GENDEI_FUNCTIONS_URL or GENDEI_SERVICE_SECRET)")
+        return None
+
+    if amount_cents < 100:
+        logger.error(f"Amount {amount_cents} cents is below minimum (100 cents / R$ 1.00)")
+        return None
+
+    try:
+        import httpx
+
+        url = f"{GENDEI_FUNCTIONS_URL}/payments/stripe-checkout/{clinic_id}/create-session"
+
+        async with httpx.AsyncClient(timeout=30) as client:
+            response = await client.post(
+                url,
+                json={
+                    "orderId": order_id,
+                    "appointmentId": appointment_id,
+                    "amountCents": amount_cents,
+                    "totalCents": total_cents if total_cents > 0 else amount_cents,
+                    "patientName": patient_name,
+                    "patientPhone": patient_phone,
+                    "description": description,
+                },
+                headers={
+                    "Content-Type": "application/json",
+                    "X-Gendei-Service-Secret": GENDEI_SERVICE_SECRET,
+                },
+            )
+
+            if response.status_code != 200:
+                logger.error(
+                    f"Stripe checkout session creation failed: {response.status_code} - {response.text}"
+                )
+                return None
+
+            data = response.json()
+            logger.info(
+                f"Stripe checkout session created: session={data.get('sessionId')} "
+                f"type={data.get('chargeType')} for clinic={clinic_id}"
+            )
+            return {
+                "payment_link": data["checkoutUrl"],
+                "payment_id": data["sessionId"],
+                "session_id": data["sessionId"],
+                "payment_intent_id": data.get("paymentIntentId"),
+                "charge_type": data.get("chargeType", "destination"),
+                "provider": "stripe",
+            }
+    except Exception as e:
+        logger.error(f"Error creating Stripe checkout session: {e}", exc_info=True)
+        return None
+
+
+async def send_stripe_checkout_to_customer(
+    phone: str,
+    payment_info: Dict[str, Any],
+    amount: int,
+    product_name: str = "sua consulta",
+) -> bool:
+    """Send Stripe Checkout link to customer via WhatsApp CTA button."""
+    try:
+        from src.utils.messaging import send_payment_button
+
+        payment_url = payment_info.get("payment_link")
+        if not payment_url:
+            logger.error("No Stripe checkout URL found in payment info")
+            return False
+
+        result = await send_payment_button(
+            phone=phone,
+            payment_url=payment_url,
+            amount_cents=amount,
+            product_name=product_name,
+            button_text="Pagar com cartao",
+            header_text="Pagamento com cartao",
+            body_suffix="Clique no botao abaixo para pagar com cartao de credito ou debito.",
+            footer_text="Pagamento seguro via Stripe",
+            expires_minutes=30,
+        )
+        if "successfully" in result.lower() or "\u2705" in result:
+            logger.info(f"Stripe checkout sent to {phone}")
+            return True
+
+        logger.warning(f"Stripe checkout send returned: {result}")
+        return False
+    except Exception as e:
+        logger.error(f"Error sending Stripe checkout: {e}")
+        return False
