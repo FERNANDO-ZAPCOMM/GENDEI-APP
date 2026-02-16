@@ -5,7 +5,6 @@ Clinic appointment scheduling via WhatsApp
 
 import os
 import logging
-import json
 import asyncio
 import re
 from typing import Any, Dict, Optional, List
@@ -17,8 +16,7 @@ from contextvars import ContextVar
 _current_clinic_id: ContextVar[Optional[str]] = ContextVar('current_clinic_id', default=None)
 _current_phone_number_id: ContextVar[Optional[str]] = ContextVar('current_phone_number_id', default=None)
 
-from fastapi import FastAPI, Request, BackgroundTasks, HTTPException  # type: ignore
-from fastapi.responses import Response, HTMLResponse  # type: ignore
+from fastapi import FastAPI, BackgroundTasks  # type: ignore
 
 # Configure logging
 logging.basicConfig(
@@ -87,6 +85,12 @@ try:
         MessagePipelineDeps,
         process_buffered_messages as orchestrated_process_buffered_messages,
         handle_voice_message as orchestrated_handle_voice_message,
+    )
+    from src.routes import (
+        register_webhook_routes,
+        register_internal_api_routes,
+        register_payment_routes,
+        register_flow_routes,
     )
     from src.utils.http_client import http_post, close_shared_http_client
     from src.utils.helpers import format_outgoing_text, format_button_title
@@ -3079,53 +3083,6 @@ async def process_message(
     )
 
 
-# ============================================
-# WEBHOOK ENDPOINTS
-# ============================================
-
-@app.get("/")
-async def root():
-    """Root endpoint."""
-    return {"status": "ok", "service": "Gendei WhatsApp Agent"}
-
-
-@app.get("/health")
-async def health():
-    """Health check endpoint."""
-    return {
-        "status": "healthy",
-        "service": "Gendei WhatsApp Agent",
-        "timestamp": datetime.now().isoformat()
-    }
-
-
-@app.get("/webhook")
-async def verify_webhook(request: Request):
-    """Verify webhook for WhatsApp API."""
-    mode = request.query_params.get("hub.mode")
-    token = request.query_params.get("hub.verify_token")
-    challenge = request.query_params.get("hub.challenge")
-
-    logger.info(f"Webhook verification: mode={mode}, token={token}")
-
-    if mode == "subscribe" and token == VERIFY_TOKEN:
-        logger.info("✅ Webhook verified successfully")
-        return Response(content=challenge, media_type="text/plain")
-
-    logger.warning("❌ Webhook verification failed")
-    raise HTTPException(status_code=403, detail="Verification failed")
-
-
-# Alias routes so Meta webhook configured at /whatsapp keeps working
-@app.get("/whatsapp")
-async def verify_webhook_alias(request: Request):
-    return await verify_webhook(request)
-
-@app.post("/whatsapp")
-async def receive_webhook_alias(request: Request, background_tasks: BackgroundTasks):
-    return await receive_webhook(request, background_tasks)
-
-
 async def process_buffered_messages(
     clinic_id: str,
     phone: str,
@@ -3165,592 +3122,62 @@ async def handle_voice_message(
     )
 
 
-@app.post("/webhook")
-async def receive_webhook(request: Request, background_tasks: BackgroundTasks):
-    """Receive WhatsApp webhook events."""
-    try:
-        raw_body = await request.body()
-        require_meta_webhook_signature(request, raw_body)
-        body = json.loads(raw_body.decode("utf-8"))
-        return await orchestrated_process_webhook_body(
-            _get_webhook_processor_deps(),
-            body,
-            background_tasks,
-        )
-
-    except HTTPException:
-        raise
-    except json.JSONDecodeError as e:
-        logger.error(f"❌ Invalid webhook JSON: {e}")
-        return {"status": "error", "message": "invalid_json"}
-    except Exception as e:
-        logger.error(f"❌ Error processing webhook: {e}")
-        return {"status": "error", "message": str(e)}
-
-
 # ============================================
-# API ENDPOINTS (called by Cloud Functions)
+# ROUTE REGISTRATION
 # ============================================
 
-@app.post("/api/send-reminder")
-async def send_reminder(request: Request):
-    """Send appointment reminder (called by Cloud Scheduler via Functions)."""
-    try:
-        require_service_secret(request)
-        body = await request.json()
-
-        clinic_id = body.get("clinicId")
-        phone_number_id = body.get("phoneNumberId")
-        access_token = body.get("accessToken")
-        patient_phone = body.get("patientPhone")
-        message = body.get("message")
-        reminder_type = body.get("reminderType")  # "24h" or "2h"
-        appointment_id = body.get("appointmentId")
-
-        if not all([clinic_id, phone_number_id, access_token, patient_phone, message]):
-            raise HTTPException(status_code=400, detail="Missing required fields")
-
-        patient_phone = ensure_phone_has_plus(patient_phone)
-
-        # For 24h reminder, send with confirmation buttons
-        if reminder_type == "24h":
-            buttons = [
-                {"id": "confirm_yes", "title": "Confirmar"},
-                {"id": "confirm_reschedule", "title": "Reagendar"},
-                {"id": "confirm_cancel", "title": "Cancelar"},
-            ]
-            success = await send_whatsapp_buttons(
-                phone_number_id, patient_phone, message, buttons, access_token
-            )
-        else:
-            # 2h reminder - just informational
-            success = await send_whatsapp_message(
-                phone_number_id, patient_phone, message, access_token
-            )
-
-        return {"success": success, "appointmentId": appointment_id}
-
-    except Exception as e:
-        logger.error(f"❌ Error sending reminder: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/api/send-confirmation")
-async def send_confirmation(request: Request):
-    """Send appointment confirmation message."""
-    try:
-        require_service_secret(request)
-        body = await request.json()
-
-        phone_number_id = body.get("phoneNumberId")
-        access_token = body.get("accessToken")
-        patient_phone = body.get("patientPhone")
-        message = body.get("message")
-
-        if not all([phone_number_id, access_token, patient_phone, message]):
-            raise HTTPException(status_code=400, detail="Missing required fields")
-
-        patient_phone = ensure_phone_has_plus(patient_phone)
-
-        success = await send_whatsapp_message(
-            phone_number_id, patient_phone, message, access_token
-        )
-
-        return {"success": success}
-
-    except Exception as e:
-        logger.error(f"❌ Error sending confirmation: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/api/process-reminders")
-async def process_reminders(request: Request):
-    """
-    Process and send appointment reminders.
-    Called by Cloud Scheduler every 15 minutes.
-    """
-    try:
-        require_service_secret(request)
-        body = await request.json() if request.headers.get("content-type") == "application/json" else {}
-        clinic_id = body.get("clinicId")  # Optional - process all clinics if not specified
-
-        logger.info(f"⏰ Processing reminders for clinic: {clinic_id or 'all'}")
-
-        if not db:
-            raise HTTPException(status_code=500, detail="Database not initialized")
-
-        results = {
-            "reminder_24h": {"sent": 0, "failed": 0},
-            "reminder_2h": {"sent": 0, "failed": 0}
-        }
-
-        # Process 24h reminders
-        for reminder_type in ["reminder_24h", "reminder_2h"]:
-            appointments = db.get_appointments_needing_reminder(reminder_type, clinic_id)
-
-            for apt in appointments:
-                try:
-                    # Get clinic info
-                    clinic = db.get_clinic(apt.clinic_id)
-                    if not clinic:
-                        continue
-
-                    # Get access token
-                    access_token = db.get_clinic_access_token(apt.clinic_id)
-                    if not access_token:
-                        logger.warning(f"No access token for clinic {apt.clinic_id}")
-                        continue
-
-                    phone_number_id = clinic.whatsapp_phone_number_id
-                    if not phone_number_id:
-                        logger.warning(f"No phone_number_id for clinic {apt.clinic_id}")
-                        continue
-
-                    # Format reminder message
-                    message = format_reminder_message(
-                        apt,
-                        reminder_type,
-                        clinic.name,
-                        clinic.address or ""
-                    )
-
-                    patient_phone = ensure_phone_has_plus(apt.patient_phone)
-
-                    # Send reminder
-                    if reminder_type == "reminder_24h":
-                        buttons = [
-                            {"id": "confirm_yes", "title": "Confirmar"},
-                            {"id": "confirm_reschedule", "title": "Reagendar"},
-                            {"id": "confirm_cancel", "title": "Cancelar"},
-                        ]
-                        success = await send_whatsapp_buttons(
-                            phone_number_id, patient_phone, message, buttons, access_token
-                        )
-                    else:
-                        success = await send_whatsapp_message(
-                            phone_number_id, patient_phone, message, access_token
-                        )
-
-                    if success:
-                        # Mark reminder as sent
-                        mark_reminder_sent(db, apt.id, reminder_type)
-                        results[reminder_type]["sent"] += 1
-                        logger.info(f"✅ Sent {reminder_type} reminder for appointment {apt.id}")
-                    else:
-                        results[reminder_type]["failed"] += 1
-                        logger.error(f"❌ Failed to send {reminder_type} for {apt.id}")
-
-                except Exception as e:
-                    results[reminder_type]["failed"] += 1
-                    logger.error(f"❌ Error processing reminder for {apt.id}: {e}")
-
-        logger.info(f"📊 Reminder processing complete: {results}")
-        return {"success": True, "results": results}
-
-    except Exception as e:
-        logger.error(f"❌ Error processing reminders: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/api/set-human-takeover")
-async def set_human_takeover_endpoint(request: Request):
-    """Set human takeover status for a conversation."""
-    try:
-        require_service_secret(request)
-        body = await request.json()
-        clinic_id = body.get("clinicId")
-        phone = body.get("phone")
-        enabled = body.get("enabled", True)
-        reason = body.get("reason")
-
-        if not clinic_id or not phone:
-            raise HTTPException(status_code=400, detail="clinicId and phone are required")
-
-        phone = ensure_phone_has_plus(phone)
-        success = db.set_human_takeover(clinic_id, phone, enabled, reason)
-
-        return {"success": success}
-
-    except Exception as e:
-        logger.error(f"❌ Error setting human takeover: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-# ============================================
-# PIX PAYMENT ENDPOINTS
-# ============================================
-
-@app.post("/pagseguro-webhook")
-async def pagseguro_webhook(request: Request, background_tasks: BackgroundTasks):
-    """
-    PagSeguro payment webhook endpoint.
-    Receives payment notifications and updates appointment status.
-    """
-    try:
-        body = await request.body()
-        signature = request.headers.get('X-PagSeguro-Signature', '')
-
-        logger.info(f"📨 PagSeguro webhook received: {body.decode()[:500]}")
-
-        data = json.loads(body.decode())
-
-        # Parse webhook
-        from src.utils.payment import (
-            parse_pagseguro_webhook,
-            process_payment_confirmation,
-            verify_pagseguro_webhook_signature,
-        )
-
-        if not verify_pagseguro_webhook_signature(body.decode(), signature):
-            logger.warning("Invalid PagSeguro webhook signature")
-            raise HTTPException(status_code=401, detail="Invalid webhook signature")
-
-        reference_id, payment_status, transaction_id = parse_pagseguro_webhook(data)
-
-        if not reference_id or not payment_status:
-            logger.warning("Invalid webhook payload - missing reference_id or status")
-            return {"status": "ignored", "reason": "missing_data"}
-
-        logger.info(f"💳 Payment webhook: ref={reference_id}, status={payment_status}, txn={transaction_id}")
-
-        # Process payment confirmation in background
-        background_tasks.add_task(
-            process_payment_confirmation,
-            reference_id,
-            payment_status,
-            transaction_id,
-            db
-        )
-
-        return {"status": "ok", "reference_id": reference_id}
-
-    except json.JSONDecodeError as e:
-        logger.error(f"❌ Invalid JSON in webhook: {e}")
-        return {"status": "error", "message": "Invalid JSON"}
-
-    except Exception as e:
-        logger.error(f"Error processing PagSeguro webhook: {e}")
-        return {"status": "error", "message": str(e)}
-
-
-@app.post("/stripe-payment-callback")
-async def stripe_payment_callback(request: Request):
-    """
-    Callback from Firebase Functions Stripe webhook.
-    Sends WhatsApp confirmation message to patient after successful Stripe payment.
-    """
-    require_service_secret(request)
-
-    data = await request.json()
-    clinic_id = data.get("clinicId")
-    appointment_id = data.get("appointmentId")
-    patient_phone = data.get("patientPhone")
-    payment_status = data.get("paymentStatus")
-
-    if payment_status != "completed" or not patient_phone or not clinic_id:
-        return {"status": "ignored"}
-
-    try:
-        clinic = db.get_clinic(clinic_id) if db else None
-        if not clinic or not clinic.whatsapp_phone_number_id:
-            logger.warning(f"Stripe callback: clinic {clinic_id} not found or no WhatsApp configured")
-            return {"status": "error", "message": "Clinic not configured"}
-
-        access_token = db.get_access_token(clinic_id) if db else None
-        if not access_token:
-            logger.warning(f"Stripe callback: no access token for clinic {clinic_id}")
-            return {"status": "error", "message": "No access token"}
-
-        appointment = (
-            db.get_appointment(appointment_id, clinic_id=clinic_id)
-            if db and appointment_id
-            else None
-        )
-
-        if appointment:
-            dt = datetime.strptime(appointment.date, "%Y-%m-%d")
-            formatted_date = dt.strftime("%d/%m/%Y")
-            message = (
-                "*Pagamento confirmado*\n\n"
-                "Seu pagamento com cartao foi aprovado.\n\n"
-                f"Data: *{formatted_date}*\n"
-                f"Hora: *{appointment.time}*\n"
-                f"Profissional: *{appointment.professional_name}*\n\n"
-                "Sua consulta esta *confirmada*.\n"
-                "Chegue com 15 minutos de antecedencia."
-            )
-        else:
-            message = (
-                "*Pagamento confirmado*\n\n"
-                "Seu pagamento com cartao foi aprovado.\n\n"
-                "Sua consulta esta *confirmada*.\n"
-                "Chegue com 15 minutos de antecedencia."
-            )
-
-        phone_clean = patient_phone.replace("+", "")
-        await send_whatsapp_message(
-            clinic.whatsapp_phone_number_id,
-            phone_clean,
-            message,
-            access_token,
-        )
-
-        logger.info(f"Stripe payment confirmation sent to {patient_phone} for clinic {clinic_id}")
-        return {"status": "ok"}
-
-    except Exception as e:
-        logger.error(f"Error in stripe payment callback: {e}", exc_info=True)
-        return {"status": "error", "message": str(e)}
-
-
-@app.get("/pix/{phone}/{order_id}")
-async def pix_payment_page(phone: str, order_id: str):
-    """
-    PIX payment HTML page with copy button.
-    Renders a mobile-friendly page for PIX copia e cola.
-    """
-    try:
-        import urllib.parse
-        from jinja2 import Environment, FileSystemLoader  # type: ignore
-
-        # Decode phone from URL
-        phone = urllib.parse.unquote(phone)
-        logger.info(f"📱 PIX page requested: phone={phone}, order={order_id}")
-
-        # Find order
-        order = db.get_order(order_id) if db else None
-
-        if not order:
-            # Try to find by searching recent orders
-            from google.cloud import firestore as gcloud_firestore
-            firestore_client = gcloud_firestore.Client()
-            orders_ref = firestore_client.collection_group("orders")
-
-            # Search by order ID prefix
-            for order_doc in orders_ref.order_by("createdAt", direction=gcloud_firestore.Query.DESCENDING).limit(100).stream():
-                if order_doc.id == order_id or order_doc.id.startswith(order_id[:12]):
-                    order = order_doc.to_dict()
-                    order["id"] = order_doc.id
-                    break
-
-        if not order:
-            logger.warning(f"Order not found: {order_id}")
-            # Return not found page
-            return HTMLResponse(content="""
-                <!DOCTYPE html>
-                <html lang="pt-BR">
-                <head>
-                    <meta charset="UTF-8">
-                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                    <title>PIX não encontrado</title>
-                    <style>
-                        body { font-family: sans-serif; padding: 40px 20px; text-align: center; }
-                        h1 { color: #dc2626; }
-                        p { color: #666; }
-                    </style>
-                </head>
-                <body>
-                    <h1>❌ PIX não encontrado</h1>
-                    <p>Este código PIX expirou ou não foi encontrado.</p>
-                    <p>Volte ao WhatsApp e solicite um novo link de pagamento.</p>
-                </body>
-                </html>
-            """, status_code=404)
-
-        # Get PIX code and QR code URL
-        pix_code = order.get("pixCopiaCola") or order.get("qr_code_text")
-        qr_code_url = order.get("qrCodeUrl") or order.get("qr_code")
-        amount_cents = order.get("amountCents") or order.get("amount", 0)
-        description = order.get("description", "Sinal de Consulta")
-
-        if not pix_code:
-            logger.warning(f"No PIX code in order: {order_id}")
-            return HTMLResponse(content="""
-                <!DOCTYPE html>
-                <html lang="pt-BR">
-                <head>
-                    <meta charset="UTF-8">
-                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                    <title>PIX não disponível</title>
-                    <style>
-                        body { font-family: sans-serif; padding: 40px 20px; text-align: center; }
-                        h1 { color: #dc2626; }
-                        p { color: #666; }
-                    </style>
-                </head>
-                <body>
-                    <h1>❌ PIX não disponível</h1>
-                    <p>O código PIX deste pedido expirou.</p>
-                    <p>Volte ao WhatsApp e solicite um novo link de pagamento.</p>
-                </body>
-                </html>
-            """, status_code=410)
-
-        # Format amount
-        from src.utils.payment import format_payment_amount
-        amount_formatted = format_payment_amount(amount_cents)
-
-        # Setup Jinja2 templates
-        import os
-        template_dir = os.path.join(os.path.dirname(__file__), "templates")
-        jinja_env = Environment(loader=FileSystemLoader(template_dir))
-
-        try:
-            template = jinja_env.get_template("pix_payment.html")
-            html_content = template.render(
-                product_name=description,
-                qr_code_url=qr_code_url,
-                pix_code=pix_code,
-                pix_code_preview=pix_code[:40] if len(pix_code) > 40 else pix_code,
-                amount_formatted=amount_formatted
-            )
-            return HTMLResponse(content=html_content)
-        except Exception as template_error:
-            logger.error(f"Template error: {template_error}")
-            # Fallback: simple HTML page
-            return HTMLResponse(content=f"""
-                <!DOCTYPE html>
-                <html lang="pt-BR">
-                <head>
-                    <meta charset="UTF-8">
-                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                    <title>PIX - {amount_formatted}</title>
-                    <style>
-                        body {{ font-family: sans-serif; padding: 20px; }}
-                        .amount {{ font-size: 24px; font-weight: bold; }}
-                        .code {{ background: #f0f0f0; padding: 10px; word-break: break-all; font-family: monospace; }}
-                        button {{ background: #00a650; color: white; padding: 15px 30px; border: none; font-size: 16px; cursor: pointer; }}
-                    </style>
-                </head>
-                <body>
-                    <h2>{description}</h2>
-                    <p class="amount">{amount_formatted}</p>
-                    <p>Copie o código PIX abaixo:</p>
-                    <div class="code" id="pixCode">{pix_code}</div>
-                    <br>
-                    <button onclick="navigator.clipboard.writeText(document.getElementById('pixCode').textContent).then(() => this.textContent = 'Copiado!')">
-                        Copiar código
-                    </button>
-                </body>
-                </html>
-            """)
-
-    except Exception as e:
-        logger.error(f"❌ Error rendering PIX page: {e}")
-        return HTMLResponse(content="""
-            <!DOCTYPE html>
-            <html lang="pt-BR">
-            <head>
-                <meta charset="UTF-8">
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>Erro</title>
-                <style>
-                    body { font-family: sans-serif; padding: 40px 20px; text-align: center; }
-                    h1 { color: #dc2626; }
-                </style>
-            </head>
-            <body>
-                <h1>❌ Erro</h1>
-                <p>Ocorreu um erro ao carregar a página de pagamento.</p>
-                <p>Por favor, tente novamente pelo WhatsApp.</p>
-            </body>
-            </html>
-        """, status_code=500)
-
-
-# ============================================
-# WHATSAPP FLOWS ENDPOINT
-# ============================================
-
-@app.post("/flows")
-async def flows_endpoint(request: Request):
-    """
-    WhatsApp Flows data endpoint.
-    Handles INIT, data_exchange, and BACK actions for dynamic flows.
-    Supports both encrypted and unencrypted requests.
-    """
-    aes_key = None
-    initial_vector = None
-    is_encrypted = False
-
-    try:
-        # Get raw body for encryption handling
-        raw_body = await request.body()
-
-        # Handle encrypted or unencrypted request
-        body, aes_key, initial_vector, is_encrypted = handle_encrypted_flow_request(raw_body)
-        require_encrypted_flow_request(is_encrypted)
-
-        if "error" in body:
-            error_response = {"data": {"error_message": "Erro de criptografia"}}
-            return prepare_flow_response(error_response, aes_key, initial_vector, is_encrypted)
-
-        if is_encrypted:
-            logger.info(f"🔐 Encrypted flow request received and decrypted")
-        else:
-            logger.info(f"📱 Flow request received: {json.dumps(body)[:500]}")
-
-        action = body.get("action", "")
-        screen = body.get("screen")
-        data = body.get("data", {})
-        flow_token = body.get("flow_token", "")
-
-        # Handle ping (health check)
-        if action == "ping":
-            response = {"data": {"status": "active"}}
-            return prepare_flow_response(response, aes_key, initial_vector, is_encrypted)
-
-        # Handle error notifications
-        if action == "error":
-            logger.error(f"Flow error: {data}")
-            response = {"data": {"acknowledged": True}}
-            return prepare_flow_response(response, aes_key, initial_vector, is_encrypted)
-
-        # Extract clinic_id/phone from signed flow token (legacy tokens still accepted).
-        clinic_id = ""
-        patient_phone = ""
-
-        if flow_token:
-            try:
-                token_data = parse_flow_token(flow_token)
-                clinic_id = token_data.get("clinic_id", "")
-                patient_phone = token_data.get("phone", "")
-            except ValueError as e:
-                logger.error(f"Invalid flow token: {e}")
-                response = {"data": {"error_message": "Token de fluxo inválido"}}
-                return prepare_flow_response(response, aes_key, initial_vector, is_encrypted)
-
-        if not clinic_id:
-            clinic_id = data.get("clinic_id", "")
-
-        if not clinic_id:
-            logger.error("No clinic_id in flow request")
-            response = {"data": {"error_message": "Erro: clínica não identificada"}}
-            return prepare_flow_response(response, aes_key, initial_vector, is_encrypted)
-
-        # Add patient phone to data for appointment creation
-        data["patient_phone"] = patient_phone
-
-        # Process with flows handler
-        if flows_handler:
-            result = await flows_handler.handle_request(
-                action=action,
-                screen=screen,
-                data=data,
-                flow_token=flow_token,
-                clinic_id=clinic_id,
-            )
-            logger.info(f"📤 Flow response: {json.dumps(result)[:500]}")
-            return prepare_flow_response(result, aes_key, initial_vector, is_encrypted)
-        else:
-            logger.error("Flows handler not initialized")
-            response = {"data": {"error_message": "Erro interno"}}
-            return prepare_flow_response(response, aes_key, initial_vector, is_encrypted)
-
-    except Exception as e:
-        logger.error(f"❌ Flow endpoint error: {e}")
-        response = {"data": {"error_message": "Erro ao processar solicitação"}}
-        return prepare_flow_response(response, aes_key, initial_vector, is_encrypted)
+async def _process_webhook_body_for_route(
+    body: Dict[str, Any],
+    background_tasks: BackgroundTasks,
+) -> Any:
+    return await orchestrated_process_webhook_body(
+        _get_webhook_processor_deps(),
+        body,
+        background_tasks,
+    )
+
+
+def _get_db_instance() -> Optional[GendeiDatabase]:
+    return db
+
+
+def _get_flows_handler_instance() -> Optional[FlowsHandler]:
+    return flows_handler
+
+
+register_webhook_routes(
+    app,
+    verify_token=VERIFY_TOKEN,
+    process_webhook_body=_process_webhook_body_for_route,
+    require_meta_webhook_signature=require_meta_webhook_signature,
+)
+
+register_internal_api_routes(
+    app,
+    get_db=_get_db_instance,
+    require_service_secret=require_service_secret,
+    ensure_phone_has_plus=ensure_phone_has_plus,
+    send_whatsapp_message=send_whatsapp_message,
+    send_whatsapp_buttons=send_whatsapp_buttons,
+    format_reminder_message=format_reminder_message,
+    mark_reminder_sent=mark_reminder_sent,
+)
+
+register_payment_routes(
+    app,
+    get_db=_get_db_instance,
+    require_service_secret=require_service_secret,
+    send_whatsapp_message=send_whatsapp_message,
+)
+
+register_flow_routes(
+    app,
+    get_flows_handler=_get_flows_handler_instance,
+    handle_encrypted_flow_request=handle_encrypted_flow_request,
+    prepare_flow_response=prepare_flow_response,
+    require_encrypted_flow_request=require_encrypted_flow_request,
+    parse_flow_token=parse_flow_token,
+)
 
 
 # ============================================
