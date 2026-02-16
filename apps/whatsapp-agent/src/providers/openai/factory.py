@@ -5,7 +5,7 @@ Uses direct @function_tool functions from function_tools.py (SDK-native tools)
 instead of the ToolConverter, and attaches SDK guardrails to agents.
 """
 
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Callable
 import logging
 
 from agents import Agent, ModelSettings  # type: ignore
@@ -41,8 +41,8 @@ class OpenAIAgent(BaseAgent):
 class OpenAIAgentFactory(BaseAgentFactory):
     """Factory for creating OpenAI agents using direct SDK tools and guardrails."""
 
-    def __init__(self):
-        self.session_manager = OpenAISessionManager()
+    def __init__(self, history_loader: Optional[Callable[[str], List[Dict[str, Any]]]] = None):
+        self.session_manager = OpenAISessionManager(history_loader=history_loader)
         self._runner: Optional[OpenAIRunner] = None
 
     def create_agent(

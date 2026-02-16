@@ -32,10 +32,32 @@ class AgentOrchestrator:
         """
         self.clinic_id = clinic_id
         self.db = db
-        self.factory = OpenAIAgentFactory()
+        self.factory = OpenAIAgentFactory(history_loader=self._load_session_history)
         self.runner = self.factory.get_runner()
         self._agents: Optional[Dict[AgentType, OpenAIAgent]] = None
         self._clinic_context: Optional[Dict[str, Any]] = None
+
+    def _load_session_history(self, session_id: str) -> List[Dict[str, Any]]:
+        """Best-effort Firestore history loader for OpenAI session hydration."""
+        if not self.db:
+            return []
+
+        clinic_id = self.clinic_id
+        phone = session_id
+        if ":" in session_id:
+            maybe_clinic, maybe_phone = session_id.split(":", 1)
+            if maybe_clinic:
+                clinic_id = maybe_clinic
+            phone = maybe_phone
+
+        if not clinic_id or not phone:
+            return []
+
+        try:
+            return self.db.get_conversation_history(clinic_id, phone, limit=80) or []
+        except Exception as exc:
+            logger.warning("Failed to load session history for %s: %s", session_id, exc)
+            return []
 
     def _load_clinic_context(self) -> Dict[str, Any]:
         """Load clinic context for agent prompts."""

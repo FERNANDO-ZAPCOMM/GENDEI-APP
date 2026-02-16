@@ -7,9 +7,9 @@ import os
 import json
 import logging
 from typing import Any, Dict, Optional
-from datetime import datetime
 
-import httpx
+from src.flows.token import generate_flow_token as generate_signed_flow_token
+from src.utils.http_client import http_get, http_post
 
 logger = logging.getLogger(__name__)
 
@@ -68,16 +68,15 @@ class FlowsManager:
         }
 
         try:
-            async with httpx.AsyncClient() as client:
-                response = await client.post(url, json=payload, headers=headers)
-                data = response.json()
+            response = await http_post(url, json=payload, headers=headers, timeout=30)
+            data = response.json()
 
-                if "id" in data:
-                    logger.info(f"✅ Created flow: {data['id']}")
-                    return data["id"]
-                else:
-                    logger.error(f"❌ Failed to create flow: {data}")
-                    return None
+            if "id" in data:
+                logger.info(f"✅ Created flow: {data['id']}")
+                return data["id"]
+
+            logger.error(f"❌ Failed to create flow: {data}")
+            return None
 
         except Exception as e:
             logger.error(f"❌ Error creating flow: {e}")
@@ -112,16 +111,15 @@ class FlowsManager:
         }
 
         try:
-            async with httpx.AsyncClient() as client:
-                response = await client.post(url, files=files, headers=headers)
-                data = response.json()
+            response = await http_post(url, files=files, headers=headers, timeout=30)
+            data = response.json()
 
-                if data.get("success"):
-                    logger.info(f"✅ Updated flow JSON: {flow_id}")
-                    return True
-                else:
-                    logger.error(f"❌ Failed to update flow JSON: {data}")
-                    return False
+            if data.get("success"):
+                logger.info(f"✅ Updated flow JSON: {flow_id}")
+                return True
+
+            logger.error(f"❌ Failed to update flow JSON: {data}")
+            return False
 
         except Exception as e:
             logger.error(f"❌ Error updating flow JSON: {e}")
@@ -145,16 +143,15 @@ class FlowsManager:
         }
 
         try:
-            async with httpx.AsyncClient() as client:
-                response = await client.post(url, headers=headers)
-                data = response.json()
+            response = await http_post(url, headers=headers, timeout=30)
+            data = response.json()
 
-                if data.get("success"):
-                    logger.info(f"✅ Published flow: {flow_id}")
-                    return True
-                else:
-                    logger.error(f"❌ Failed to publish flow: {data}")
-                    return False
+            if data.get("success"):
+                logger.info(f"✅ Published flow: {flow_id}")
+                return True
+
+            logger.error(f"❌ Failed to publish flow: {data}")
+            return False
 
         except Exception as e:
             logger.error(f"❌ Error publishing flow: {e}")
@@ -181,9 +178,8 @@ class FlowsManager:
         }
 
         try:
-            async with httpx.AsyncClient() as client:
-                response = await client.get(url, headers=headers, params=params)
-                return response.json()
+            response = await http_get(url, headers=headers, params=params, timeout=30)
+            return response.json()
 
         except Exception as e:
             logger.error(f"❌ Error getting flow: {e}")
@@ -203,10 +199,9 @@ class FlowsManager:
         }
 
         try:
-            async with httpx.AsyncClient() as client:
-                response = await client.get(url, headers=headers)
-                data = response.json()
-                return data.get("data", [])
+            response = await http_get(url, headers=headers, timeout=30)
+            data = response.json()
+            return data.get("data", [])
 
         except Exception as e:
             logger.error(f"❌ Error listing flows: {e}")
@@ -234,7 +229,7 @@ async def send_whatsapp_flow(
         phone_number_id: WhatsApp phone number ID
         to: Recipient phone number
         flow_id: Flow ID
-        flow_token: Unique token for this flow session (clinic_id:phone:timestamp)
+        flow_token: Unique signed token for this flow session
         flow_cta: Call-to-action button text
         header_text: Header text
         body_text: Body text
@@ -293,16 +288,15 @@ async def send_whatsapp_flow(
     }
 
     try:
-        async with httpx.AsyncClient() as client:
-            response = await client.post(url, json=payload, headers=headers)
-            data = response.json()
+        response = await http_post(url, json=payload, headers=headers, timeout=30)
+        data = response.json()
 
-            if "messages" in data:
-                logger.info(f"✅ Sent flow to {to}")
-                return True
-            else:
-                logger.error(f"❌ Failed to send flow: {data}")
-                return False
+        if "messages" in data:
+            logger.info(f"✅ Sent flow to {to}")
+            return True
+
+        logger.error(f"❌ Failed to send flow: {data}")
+        return False
 
     except Exception as e:
         logger.error(f"❌ Error sending flow: {e}")
@@ -313,13 +307,10 @@ def generate_flow_token(clinic_id: str, phone: str, extra_data: str = "") -> str
     """
     Generate a unique flow token for session tracking.
 
-    Format: clinic_id:phone:timestamp or clinic_id:phone:timestamp:extra_data
+    Uses signed token format by default.
+    Falls back to legacy token in non-production when token secret is not configured.
     """
-    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-    base_token = f"{clinic_id}:{phone}:{timestamp}"
-    if extra_data:
-        return f"{base_token}:{extra_data}"
-    return base_token
+    return generate_signed_flow_token(clinic_id, phone, extra_data=extra_data)
 
 
 async def send_booking_flow(

@@ -16,10 +16,8 @@ logger = logging.getLogger(__name__)
 
 # Collection names with gendei_ prefix
 CLINICS = "gendei_clinics"
-APPOINTMENTS = "gendei_appointments"
 PATIENTS = "gendei_patients"
 WHATSAPP = "gendei_whatsapp"
-ORDERS = "gendei_orders"
 PAYMENTS = "gendei_payments"
 TEMPLATES = "gendei_templates"
 TOKENS = "gendei_tokens"
@@ -1389,7 +1387,7 @@ class GendeiDatabase:
             start_date = window_start.date().isoformat()
             end_date = window_end.date().isoformat()
 
-            query = self.db.collection(APPOINTMENTS).where("date", ">=", start_date).where("date", "<=", end_date)
+            query = self.db.collection_group("appointments").where("date", ">=", start_date).where("date", "<=", end_date)
 
             if clinic_id:
                 query = query.where("clinicId", "==", clinic_id)

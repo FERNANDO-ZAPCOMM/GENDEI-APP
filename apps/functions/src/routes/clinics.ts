@@ -20,6 +20,7 @@ function getOpenAI(): OpenAI {
 
 // Collection names
 const CLINICS = 'gendei_clinics';
+const APPOINTMENTS_SUBCOLLECTION = 'appointments';
 
 // GET /clinics - Get current user's clinic
 router.get('/', verifyAuth, async (req: Request, res: Response) => {
@@ -399,14 +400,14 @@ router.get('/:clinicId/stats', verifyAuth, async (req: Request, res: Response) =
       totalPatients,
       totalProfessionals
     ] = await Promise.all([
-      db.collection('gendei_appointments')
+      db.collectionGroup(APPOINTMENTS_SUBCOLLECTION)
         .where('clinicId', '==', clinicId)
         .count().get(),
-      db.collection('gendei_appointments')
+      db.collectionGroup(APPOINTMENTS_SUBCOLLECTION)
         .where('clinicId', '==', clinicId)
         .where('date', '==', today)
         .count().get(),
-      db.collection('gendei_appointments')
+      db.collectionGroup(APPOINTMENTS_SUBCOLLECTION)
         .where('clinicId', '==', clinicId)
         .where('status', '==', 'pending')
         .count().get(),
@@ -445,7 +446,7 @@ router.get('/:clinicId/pending-counts', verifyAuth, async (req: Request, res: Re
       pendingAppointments,
       escalatedConversations
     ] = await Promise.all([
-      db.collection('gendei_appointments')
+      db.collectionGroup(APPOINTMENTS_SUBCOLLECTION)
         .where('clinicId', '==', clinicId)
         .where('status', '==', 'pending')
         .count().get(),

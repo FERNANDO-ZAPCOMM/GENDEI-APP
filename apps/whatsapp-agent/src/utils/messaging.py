@@ -5,13 +5,13 @@ Handles all WhatsApp API communication
 
 import os
 import logging
-import requests  # type: ignore
 from typing import Optional, Dict, Any, List
 from src.utils.helpers import (
     validate_and_format_phone,
     format_button_title,
     format_outgoing_text,
 )
+from src.utils.http_client import http_get as _http_get, http_post as _http_post
 from src.runtime.context import get_runtime_safe
 
 logger = logging.getLogger(__name__)
@@ -69,7 +69,7 @@ async def mark_message_as_read(message_id: str, show_typing: bool = False) -> bo
         payload["typing_indicator"] = {"type": "text"}
 
     try:
-        response = requests.post(
+        response = await _http_post(
             url,
             headers={
                 "Authorization": f"Bearer {access_token}",
@@ -136,7 +136,7 @@ async def send_whatsapp_text(phone: str, text: str) -> str:
     logger.info(f"Sending message to {phone}: {text[:50]}...")
 
     try:
-        response = requests.post(
+        response = await _http_post(
             url,
             headers={
                 "Authorization": f"Bearer {access_token}",
@@ -227,7 +227,7 @@ async def send_whatsapp_document(
     logger.info(f"Sending document to {phone}: {document_url[:50]}...")
 
     try:
-        response = requests.post(
+        response = await _http_post(
             url,
             headers={
                 "Authorization": f"Bearer {access_token}",
@@ -310,7 +310,7 @@ async def send_whatsapp_button(
         }
 
     try:
-        response = requests.post(
+        response = await _http_post(
             url,
             headers={
                 "Authorization": f"Bearer {access_token}",
@@ -407,7 +407,7 @@ async def send_whatsapp_buttons(
         }
 
     try:
-        response = requests.post(
+        response = await _http_post(
             url,
             headers={
                 "Authorization": f"Bearer {access_token}",
@@ -461,7 +461,7 @@ async def send_whatsapp_location_request(
     }
 
     try:
-        response = requests.post(
+        response = await _http_post(
             url,
             headers={
                 "Authorization": f"Bearer {access_token}",
@@ -557,7 +557,7 @@ async def send_payment_button(
     }
 
     try:
-        response = requests.post(
+        response = await _http_post(
             url,
             headers={
                 "Authorization": f"Bearer {access_token}",
@@ -647,7 +647,7 @@ async def get_whatsapp_profile_picture(phone: str) -> Optional[str]:
         # note: this endpoint may have limited availability depending on WhatsApp Business API tier
         url = f"https://graph.facebook.com/{WHATSAPP_API_VERSION}/{phone_number_id}/contacts"
 
-        response = requests.post(
+        response = await _http_post(
             url,
             headers={
                 "Authorization": f"Bearer {access_token}",
@@ -702,7 +702,7 @@ async def download_whatsapp_media(media_id: str) -> Optional[tuple[str, str]]:
     try:
         # STEP 1: Get media URL
         url = f"https://graph.facebook.com/{WHATSAPP_API_VERSION}/{media_id}"
-        response = requests.get(
+        response = await _http_get(
             url,
             headers={"Authorization": f"Bearer {access_token}"},
             timeout=10
@@ -721,7 +721,7 @@ async def download_whatsapp_media(media_id: str) -> Optional[tuple[str, str]]:
             return None
 
         # STEP 2: Download media content
-        media_response = requests.get(
+        media_response = await _http_get(
             media_url,
             headers={"Authorization": f"Bearer {access_token}"},
             timeout=30
@@ -812,7 +812,7 @@ async def send_single_product_message(
     logger.info(f"Sending single product message to {phone}: {product_retailer_id}")
 
     try:
-        response = requests.post(
+        response = await _http_post(
             url,
             headers={
                 "Authorization": f"Bearer {access_token}",
@@ -924,7 +924,7 @@ async def send_multi_product_message(
     logger.info(f"Sending multi-product message to {phone}: {total_products} products")
 
     try:
-        response = requests.post(
+        response = await _http_post(
             url,
             headers={
                 "Authorization": f"Bearer {access_token}",
@@ -1012,7 +1012,7 @@ async def send_catalog_message(
     logger.info(f"Sending catalog message to {phone}")
 
     try:
-        response = requests.post(
+        response = await _http_post(
             url,
             headers={
                 "Authorization": f"Bearer {access_token}",
@@ -1105,7 +1105,7 @@ async def send_spm_template(
     logger.info(f"Sending SPM template '{template_name}' to {phone}: product={product_retailer_id}")
 
     try:
-        response = requests.post(
+        response = await _http_post(
             url,
             headers={
                 "Authorization": f"Bearer {access_token}",
@@ -1226,7 +1226,7 @@ async def send_product_carousel_template(
     logger.info(f"Sending product carousel template '{template_name}' to {phone}: {len(carousel_cards)} products")
 
     try:
-        response = requests.post(
+        response = await _http_post(
             url,
             headers={
                 "Authorization": f"Bearer {access_token}",

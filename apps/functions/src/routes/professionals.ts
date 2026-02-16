@@ -10,6 +10,7 @@ const router = Router();
 const db = getFirestore();
 
 const CLINICS = 'gendei_clinics';
+const APPOINTMENTS_SUBCOLLECTION = 'appointments';
 
 // GET /professionals?clinicId=xxx - Get all professionals for a clinic
 router.get('/', verifyAuth, async (req: Request, res: Response) => {
@@ -277,7 +278,7 @@ router.get('/:professionalId/availability', verifyAuth, async (req: Request, res
     const workingHours = professional?.workingHours || {};
 
     // Get existing appointments to exclude
-    let appointmentsQuery = db.collection('gendei_appointments')
+    let appointmentsQuery = db.collectionGroup(APPOINTMENTS_SUBCOLLECTION)
       .where('clinicId', '==', clinicId)
       .where('professionalId', '==', professionalId);
 

@@ -3,7 +3,8 @@ WhatsApp Flows Handler for Gendei
 Handles dynamic flow data endpoints for appointment scheduling
 
 Two Flows:
-1. Patient Info Flow (ESPECIALIDADE → TIPO_ATENDIMENTO → INFO_CONVENIO → DADOS_PACIENTE → CONFIRMACAO)
+1. Patient Info Flow (ESPECIALIDADE → TIPO_ATENDIMENTO → INFO_CONVENIO → complete)
+   - Patient name/email collected via free-text chat after flow completion
 2. Booking Flow (BOOKING - date picker + time dropdown)
 """
 
@@ -12,6 +13,7 @@ from typing import Any, Dict, List, Optional
 from datetime import datetime, timedelta
 
 from src.vertical_config import get_vertical_config, get_specialty_name, ALL_SPECIALTIES
+from src.flows.token import parse_flow_token
 
 logger = logging.getLogger(__name__)
 
@@ -188,9 +190,6 @@ class FlowsHandler:
         if screen == "INFO_CONVENIO":
             return await self._handle_info_convenio(clinic_id, data)
 
-        if screen == "DADOS_PACIENTE":
-            return await self._handle_dados_paciente(clinic_id, data)
-
         # Flow 2: Booking Flow
         if screen == "BOOKING":
             return await self._handle_booking(clinic_id, data, flow_token)
@@ -210,8 +209,6 @@ class FlowsHandler:
             "ESPECIALIDADE",
             "TIPO_ATENDIMENTO",
             "INFO_CONVENIO",
-            "DADOS_PACIENTE",
-            "CONFIRMACAO"
         ]
 
         try:
@@ -391,16 +388,20 @@ class FlowsHandler:
         }
 
         # Match the deployed flow variant routing:
-        # - particular-only: ESPECIALIDADE -> DADOS_PACIENTE
+        # - particular-only: ESPECIALIDADE is terminal (complete action, no data_exchange)
         # - convenio-only:   ESPECIALIDADE -> INFO_CONVENIO
         # - both modes:      ESPECIALIDADE -> TIPO_ATENDIMENTO
         if accepts_particular and not accepts_convenio:
+            # Particular-only flow: ESPECIALIDADE is terminal with complete action.
+            # This handler should not be called, but return INFO_CONVENIO as fallback.
+            logger.warning("⚠️ _handle_especialidade_selection called for particular-only flow (unexpected)")
             return {
-                "screen": "DADOS_PACIENTE",
+                "screen": "INFO_CONVENIO",
                 "data": {
                     **base_data,
                     "tipo_pagamento": "particular",
-                    "convenio_nome": ""
+                    "convenios": [],
+                    "show_convenio_fields": False,
                 }
             }
 
@@ -466,69 +467,13 @@ class FlowsHandler:
         clinic_id: str,
         data: Dict[str, Any],
     ) -> Dict[str, Any]:
-        """User provided convenio info - show patient data form."""
+        """INFO_CONVENIO is now a terminal screen with complete action.
 
-        return {
-            "screen": "DADOS_PACIENTE",
-            "data": {
-                "especialidade": data.get("especialidade"),
-                "professional_id": data.get("professional_id"),
-                "professional_name": data.get("professional_name"),
-                "specialty_name": data.get("specialty_name"),
-                "tipo_pagamento": data.get("tipo_pagamento"),
-                "convenio_nome": data.get("convenio_nome", ""),
-                "error_message": ""
-            }
-        }
-
-    async def _handle_dados_paciente(
-        self,
-        clinic_id: str,
-        data: Dict[str, Any],
-    ) -> Dict[str, Any]:
-        """User provided patient data - show confirmation screen.
-
-        Note: This returns to CONFIRMACAO which is a terminal screen with 'complete' action.
-        The flow will end here and return all data to the WhatsApp agent.
+        This handler should not be called in normal flow, but is kept as a
+        fallback. It acknowledges the data without routing to another screen.
         """
-
-        nome = data.get("nome", "").strip()
-        email = data.get("email", "").strip()
-
-        if not nome:
-            return {
-                "screen": "DADOS_PACIENTE",
-                "data": {
-                    **data,
-                    "error_message": "Por favor, informe seu nome."
-                }
-            }
-
-        if not email:
-            return {
-                "screen": "DADOS_PACIENTE",
-                "data": {
-                    **data,
-                    "error_message": "Por favor, informe seu e-mail."
-                }
-            }
-
-        # CONFIRMACAO is a terminal screen - we just pass all data
-        # The flow will complete when user clicks "Ver Horários"
-        return {
-            "screen": "CONFIRMACAO",
-            "data": {
-                "especialidade": data.get("especialidade"),
-                "professional_id": data.get("professional_id"),
-                "professional_name": data.get("professional_name"),
-                "specialty_name": data.get("specialty_name"),
-                "tipo_pagamento": data.get("tipo_pagamento"),
-                "convenio_nome": data.get("convenio_nome", ""),
-                "nome": nome,
-                "email": email,
-                "error_message": ""
-            }
-        }
+        logger.warning("⚠️ _handle_info_convenio called via data_exchange (unexpected — INFO_CONVENIO is terminal)")
+        return {"data": {"acknowledged": True}}
 
     # ============================================
     # FLOW 2: Booking Flow Handler
@@ -567,10 +512,14 @@ class FlowsHandler:
                 }
             }
 
-        # Extract patient info from flow_token context
-        # flow_token format: clinic_id:phone:timestamp:patient_data_json
-        parts = flow_token.split(":", 3)
-        patient_phone = parts[1] if len(parts) > 1 else ""
+        # Extract patient info from signed flow token (legacy tokens still accepted).
+        patient_phone = ""
+        if flow_token:
+            try:
+                token_data = parse_flow_token(flow_token)
+                patient_phone = token_data.get("phone", "")
+            except ValueError:
+                logger.warning("⚠️ Invalid flow token when handling booking completion")
 
         # Get additional data passed when sending the booking flow
         professional_id = data.get("professional_id", "")

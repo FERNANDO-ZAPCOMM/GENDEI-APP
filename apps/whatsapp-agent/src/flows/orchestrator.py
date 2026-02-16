@@ -1,11 +1,15 @@
 """Flow orchestration layer extracted from main.py.
 
 Keeps WhatsApp Flow scheduling logic outside transport/webhook code.
+Patient name/email are collected via free-text chat messages after flow
+completion, not inside the WhatsApp Flow itself.
 """
 
 from __future__ import annotations
 
 import logging
+import os
+import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, Awaitable, Callable, Dict, Optional
@@ -13,6 +17,126 @@ from typing import Any, Awaitable, Callable, Dict, Optional
 from src.vertical_config import ALL_SPECIALTIES
 
 logger = logging.getLogger(__name__)
+
+# Email pattern — regex fallback for email extraction
+EMAIL_PATTERN = re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}")
+
+
+async def _ai_extract(field: str, message: str) -> Optional[str]:
+    """Use gpt-4o-mini to extract a patient field from conversational text.
+
+    Args:
+        field: "name" or "email"
+        message: The raw WhatsApp message text from the patient.
+
+    Returns:
+        The extracted value, or None if extraction failed.
+    """
+    import openai  # type: ignore
+
+    if field == "name":
+        system_prompt = (
+            "You are a data extraction assistant for a Brazilian healthcare clinic. "
+            "The patient was asked for their full name. Extract ONLY the patient's "
+            "full name from the message below. Remove any conversational filler, "
+            "greetings, or extra text. Return ONLY the name, properly capitalized "
+            "(Title Case). If you cannot find a valid name, return exactly: null\n\n"
+            "Examples:\n"
+            '- "Fernando Maximo" -> "Fernando Maximo"\n'
+            '- "meu nome é Fernando Maximo" -> "Fernando Maximo"\n'
+            '- "A ta, voce precisa do meu nome ne, Fernando Maximo" -> "Fernando Maximo"\n'
+            '- "sou a Maria Clara da Silva" -> "Maria Clara Da Silva"\n'
+            '- "ok pode anotar, joao pedro" -> "Joao Pedro"\n'
+            '- "sim" -> null\n'
+            '- "oi" -> null\n'
+        )
+    else:
+        system_prompt = (
+            "You are a data extraction assistant for a Brazilian healthcare clinic. "
+            "The patient was asked for their email address. Extract ONLY the email "
+            "address from the message below. Remove any conversational text. Return "
+            "ONLY the email in lowercase. If you cannot find a valid email, return "
+            "exactly: null\n\n"
+            "Examples:\n"
+            '- "fernando@gmail.com" -> "fernando@gmail.com"\n'
+            '- "meu email é fernando@gmail.com" -> "fernando@gmail.com"\n'
+            '- "pode usar fernando.silva@hotmail.com por favor" -> "fernando.silva@hotmail.com"\n'
+            '- "sim" -> null\n'
+            '- "não tenho email" -> null\n'
+        )
+
+    try:
+        client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": message},
+            ],
+            max_tokens=100,
+            temperature=0,
+        )
+        result = response.choices[0].message.content.strip()
+        if result.lower() in ("null", "none", "n/a", ""):
+            return None
+        # Strip surrounding quotes if the model wraps the answer
+        result = result.strip('"\'')
+        return result or None
+    except Exception as e:
+        logger.warning(f"⚠️ AI extraction failed for {field}, using regex fallback: {e}")
+        return None
+
+
+async def _extract_patient_name(message: str) -> str:
+    """Extract the patient name from conversational text using AI (with regex fallback).
+
+    Examples:
+        "Fernando Maximo" -> "Fernando Maximo"
+        "meu nome é Fernando Maximo" -> "Fernando Maximo"
+        "A ta, voce precisa do meu nome ne, Fernando Maximo" -> "Fernando Maximo"
+    """
+    # Try AI extraction first
+    result = await _ai_extract("name", message)
+    if result:
+        return result
+
+    # Regex fallback — simple cleanup
+    text = message.strip()
+    # Remove common filler at the start
+    text = re.sub(
+        r"^(?:(?:a\s+ta|ah?\s+ta|ata|ok|tá|ta)\s*[,.]?\s*)?",
+        "", text, flags=re.IGNORECASE,
+    ).strip()
+    # Remove known introductory phrases
+    for phrase in [
+        "meu nome é", "meu nome e", "me chamo", "eu sou o", "eu sou a",
+        "eu sou", "sou o", "sou a", "sou", "pode anotar", "anota ai", "anota aí",
+    ]:
+        if text.lower().startswith(phrase):
+            text = text[len(phrase):].lstrip(",:;. ")
+    # Title-case if all-lowercase
+    if text and text == text.lower():
+        text = text.title()
+    return text.strip()
+
+
+async def _extract_email(message: str) -> Optional[str]:
+    """Extract an email address from conversational text using AI (with regex fallback).
+
+    Examples:
+        "fernando@gmail.com" -> "fernando@gmail.com"
+        "meu email é fernando@gmail.com" -> "fernando@gmail.com"
+    """
+    # Try AI extraction first
+    result = await _ai_extract("email", message)
+    if result:
+        return result.lower()
+
+    # Regex fallback
+    match = EMAIL_PATTERN.search(message)
+    if match:
+        return match.group(0).lower()
+    return None
 
 
 @dataclass
@@ -33,6 +157,7 @@ class FlowOrchestrationDeps:
     reset_runtime: Callable[[Any], None]
     runtime_cls: Any
     resolve_consultation_pricing: Callable[[str, Any, str], Dict[str, int]]
+    get_professional: Callable[..., Any]
 
 
 async def handle_flow_completion(
@@ -51,143 +176,99 @@ async def handle_flow_completion(
     """
     logger.info(f"🔄 Processing flow completion for {phone}: {flow_response}")
 
-    has_patient_info = "nome" in flow_response and "email" in flow_response
     has_booking = "date" in flow_response and "time" in flow_response
+    has_professional_selection = "especialidade" in flow_response and not has_booking
 
-    if has_patient_info and not has_booking:
-        logger.info("📋 Flow 1 completed, sending Booking flow...")
+    if has_professional_selection:
+        logger.info("📋 Patient Info Flow completed, checking patient identity...")
 
-        booking_flow_id = None
-        if deps.db:
-            clinic = deps.db.get_clinic(clinic_id)
-            if clinic:
-                whatsapp_config = getattr(clinic, "whatsapp_config", {}) or {}
-                booking_flow_id = whatsapp_config.get("bookingFlowId", "")
-                logger.info(f"📱 Using clinic-specific booking flow ID: {booking_flow_id}")
-
-        if not booking_flow_id:
-            logger.warning("⚠️ No booking flow ID configured (not in clinic config or env var)")
-            await deps.send_whatsapp_message(
-                phone_number_id,
-                phone,
-                f"Obrigado {flow_response.get('nome', '')}! 📋\n\n"
-                "Seus dados foram recebidos. Um atendente entrará em contato para "
-                "confirmar data e horário da sua consulta.\n\n"
-                f"Profissional: {flow_response.get('professional_name', '')}\n"
-                f"Especialidade: {flow_response.get('specialty_name', '')}",
-                access_token,
-            )
-            return
-
-        professional_id = flow_response.get("professional_id", "")
+        professional_id = flow_response.get("professional_id", "") or flow_response.get("especialidade", "")
         professional_name = flow_response.get("professional_name", "")
         specialty_name = flow_response.get("specialty_name", "")
-        patient_name = flow_response.get("nome", "")
-        patient_email = flow_response.get("email", "")
+        tipo_pagamento = flow_response.get("tipo_pagamento", "particular")
+        convenio_nome = flow_response.get("convenio_nome", "")
 
-        available_times = []
-        if deps.db and professional_id:
-            today = datetime.now()
-            min_date = (today + timedelta(days=1)).strftime("%Y-%m-%d")
-            max_date = (today + timedelta(days=30)).strftime("%Y-%m-%d")
+        # If professional_name is missing (particular-only flow), look it up
+        if not professional_name and deps.db and professional_id:
+            prof = deps.get_professional(clinic_id, professional_id)
+            if prof:
+                professional_name = getattr(prof, "name", "") or getattr(prof, "full_name", "") or ""
+                specialty_id = getattr(prof, "specialty", "") or ""
+                specialty_name = ALL_SPECIALTIES.get(specialty_id, specialty_id) if specialty_id else ""
+                logger.info(f"📋 Looked up professional: {professional_name} ({specialty_name})")
 
-            slots = deps.get_available_slots(
-                deps.db,
-                clinic_id,
-                professional_id=professional_id,
-                start_date=min_date,
-                end_date=max_date,
+        # Check if patient is known (has name and email from previous interactions)
+        state = deps.db.load_conversation_state(clinic_id, phone) if deps.db else {}
+        known_name = state.get("waUserName", "") or contact_name or ""
+        known_email = ""
+
+        # Also check if patient exists in DB
+        if deps.db:
+            patient = deps.db.get_patient(phone, clinic_id)
+            if patient:
+                known_name = known_name or getattr(patient, "name", "") or ""
+                known_email = getattr(patient, "email", "") or ""
+                logger.info(f"📋 Found existing patient: {known_name} ({known_email})")
+
+        # Save professional selection in state for later use
+        base_state = {
+            "clinic_id": clinic_id,
+            "professional_id": professional_id,
+            "professional_name": professional_name,
+            "specialty_name": specialty_name,
+            "tipo_pagamento": tipo_pagamento,
+            "convenio_nome": convenio_nome,
+        }
+
+        if known_name and known_email:
+            # Known patient — ask for confirmation
+            logger.info(f"✅ Known patient: {known_name} ({known_email}), asking for confirmation")
+            base_state["state"] = "awaiting_patient_confirmation"
+            base_state["patient_name"] = known_name
+            base_state["patient_email"] = known_email
+            if deps.db:
+                deps.db.save_conversation_state(clinic_id, phone, base_state)
+
+            first_name = known_name.split()[0] if known_name else ""
+            buttons = [
+                {"id": "confirm_patient_yes", "title": "Sim, sou eu"},
+                {"id": "confirm_patient_no", "title": "Não"},
+            ]
+            await deps.send_whatsapp_buttons(
+                phone_number_id,
+                phone,
+                f"O agendamento é para *{known_name}*?\nE-mail: {known_email}",
+                buttons,
+                access_token,
             )
+        else:
+            # Unknown patient — ask for name via free text
+            logger.info(f"📝 Unknown patient, asking for name via free text")
+            base_state["state"] = "awaiting_patient_name"
+            if known_name:
+                base_state["patient_name"] = known_name
+            if deps.db:
+                deps.db.save_conversation_state(clinic_id, phone, base_state)
 
-            min_lead_hours = deps.get_clinic_min_lead_time(clinic_id)
-            if slots and min_lead_hours > 0:
-                slots = deps.filter_slots_by_lead_time(slots, min_lead_hours)
-
-            time_set = set()
-            for slot in slots:
-                time_str = slot.time if hasattr(slot, "time") else slot.get("time", "")
-                if time_str:
-                    time_set.add(time_str)
-
-            available_times = [{"id": t, "title": t} for t in sorted(time_set)][:20]
-
-        if not available_times:
-            if deps.db and professional_id:
+            if known_name:
+                # We have a name but no email
+                base_state["state"] = "awaiting_patient_email"
+                if deps.db:
+                    deps.db.save_conversation_state(clinic_id, phone, base_state)
                 await deps.send_whatsapp_message(
                     phone_number_id,
                     phone,
-                    "No momento não há horários disponíveis para esse profissional. "
-                    "Posso verificar outra data ou outro profissional?",
+                    f"Olá, *{known_name.split()[0]}*! Para finalizar o agendamento, "
+                    "qual é o seu e-mail?",
                     access_token,
                 )
-                return
-            available_times = [
-                {"id": "08:00", "title": "08:00"},
-                {"id": "09:00", "title": "09:00"},
-                {"id": "10:00", "title": "10:00"},
-                {"id": "11:00", "title": "11:00"},
-                {"id": "14:00", "title": "14:00"},
-                {"id": "15:00", "title": "15:00"},
-                {"id": "16:00", "title": "16:00"},
-                {"id": "17:00", "title": "17:00"},
-            ]
-
-        today = datetime.now()
-        min_date = (today + timedelta(days=1)).strftime("%Y-%m-%d")
-        max_date = (today + timedelta(days=30)).strftime("%Y-%m-%d")
-
-        flow_token = deps.generate_flow_token(clinic_id, phone)
-
-        await deps.send_whatsapp_message(
-            phone_number_id,
-            phone,
-            "Agora escolha o melhor dia e horário para sua consulta.",
-            access_token,
-        )
-
-        success = await deps.send_booking_flow(
-            phone_number_id=phone_number_id,
-            to=phone,
-            flow_id=booking_flow_id,
-            flow_token=flow_token,
-            access_token=access_token,
-            professional_id=professional_id,
-            professional_name=professional_name,
-            specialty_name=specialty_name,
-            patient_name=patient_name,
-            patient_email=patient_email,
-            available_times=available_times,
-            min_date=min_date,
-            max_date=max_date,
-        )
-
-        if success:
-            logger.info(f"✅ Booking flow sent to {phone}")
-            tipo_pagamento = flow_response.get("tipo_pagamento", "particular")
-            convenio_nome = flow_response.get("convenio_nome", "")
-            if deps.db:
-                deps.db.save_conversation_state(
-                    clinic_id,
+            else:
+                await deps.send_whatsapp_message(
+                    phone_number_id,
                     phone,
-                    {
-                        "state": "in_booking_flow",
-                        "professional_id": professional_id,
-                        "professional_name": professional_name,
-                        "patient_name": patient_name,
-                        "patient_email": patient_email,
-                        "tipo_pagamento": tipo_pagamento,
-                        "convenio_nome": convenio_nome,
-                    },
+                    "Para finalizar o agendamento, qual é o seu *nome completo*?",
+                    access_token,
                 )
-        else:
-            logger.error(f"❌ Failed to send booking flow to {phone}")
-            await deps.send_whatsapp_message(
-                phone_number_id,
-                phone,
-                "Desculpe, ocorreu um erro ao carregar os horários. "
-                "Por favor, tente novamente.",
-                access_token,
-            )
         return
 
     if has_booking:
@@ -341,6 +422,265 @@ async def handle_flow_completion(
         return
 
     logger.warning(f"⚠️ Unknown flow response format: {flow_response}")
+
+
+async def proceed_to_booking_flow(
+    deps: FlowOrchestrationDeps,
+    clinic_id: str,
+    phone: str,
+    phone_number_id: str,
+    access_token: str,
+    state: Dict[str, Any],
+) -> None:
+    """Send the Booking Flow after patient name/email have been confirmed.
+
+    Called after patient identification (text-based or confirmation buttons).
+    Reads professional info and patient data from conversation state.
+    """
+    professional_id = state.get("professional_id", "")
+    professional_name = state.get("professional_name", "")
+    specialty_name = state.get("specialty_name", "")
+    patient_name = state.get("patient_name", "")
+    patient_email = state.get("patient_email", "")
+    tipo_pagamento = state.get("tipo_pagamento", "particular")
+    convenio_nome = state.get("convenio_nome", "")
+
+    booking_flow_id = None
+    if deps.db:
+        clinic = deps.db.get_clinic(clinic_id)
+        if clinic:
+            whatsapp_config = getattr(clinic, "whatsapp_config", {}) or {}
+            booking_flow_id = whatsapp_config.get("bookingFlowId", "")
+
+    if not booking_flow_id:
+        logger.warning("⚠️ No booking flow ID configured")
+        await deps.send_whatsapp_message(
+            phone_number_id,
+            phone,
+            f"Obrigado, {patient_name.split()[0] if patient_name else ''}! 📋\n\n"
+            "Seus dados foram recebidos. Um atendente entrará em contato para "
+            "confirmar data e horário da sua consulta.\n\n"
+            f"Profissional: {professional_name}\n"
+            f"Especialidade: {specialty_name}",
+            access_token,
+        )
+        if deps.db:
+            deps.db.save_conversation_state(clinic_id, phone, {"state": "idle"})
+        return
+
+    available_times = []
+    if deps.db and professional_id:
+        today = datetime.now()
+        min_date = (today + timedelta(days=1)).strftime("%Y-%m-%d")
+        max_date = (today + timedelta(days=30)).strftime("%Y-%m-%d")
+
+        slots = deps.get_available_slots(
+            deps.db,
+            clinic_id,
+            professional_id=professional_id,
+            start_date=min_date,
+            end_date=max_date,
+        )
+
+        min_lead_hours = deps.get_clinic_min_lead_time(clinic_id)
+        if slots and min_lead_hours > 0:
+            slots = deps.filter_slots_by_lead_time(slots, min_lead_hours)
+
+        time_set = set()
+        for slot in slots:
+            time_str = slot.time if hasattr(slot, "time") else slot.get("time", "")
+            if time_str:
+                time_set.add(time_str)
+
+        available_times = [{"id": t, "title": t} for t in sorted(time_set)][:20]
+
+    if not available_times:
+        if deps.db and professional_id:
+            await deps.send_whatsapp_message(
+                phone_number_id,
+                phone,
+                "No momento não há horários disponíveis para esse profissional. "
+                "Posso verificar outra data ou outro profissional?",
+                access_token,
+            )
+            if deps.db:
+                deps.db.save_conversation_state(clinic_id, phone, {"state": "idle"})
+            return
+        available_times = [
+            {"id": "08:00", "title": "08:00"},
+            {"id": "09:00", "title": "09:00"},
+            {"id": "10:00", "title": "10:00"},
+            {"id": "11:00", "title": "11:00"},
+            {"id": "14:00", "title": "14:00"},
+            {"id": "15:00", "title": "15:00"},
+            {"id": "16:00", "title": "16:00"},
+            {"id": "17:00", "title": "17:00"},
+        ]
+
+    today = datetime.now()
+    min_date = (today + timedelta(days=1)).strftime("%Y-%m-%d")
+    max_date = (today + timedelta(days=30)).strftime("%Y-%m-%d")
+
+    flow_token = deps.generate_flow_token(clinic_id, phone)
+
+    await deps.send_whatsapp_message(
+        phone_number_id,
+        phone,
+        "Agora escolha o melhor dia e horário para sua consulta.",
+        access_token,
+    )
+
+    success = await deps.send_booking_flow(
+        phone_number_id=phone_number_id,
+        to=phone,
+        flow_id=booking_flow_id,
+        flow_token=flow_token,
+        access_token=access_token,
+        professional_id=professional_id,
+        professional_name=professional_name,
+        specialty_name=specialty_name,
+        patient_name=patient_name,
+        patient_email=patient_email,
+        available_times=available_times,
+        min_date=min_date,
+        max_date=max_date,
+    )
+
+    if success:
+        logger.info(f"✅ Booking flow sent to {phone}")
+        if deps.db:
+            deps.db.save_conversation_state(
+                clinic_id,
+                phone,
+                {
+                    "state": "in_booking_flow",
+                    "professional_id": professional_id,
+                    "professional_name": professional_name,
+                    "patient_name": patient_name,
+                    "patient_email": patient_email,
+                    "tipo_pagamento": tipo_pagamento,
+                    "convenio_nome": convenio_nome,
+                },
+            )
+    else:
+        logger.error(f"❌ Failed to send booking flow to {phone}")
+        await deps.send_whatsapp_message(
+            phone_number_id,
+            phone,
+            "Desculpe, ocorreu um erro ao carregar os horários. "
+            "Por favor, tente novamente.",
+            access_token,
+        )
+
+
+async def handle_patient_name_response(
+    deps: FlowOrchestrationDeps,
+    clinic_id: str,
+    phone: str,
+    message: str,
+    phone_number_id: str,
+    access_token: str,
+) -> None:
+    """Handle free-text response with patient name.
+
+    Extracts the name from conversational text like:
+    - "Fernando Maximo"
+    - "meu nome é Fernando Maximo"
+    - "A ta, voce precisa do meu nome ne, Fernando Maximo"
+    """
+    patient_name = await _extract_patient_name(message)
+    if not patient_name:
+        await deps.send_whatsapp_message(
+            phone_number_id, phone,
+            "Por favor, informe seu nome completo.",
+            access_token,
+        )
+        return
+
+    logger.info(f"📝 Patient name extracted: '{patient_name}' (from: '{message[:60]}')")
+
+    state = deps.db.load_conversation_state(clinic_id, phone) if deps.db else {}
+    state["patient_name"] = patient_name
+    state["state"] = "awaiting_patient_email"
+    if deps.db:
+        deps.db.save_conversation_state(clinic_id, phone, state)
+
+    await deps.send_whatsapp_message(
+        phone_number_id, phone,
+        f"Obrigado, *{patient_name.split()[0]}*! Agora, qual é o seu *e-mail*?",
+        access_token,
+    )
+
+
+async def handle_patient_email_response(
+    deps: FlowOrchestrationDeps,
+    clinic_id: str,
+    phone: str,
+    message: str,
+    phone_number_id: str,
+    access_token: str,
+) -> None:
+    """Handle free-text response with patient email.
+
+    Extracts email from conversational text like:
+    - "fernando@gmail.com"
+    - "meu email é fernando@gmail.com"
+    - "pode usar fernando@gmail.com por favor"
+    """
+    patient_email = await _extract_email(message)
+
+    if not patient_email:
+        logger.info(f"❌ No email found in message: {message[:60]}")
+        await deps.send_whatsapp_message(
+            phone_number_id, phone,
+            "Hmm, não encontrei um e-mail na sua mensagem. "
+            "Por favor, informe um e-mail no formato exemplo@email.com",
+            access_token,
+        )
+        return
+
+    logger.info(f"📧 Patient email extracted: '{patient_email}' (from: '{message[:60]}')")
+
+    state = deps.db.load_conversation_state(clinic_id, phone) if deps.db else {}
+    state["patient_email"] = patient_email
+    if deps.db:
+        deps.db.save_conversation_state(clinic_id, phone, state)
+
+    # Proceed to booking flow
+    await proceed_to_booking_flow(
+        deps, clinic_id, phone, phone_number_id, access_token, state,
+    )
+
+
+async def handle_patient_confirmation_response(
+    deps: FlowOrchestrationDeps,
+    clinic_id: str,
+    phone: str,
+    confirmed: bool,
+    phone_number_id: str,
+    access_token: str,
+) -> None:
+    """Handle patient identity confirmation (Yes/No buttons)."""
+    state = deps.db.load_conversation_state(clinic_id, phone) if deps.db else {}
+
+    if confirmed:
+        logger.info(f"✅ Patient confirmed identity: {state.get('patient_name')}")
+        await proceed_to_booking_flow(
+            deps, clinic_id, phone, phone_number_id, access_token, state,
+        )
+    else:
+        logger.info(f"❌ Patient rejected identity, asking for name")
+        state["state"] = "awaiting_patient_name"
+        state.pop("patient_name", None)
+        state.pop("patient_email", None)
+        if deps.db:
+            deps.db.save_conversation_state(clinic_id, phone, state)
+
+        await deps.send_whatsapp_message(
+            phone_number_id, phone,
+            "Sem problemas! Qual é o seu *nome completo*?",
+            access_token,
+        )
 
 
 async def handle_payment_type_selection(

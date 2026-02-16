@@ -52,7 +52,7 @@ class OpenAIRunner(BaseRunner):
         """
         try:
             # Get or create session
-            session = self.session_manager.get_sqlite_session(session_id)
+            session = self.session_manager.get_sdk_session(session_id)
 
             # Build enriched prompt with context
             prompt = self._build_prompt(message, context)

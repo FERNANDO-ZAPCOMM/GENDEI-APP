@@ -3,126 +3,158 @@
 **Feature Branch**: `013-whatsapp-flows`
 **Created**: 2026-02-04
 **Updated**: 2026-02-16
-**Status**: Implemented
+**Status**: In Progress
+
+## Architecture Overview
+
+The booking system uses a **two-flow architecture** with **text-based patient info collection**:
+
+1. **Patient Info Flow** (WhatsApp Flow): Structured screens for selecting professional, payment type, and convenio info
+2. **Patient Identification** (Free-text chat): Collects or confirms patient name and email via conversational messages
+3. **Booking Flow** (WhatsApp Flow): Date picker and time slot selection
+
+### Flow Variants
+
+Three Patient Info Flow variants are deployed based on clinic payment settings:
+
+| Variant | File | Screens | When Used |
+|---------|------|---------|-----------|
+| Particular-only | `patient_info_particular_flow.json` | ESPECIALIDADE → complete | Clinic accepts only particular |
+| Convenio-only | `patient_info_convenio_flow.json` | ESPECIALIDADE → INFO_CONVENIO → complete | Clinic accepts only convenio |
+| Both modes | `patient_info_flow.json` | ESPECIALIDADE → TIPO_ATENDIMENTO → INFO_CONVENIO → complete | Clinic accepts both |
+
+### Booking Flow
+
+Single variant (`booking_flow.json`): BOOKING screen with DatePicker + time Dropdown → complete
 
 ## User Scenarios & Testing
 
-### User Story 1 - Booking Flow (Priority: P1)
+### User Story 1 - Booking Flow with Known Patient (Priority: P1)
 
-A patient interacts with a structured WhatsApp Flow to book an appointment: selecting a service, professional, date, and time slot — all within the WhatsApp chat interface.
+A returning patient (who has previously booked or been registered) selects a professional via the WhatsApp Flow, confirms their identity, and picks a date/time.
 
-**Why this priority**: Booking via structured flows provides a guided, error-free experience that reduces friction compared to free-form text.
+**Why this priority**: Most bookings come from returning patients. Skipping data entry reduces friction.
 
-**Independent Test**: Trigger booking flow → select service → select professional → select date → select time → confirm → verify appointment created in Firestore.
+**Independent Test**: Trigger booking flow → select professional → confirm identity → select date → select time → verify appointment created in Firestore.
 
 **Acceptance Scenarios**:
 
-1. **Given** a patient in a WhatsApp conversation, **When** the AI triggers the booking flow, **Then** a structured form appears with available services.
-2. **Given** the service selection screen, **When** the patient selects a service, **Then** available professionals for that service are shown.
-3. **Given** a professional selected, **When** the date screen loads, **Then** only dates with available slots are shown (up to `maxDaysAhead` days).
-4. **Given** a date selected, **When** the time screen loads, **Then** only available time slots are shown (real-time availability check).
-5. **Given** all selections confirmed, **When** the flow completes, **Then** an appointment is created and the patient receives a confirmation message.
+1. **Given** a returning patient with known name and email, **When** the Patient Info Flow completes, **Then** the system sends a confirmation message: "Agendamento para [Nome] ([email])? Confirme para continuar." with Yes/No buttons.
+2. **Given** the patient confirms their identity (clicks "Sim"), **When** the confirmation is received, **Then** the system proceeds directly to send the Booking Flow.
+3. **Given** the patient clicks "Não" (not me), **When** the rejection is received, **Then** the system asks for name and email via free-text messages.
 
 ---
 
-### User Story 2 - Patient Registration Flow (Priority: P1)
+### User Story 2 - Booking Flow with New Patient (Priority: P1)
 
-A new patient completes an intake form within WhatsApp to register their information: name, phone, birthday, CPF, and address.
+A new patient (no prior record) selects a professional via the WhatsApp Flow, then provides their name and email via free-text chat messages before picking a date/time.
 
-**Why this priority**: Patient registration is a prerequisite for booking — new patients need to be registered before their first appointment.
+**Why this priority**: New patients must provide their info to book, but collecting it via chat is more natural than form fields inside a flow.
 
-**Independent Test**: Trigger registration flow → fill all fields → submit → verify patient document created in Firestore.
+**Independent Test**: Trigger booking flow → select professional → provide name via text → provide email via text → select date → select time → verify appointment created with patient data.
 
 **Acceptance Scenarios**:
 
-1. **Given** a new patient without a profile, **When** the registration flow is triggered, **Then** a multi-screen form collects name, phone, birthday, CPF, and address.
-2. **Given** all fields filled, **When** the flow completes, **Then** a patient document is created in `gendei_patients` with the submitted data.
-3. **Given** an existing patient, **When** the flow is triggered, **Then** fields are pre-filled with known data.
+1. **Given** a new patient with no stored name/email, **When** the Patient Info Flow completes, **Then** the system asks "Qual é o seu nome completo?" via a text message.
+2. **Given** the patient sends their name, **When** the message is received, **Then** the name is stored and the system asks "Qual é o seu e-mail?" via a text message.
+3. **Given** the patient sends their email, **When** the message is received, **Then** the email is stored and the Booking Flow is sent immediately.
+4. **Given** the patient sends an invalid email format, **When** the message is received, **Then** the system asks again with a helpful message.
 
 ---
 
-### User Story 3 - Post-Appointment Satisfaction Survey (Priority: P2)
+### User Story 3 - Payment Type Selection (Priority: P1)
 
-After a completed appointment, the patient receives a satisfaction survey via WhatsApp Flow to rate their experience and provide feedback.
+Before entering the flow, clinics that accept both particular and convenio payment types prompt the patient to choose, which determines which flow variant is sent.
 
-**Why this priority**: Satisfaction data helps clinics improve but is not critical to core operations.
-
-**Independent Test**: Complete appointment → verify survey sent after configured delay → submit rating → verify analytics updated.
+**Why this priority**: Payment type determines the flow variant and affects convenio data collection.
 
 **Acceptance Scenarios**:
 
-1. **Given** a completed appointment, **When** `sendAfterHours` elapses, **Then** a satisfaction survey flow is sent to the patient.
-2. **Given** the survey flow, **When** the patient submits a rating and feedback, **Then** the response is stored and analytics are updated.
-3. **Given** a 5-star scale, **When** the patient rates 1-2, **Then** a follow-up question asks for improvement suggestions.
+1. **Given** a clinic that accepts both payment types, **When** the patient requests scheduling, **Then** buttons are shown: "Convênio" and "Particular".
+2. **Given** a clinic that only accepts particular, **When** the patient requests scheduling, **Then** the particular flow is sent directly (no buttons).
+3. **Given** a clinic that only accepts convenio, **When** the patient requests scheduling, **Then** the convenio flow is sent directly (no buttons).
 
 ---
 
-### User Story 4 - Reschedule/Cancellation Flow (Priority: P2)
+### User Story 4 - Date and Time Selection (Priority: P1)
 
-A patient can reschedule or cancel an existing appointment through a structured WhatsApp Flow.
+After patient info is confirmed/collected, the Booking Flow presents available dates and time slots for the selected professional.
 
-**Why this priority**: Self-service rescheduling reduces staff workload but is less critical than booking.
-
-**Independent Test**: Trigger reschedule flow → see current appointment → select new date/time → confirm → verify appointment updated.
+**Why this priority**: Date/time selection is the final step before appointment creation.
 
 **Acceptance Scenarios**:
 
-1. **Given** an existing appointment, **When** the reschedule flow is triggered, **Then** the current appointment details are shown.
-2. **Given** the reschedule screen, **When** the patient selects a new date and time, **Then** availability is checked in real-time.
-3. **Given** a confirmed reschedule, **When** the flow completes, **Then** the appointment is updated and the clinic is notified.
-
----
-
-### User Story 5 - Pre-Appointment Intake Flow (Priority: P3)
-
-Before an appointment, the patient completes a medical intake form with symptoms, medications, and allergies.
-
-**Why this priority**: Intake forms improve appointment preparation but are optional.
-
-**Independent Test**: Send intake flow before appointment → patient fills symptoms/medications → verify data stored on appointment.
-
-**Acceptance Scenarios**:
-
-1. **Given** an upcoming appointment, **When** the intake flow is sent, **Then** the patient sees forms for symptoms, current medications, and allergies.
-2. **Given** a completed intake, **When** the flow completes, **Then** intake data is stored on the appointment document for the professional to review.
+1. **Given** the Booking Flow is sent, **When** it loads, **Then** it shows the professional name, a DatePicker (next 30 days), and available time slots.
+2. **Given** the patient selects a date and time, **When** the flow completes, **Then** availability is validated server-side before creating the appointment.
+3. **Given** the selected time is no longer available, **When** validation fails, **Then** an error message is shown within the flow asking to pick another time.
 
 ---
 
 ### Edge Cases
 
 - What if the flow token expires? (Show "session expired" message and offer to restart)
-- What if available slots change during flow? (Real-time availability check on final confirmation screen)
-- What about abandoned flows? (Track abandonment per screen; timeout after 30 minutes)
+- What if available slots change during flow? (Real-time availability check on booking flow completion)
 - What about concurrent bookings for the same slot? (Validate availability on completion; show conflict error if taken)
-- What if the patient closes WhatsApp mid-flow? (Resume capability within 30-minute window)
+- What if the patient sends a non-name response when asked for name? (Accept any text as name — no strict validation)
+- What if the patient sends a non-email response when asked for email? (Basic email format validation, ask again if invalid)
+- What if the patient abandons after flow but before providing name? (Conversation state tracks `awaiting_patient_name`; next message resumes)
+- What if a known patient's stored email is empty? (Ask for email even if name is known)
 
 ## Requirements
 
 ### Functional Requirements
 
 - **FR-001**: System MUST support structured booking flows within WhatsApp using WhatsApp Flows API
-- **FR-002**: System MUST provide real-time availability data within flow screens
-- **FR-003**: System MUST support patient registration flows with multi-screen data collection
-- **FR-004**: System MUST support post-appointment satisfaction surveys with configurable rating scales
-- **FR-005**: System MUST support reschedule/cancellation flows with real-time slot checking
-- **FR-006**: System MUST support pre-appointment intake forms (symptoms, medications, allergies)
-- **FR-007**: System MUST encrypt flow tokens with session data (clinicId, patientId, flowType)
-- **FR-008**: System MUST track flow completion rates and screen-level abandonment analytics
-- **FR-009**: System MUST prevent double-booking via availability validation on flow completion
-- **FR-010**: System MUST support prefilling flow fields with known patient data
+- **FR-002**: System MUST provide real-time availability data within booking flow screens
+- **FR-003**: Patient Info Flow MUST NOT collect name or email — these MUST be collected via free-text chat messages
+- **FR-004**: System MUST detect known patients (via conversation state `waUserName` or patient DB lookup) and offer identity confirmation instead of re-collecting data
+- **FR-005**: System MUST support three Patient Info Flow variants: particular-only, convenio-only, both-modes
+- **FR-006**: System MUST track conversation state through the multi-step booking process: `awaiting_payment_type` → `in_patient_info_flow` → `awaiting_patient_name` → `awaiting_patient_email` → `in_booking_flow` → `idle`
+- **FR-007**: System MUST validate email format before accepting patient email
+- **FR-008**: System MUST prevent double-booking via availability validation on booking flow completion
+- **FR-009**: System MUST support payment signal collection after appointment creation (card/PIX)
+- **FR-010**: System MUST store patient name and email in conversation state for use by the Booking Flow
 
 ### Key Entities
 
-- **Flow**: Clinic ID, WhatsApp Flow ID, type, name, status (draft/published/deprecated), config, completion stats
-- **FlowResponse**: Clinic ID, flow ID, patient info, session ID, encrypted token, responses, screen progress, status, related entities
-- **FlowAnalytics**: Monthly stats per clinic — overall completion rates, per-type stats, screen-level drop-off, satisfaction scores
+- **ConversationState**: Current state (awaiting_payment_type, in_patient_info_flow, awaiting_patient_name, awaiting_patient_email, in_booking_flow, awaiting_payment_method, idle), professional info, patient name/email, payment type, convenio name
+- **Patient Info Flow Response**: professional_id, professional_name, specialty_name, tipo_pagamento, convenio_nome (NO nome/email)
+- **Booking Flow Response**: date, time, professional_id, doctor_name, patient_name, patient_email
+
+## Implementation Details
+
+### Flow Completion Handling (`orchestrator.py`)
+
+When Patient Info Flow completes (has professional_id but no date/time):
+1. Extract professional and payment info from flow response
+2. Look up patient: check conversation state for `waUserName` and patient DB via `get_patient(phone, clinic_id)`
+3. **Known patient** (has name AND email): Send confirmation buttons, store data in state, set state to `awaiting_patient_confirmation`
+4. **Unknown patient** (missing name or email): Send "Qual é o seu nome completo?" message, set state to `awaiting_patient_name`
+
+### Text-Based Collection (`processor.py`)
+
+New state handlers in the message processor:
+- `awaiting_patient_name`: Accept text as name → ask for email → set state to `awaiting_patient_email`
+- `awaiting_patient_email`: Validate email format → store both → send Booking Flow → set state to `in_booking_flow`
+- `awaiting_patient_confirmation`: Handle "Sim"/"Não" button responses
+
+### Files Changed
+
+| File | Change |
+|------|--------|
+| `flows/patient_info_particular_flow.json` | Remove DADOS_PACIENTE screen; make ESPECIALIDADE terminal |
+| `flows/patient_info_convenio_flow.json` | Remove DADOS_PACIENTE screen; make INFO_CONVENIO terminal |
+| `flows/patient_info_flow.json` | Remove DADOS_PACIENTE screen; make INFO_CONVENIO terminal |
+| `flows/handler.py` | Remove `_handle_dados_paciente`; update routing in `_handle_especialidade_selection` and `_handle_info_convenio` |
+| `flows/orchestrator.py` | Update `handle_flow_completion` to not expect nome/email; add patient lookup and text-based collection trigger |
+| `messages/processor.py` | Add state handlers for `awaiting_patient_name`, `awaiting_patient_email`, `awaiting_patient_confirmation` |
 
 ## Success Criteria
 
 ### Measurable Outcomes
 
-- **SC-001**: Flow completion rate > 75%
-- **SC-002**: Average flow completion time < 3 minutes
+- **SC-001**: Flow completion rate > 80% (improved by removing text input friction)
+- **SC-002**: Average flow-to-booking time < 3 minutes
 - **SC-003**: Zero double-bookings from flow submissions
-- **SC-004**: Flow data latency < 2 seconds per screen
-- **SC-005**: Abandonment tracking at screen-level granularity
+- **SC-004**: Known patient identification rate > 90% for returning patients
+- **SC-005**: Patient info collection success rate > 95% (name + email via text)

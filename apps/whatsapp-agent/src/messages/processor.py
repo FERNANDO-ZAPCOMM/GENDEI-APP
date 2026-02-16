@@ -36,6 +36,9 @@ class MessageProcessorDeps:
     is_simple_greeting: Callable[[str], bool]
     send_initial_greeting: Callable[..., Awaitable[Any]]
     run_agent_response: Callable[..., Awaitable[Any]]
+    handle_patient_name_response: Callable[..., Awaitable[Any]]
+    handle_patient_email_response: Callable[..., Awaitable[Any]]
+    handle_patient_confirmation_response: Callable[..., Awaitable[Any]]
 
 
 async def process_incoming_message(
@@ -186,6 +189,18 @@ async def process_incoming_message(
         )
         return
 
+    if button_payload in ("confirm_patient_yes", "confirm_patient_no"):
+        confirmed = button_payload == "confirm_patient_yes"
+        logger.info(f"👤 Patient confirmation: {'yes' if confirmed else 'no'} from {phone}")
+        await deps.handle_patient_confirmation_response(
+            clinic_id,
+            phone,
+            confirmed,
+            phone_number_id,
+            access_token,
+        )
+        return
+
     if button_payload in ("payment_convenio", "payment_particular"):
         logger.info(f"💳 User {phone} selected payment type (button): {button_payload}")
         await deps.handle_payment_type_selection(
@@ -208,6 +223,35 @@ async def process_incoming_message(
                 state,
                 phone_number_id,
                 access_token,
+            )
+            return
+
+    if current_state == "awaiting_patient_name" and not button_payload:
+        logger.info(f"📝 Receiving patient name from {phone}: {message[:50]}...")
+        await deps.handle_patient_name_response(
+            clinic_id, phone, message, phone_number_id, access_token,
+        )
+        return
+
+    if current_state == "awaiting_patient_email" and not button_payload:
+        logger.info(f"📧 Receiving patient email from {phone}: {message[:50]}...")
+        await deps.handle_patient_email_response(
+            clinic_id, phone, message, phone_number_id, access_token,
+        )
+        return
+
+    if current_state == "awaiting_patient_confirmation" and not button_payload:
+        # Handle text-based confirmation (user typed instead of clicking button)
+        if any(w in msg_lower for w in ["sim", "sou", "correto", "isso", "sou eu"]):
+            logger.info(f"👤 Patient confirmed identity via text from {phone}")
+            await deps.handle_patient_confirmation_response(
+                clinic_id, phone, True, phone_number_id, access_token,
+            )
+            return
+        if any(w in msg_lower for w in ["não", "nao", "no", "outro", "outra"]):
+            logger.info(f"👤 Patient rejected identity via text from {phone}")
+            await deps.handle_patient_confirmation_response(
+                clinic_id, phone, False, phone_number_id, access_token,
             )
             return
 

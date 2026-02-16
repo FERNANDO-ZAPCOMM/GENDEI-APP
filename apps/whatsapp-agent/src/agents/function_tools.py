@@ -43,14 +43,20 @@ async def _send_text_message_impl(phone: str, text: str, runtime: Optional['Runt
             logger.info(f"⚠️ Blocking HANDOFF instruction from being sent: {text[:50]}...")
             return "Handoff instruction blocked - not sent to user"
 
+        # Enforce output sanitization before any outbound WhatsApp send.
+        from src.agents.guardrails import run_output_guardrails
+        safe_text = run_output_guardrails(text or "")
+        if not safe_text.strip():
+            safe_text = "Como posso te ajudar?"
+
         # Send message using runtime's messaging function
         from src.utils.messaging import send_whatsapp_text
-        result = await send_whatsapp_text(phone, text)
+        result = await send_whatsapp_text(phone, safe_text)
         _mark_message_sent(phone, runtime=runtime)
 
         # Log interaction
         runtime.db.log_conversation_message(
-            runtime.clinic_id, phone, "text", text, source="agent"
+            runtime.clinic_id, phone, "text", safe_text, source="agent"
         )
 
         return result

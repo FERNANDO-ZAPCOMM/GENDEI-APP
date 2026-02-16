@@ -19,7 +19,6 @@ _current_phone_number_id: ContextVar[Optional[str]] = ContextVar('current_phone_
 
 from fastapi import FastAPI, Request, BackgroundTasks, HTTPException  # type: ignore
 from fastapi.responses import Response, HTMLResponse  # type: ignore
-import httpx  # type: ignore
 
 # Configure logging
 logging.basicConfig(
@@ -59,10 +58,19 @@ try:
         handle_flow_completion as orchestrated_handle_flow_completion,
         handle_payment_type_selection as orchestrated_handle_payment_type_selection,
         handle_scheduling_intent as orchestrated_handle_scheduling_intent,
+        handle_patient_name_response as orchestrated_handle_patient_name_response,
+        handle_patient_email_response as orchestrated_handle_patient_email_response,
+        handle_patient_confirmation_response as orchestrated_handle_patient_confirmation_response,
     )
     from src.vertical_config import get_vertical_config, get_specialty_name, ALL_SPECIALTIES
     from src.flows.manager import send_whatsapp_flow, send_booking_flow, generate_flow_token
+    from src.flows.token import parse_flow_token
     from src.flows.crypto import handle_encrypted_flow_request, prepare_flow_response, is_encryption_configured
+    from src.security import (
+        require_encrypted_flow_request,
+        require_meta_webhook_signature,
+        require_service_secret,
+    )
     from src.agents.orchestrator import get_orchestrator
     from src.runtime.context import Runtime, set_runtime, reset_runtime
     from src.payments.pricing import resolve_consultation_pricing
@@ -80,6 +88,7 @@ try:
         process_buffered_messages as orchestrated_process_buffered_messages,
         handle_voice_message as orchestrated_handle_voice_message,
     )
+    from src.utils.http_client import http_post, close_shared_http_client
     from src.utils.helpers import format_outgoing_text, format_button_title
     logger.info("✅ Gendei modules imported successfully")
     if is_encryption_configured():
@@ -1076,6 +1085,9 @@ def _get_message_processor_deps() -> MessageProcessorDeps:
         is_simple_greeting=is_simple_greeting,
         send_initial_greeting=send_initial_greeting,
         run_agent_response=run_agent_response,
+        handle_patient_name_response=handle_patient_name_response,
+        handle_patient_email_response=handle_patient_email_response,
+        handle_patient_confirmation_response=handle_patient_confirmation_response,
     )
 
 
@@ -1286,6 +1298,7 @@ async def lifespan(app: FastAPI):
     register_tool_implementations()
     logger.info("✅ Database initialized")
     yield
+    await close_shared_http_client()
     logger.info("👋 Shutting down Gendei WhatsApp Agent...")
 
 
@@ -1364,40 +1377,44 @@ async def send_whatsapp_message(
 ) -> bool:
     """Send WhatsApp text message and optionally log to database."""
     url = f"https://graph.facebook.com/{META_API_VERSION}/{phone_number_id}/messages"
-    message = format_outgoing_text(message)
+    from src.agents.guardrails import run_output_guardrails
+    safe_message = run_output_guardrails(message or "")
+    if not safe_message.strip():
+        safe_message = "Como posso te ajudar?"
+    message = format_outgoing_text(safe_message)
 
     # Ensure phone has + prefix for consistent storage
     to_normalized = ensure_phone_has_plus(to)
 
-    async with httpx.AsyncClient() as client:
-        response = await client.post(
-            url,
-            headers={
-                "Authorization": f"Bearer {access_token}",
-                "Content-Type": "application/json",
-                "Cache-Control": "no-cache",
-            },
-            json={
-                "messaging_product": "whatsapp",
-                "to": to,
-                "type": "text",
-                "text": {"body": message}
-            }
-        )
+    response = await http_post(
+        url,
+        headers={
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json",
+            "Cache-Control": "no-cache",
+        },
+        json={
+            "messaging_product": "whatsapp",
+            "to": to,
+            "type": "text",
+            "text": {"body": message},
+        },
+        timeout=30,
+    )
 
-        if response.status_code == 200:
-            logger.info(f"✅ Message sent to {to}")
-            # Log outgoing message to database using context variables
-            clinic_id = _current_clinic_id.get()
-            if log_to_db and db and clinic_id:
-                db.log_conversation_message(
-                    clinic_id, to_normalized, "text", message,
-                    source="ai", phone_number_id=phone_number_id
-                )
-            return True
-        else:
-            logger.error(f"❌ Failed to send message: {response.text}")
-            return False
+    if response.status_code == 200:
+        logger.info(f"✅ Message sent to {to}")
+        # Log outgoing message to database using context variables
+        clinic_id = _current_clinic_id.get()
+        if log_to_db and db and clinic_id:
+            db.log_conversation_message(
+                clinic_id, to_normalized, "text", message,
+                source="ai", phone_number_id=phone_number_id
+            )
+        return True
+
+    logger.error(f"❌ Failed to send message: {response.text}")
+    return False
 
 
 async def send_whatsapp_buttons(
@@ -1430,46 +1447,46 @@ async def send_whatsapp_buttons(
 
     to_normalized = ensure_phone_has_plus(to)
 
-    async with httpx.AsyncClient() as client:
-        response = await client.post(
-            url,
-            headers={
-                "Authorization": f"Bearer {access_token}",
-                "Content-Type": "application/json",
-                "Cache-Control": "no-cache",
-            },
-            json={
-                "messaging_product": "whatsapp",
-                "to": to,
-                "type": "interactive",
-                "interactive": {
-                    "type": "button",
-                    "body": {"text": body_text},
-                    "action": {"buttons": button_list}
-                }
+    response = await http_post(
+        url,
+        headers={
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json",
+            "Cache-Control": "no-cache",
+        },
+        json={
+            "messaging_product": "whatsapp",
+            "to": to,
+            "type": "interactive",
+            "interactive": {
+                "type": "button",
+                "body": {"text": body_text},
+                "action": {"buttons": button_list}
             }
-        )
+        },
+        timeout=30,
+    )
 
-        if response.status_code == 200:
-            logger.info(
-                "✅ Buttons sent to %s (count=%d, ids=%s)",
-                to,
-                len(sanitized_buttons),
-                [btn.get("id") for btn in sanitized_buttons],
+    if response.status_code == 200:
+        logger.info(
+            "✅ Buttons sent to %s (count=%d, ids=%s)",
+            to,
+            len(sanitized_buttons),
+            [btn.get("id") for btn in sanitized_buttons],
+        )
+        # Log outgoing message
+        clinic_id = _current_clinic_id.get()
+        if db and clinic_id:
+            button_titles = ", ".join([b["title"] for b in sanitized_buttons])
+            db.log_conversation_message(
+                clinic_id, to_normalized, "interactive",
+                f"{body_text}\n[Opções: {button_titles}]",
+                source="ai", phone_number_id=phone_number_id
             )
-            # Log outgoing message
-            clinic_id = _current_clinic_id.get()
-            if db and clinic_id:
-                button_titles = ", ".join([b["title"] for b in sanitized_buttons])
-                db.log_conversation_message(
-                    clinic_id, to_normalized, "interactive",
-                    f"{body_text}\n[Opções: {button_titles}]",
-                    source="ai", phone_number_id=phone_number_id
-                )
-            return True
-        else:
-            logger.error(f"❌ Failed to send buttons: {response.text}")
-            return False
+        return True
+
+    logger.error(f"❌ Failed to send buttons: {response.text}")
+    return False
 
 
 async def send_whatsapp_location_request(
@@ -1493,32 +1510,32 @@ async def send_whatsapp_location_request(
         }
     }
 
-    async with httpx.AsyncClient() as client:
-        response = await client.post(
-            url,
-            headers={
-                "Authorization": f"Bearer {access_token}",
-                "Content-Type": "application/json",
-                "Cache-Control": "no-cache",
-            },
-            json=payload
-        )
+    response = await http_post(
+        url,
+        headers={
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json",
+            "Cache-Control": "no-cache",
+        },
+        json=payload,
+        timeout=30,
+    )
 
-        if response.status_code == 200:
-            logger.info(f"✅ Location request sent to {to}")
-            clinic_id = _current_clinic_id.get()
-            if db and clinic_id:
-                db.log_conversation_message(
-                    clinic_id,
-                    to_normalized,
-                    "interactive",
-                    body_text,
-                    source="ai",
-                    phone_number_id=phone_number_id
-                )
-            return True
+    if response.status_code == 200:
+        logger.info(f"✅ Location request sent to {to}")
+        clinic_id = _current_clinic_id.get()
+        if db and clinic_id:
+            db.log_conversation_message(
+                clinic_id,
+                to_normalized,
+                "interactive",
+                body_text,
+                source="ai",
+                phone_number_id=phone_number_id
+            )
+        return True
 
-        logger.error(f"❌ Failed to send location request: {response.text}")
+    logger.error(f"❌ Failed to send location request: {response.text}")
     return False
 
 
@@ -1549,38 +1566,38 @@ async def send_whatsapp_location_message(
     if address:
         payload["location"]["address"] = address
 
-    async with httpx.AsyncClient() as client:
-        response = await client.post(
-            url,
-            headers={
-                "Authorization": f"Bearer {access_token}",
-                "Content-Type": "application/json",
-                "Cache-Control": "no-cache",
-            },
-            json=payload,
+    response = await http_post(
+        url,
+        headers={
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json",
+            "Cache-Control": "no-cache",
+        },
+        json=payload,
+        timeout=30,
+    )
+
+    if response.status_code == 200:
+        logger.info(
+            "📍 Location message sent to %s (lat=%s lng=%s)",
+            to,
+            latitude,
+            longitude,
         )
-
-        if response.status_code == 200:
-            logger.info(
-                "📍 Location message sent to %s (lat=%s lng=%s)",
-                to,
-                latitude,
-                longitude,
+        clinic_id = _current_clinic_id.get()
+        if db and clinic_id:
+            db.log_conversation_message(
+                clinic_id,
+                to_normalized,
+                "location",
+                f"LOCALIZAÇÃO ENVIADA: {name or ''} {address or ''}".strip(),
+                source="ai",
+                phone_number_id=phone_number_id,
             )
-            clinic_id = _current_clinic_id.get()
-            if db and clinic_id:
-                db.log_conversation_message(
-                    clinic_id,
-                    to_normalized,
-                    "location",
-                    f"LOCALIZAÇÃO ENVIADA: {name or ''} {address or ''}".strip(),
-                    source="ai",
-                    phone_number_id=phone_number_id,
-                )
-            return True
+        return True
 
-        logger.error(f"❌ Failed to send location message: {response.text}")
-        return False
+    logger.error(f"❌ Failed to send location message: {response.text}")
+    return False
 
 
 async def send_clinic_location_message(
@@ -1652,31 +1669,31 @@ async def send_whatsapp_list(
         }
     }
 
-    async with httpx.AsyncClient() as client:
-        response = await client.post(
-            url,
-            headers={
-                "Authorization": f"Bearer {access_token}",
-                "Content-Type": "application/json",
-                "Cache-Control": "no-cache",
-            },
-            json=payload
-        )
+    response = await http_post(
+        url,
+        headers={
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json",
+            "Cache-Control": "no-cache",
+        },
+        json=payload,
+        timeout=30,
+    )
 
-        if response.status_code == 200:
-            logger.info(f"✅ List message sent to {to}")
-            # Log outgoing message
-            clinic_id = _current_clinic_id.get()
-            if db and clinic_id:
-                db.log_conversation_message(
-                    clinic_id, to_normalized, "interactive",
-                    f"{header_text}\n{body_text}\n[Lista interativa]",
-                    source="ai", phone_number_id=phone_number_id
-                )
-            return True
-        else:
-            logger.error(f"❌ Failed to send list: {response.text}")
-            return False
+    if response.status_code == 200:
+        logger.info(f"✅ List message sent to {to}")
+        # Log outgoing message
+        clinic_id = _current_clinic_id.get()
+        if db and clinic_id:
+            db.log_conversation_message(
+                clinic_id, to_normalized, "interactive",
+                f"{header_text}\n{body_text}\n[Lista interativa]",
+                source="ai", phone_number_id=phone_number_id
+            )
+        return True
+
+    logger.error(f"❌ Failed to send list: {response.text}")
+    return False
 
 
 async def send_pix_payment_cta(
@@ -1716,23 +1733,23 @@ async def send_pix_payment_cta(
         }
     }
 
-    async with httpx.AsyncClient() as client:
-        response = await client.post(
-            url,
-            headers={
-                "Authorization": f"Bearer {access_token}",
-                "Content-Type": "application/json",
-                "Cache-Control": "no-cache",
-            },
-            json=payload
-        )
+    response = await http_post(
+        url,
+        headers={
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json",
+            "Cache-Control": "no-cache",
+        },
+        json=payload,
+        timeout=30,
+    )
 
-        if response.status_code == 200:
-            logger.info(f"✅ PIX payment CTA sent to {to}")
-            return True
-        else:
-            logger.error(f"❌ Failed to send PIX CTA: {response.text}")
-            return False
+    if response.status_code == 200:
+        logger.info(f"✅ PIX payment CTA sent to {to}")
+        return True
+
+    logger.error(f"❌ Failed to send PIX CTA: {response.text}")
+    return False
 
 
 async def send_whatsapp_contact_card(
@@ -1786,31 +1803,31 @@ async def send_whatsapp_contact_card(
         "contacts": [contact]
     }
 
-    async with httpx.AsyncClient() as client:
-        response = await client.post(
-            url,
-            headers={
-                "Authorization": f"Bearer {access_token}",
-                "Content-Type": "application/json",
-                "Cache-Control": "no-cache",
-            },
-            json=payload
-        )
+    response = await http_post(
+        url,
+        headers={
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json",
+            "Cache-Control": "no-cache",
+        },
+        json=payload,
+        timeout=30,
+    )
 
-        if response.status_code == 200:
-            logger.info(f"✅ Contact card sent to {to}")
-            # Log outgoing message
-            clinic_id = _current_clinic_id.get()
-            if db and clinic_id:
-                db.log_conversation_message(
-                    clinic_id, to_normalized, "contacts",
-                    f"[Cartão de contato: {contact_name} - {contact_phone}]",
-                    source="ai", phone_number_id=phone_number_id
-                )
-            return True
-        else:
-            logger.error(f"❌ Failed to send contact card: {response.text}")
-            return False
+    if response.status_code == 200:
+        logger.info(f"✅ Contact card sent to {to}")
+        # Log outgoing message
+        clinic_id = _current_clinic_id.get()
+        if db and clinic_id:
+            db.log_conversation_message(
+                clinic_id, to_normalized, "contacts",
+                f"[Cartão de contato: {contact_name} - {contact_phone}]",
+                source="ai", phone_number_id=phone_number_id
+            )
+        return True
+
+    logger.error(f"❌ Failed to send contact card: {response.text}")
+    return False
 
 
 async def mark_message_as_read(
@@ -1832,16 +1849,16 @@ async def mark_message_as_read(
     if show_typing:
         payload["typing_indicator"] = {"type": "text"}
 
-    async with httpx.AsyncClient() as client:
-        await client.post(
-            url,
-            headers={
-                "Authorization": f"Bearer {access_token}",
-                "Content-Type": "application/json",
-                "Cache-Control": "no-cache",
-            },
-            json=payload
-        )
+    await http_post(
+        url,
+        headers={
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json",
+            "Cache-Control": "no-cache",
+        },
+        json=payload,
+        timeout=30,
+    )
 
 
 async def send_typing_indicator(
@@ -2838,6 +2855,7 @@ def _get_flow_orchestration_deps() -> FlowOrchestrationDeps:
         resolve_consultation_pricing=lambda clinic_id, clinic, professional_id="": resolve_consultation_pricing(
             db, clinic_id, clinic, professional_id
         ),
+        get_professional=lambda clinic_id, professional_id: db.get_professional(clinic_id, professional_id) if db else None,
     )
 
 
@@ -2857,6 +2875,45 @@ async def handle_flow_completion(
         phone_number_id,
         access_token,
         contact_name=contact_name,
+    )
+
+
+async def handle_patient_name_response(
+    clinic_id: str,
+    phone: str,
+    message: str,
+    phone_number_id: str,
+    access_token: str,
+) -> None:
+    await orchestrated_handle_patient_name_response(
+        _get_flow_orchestration_deps(),
+        clinic_id, phone, message, phone_number_id, access_token,
+    )
+
+
+async def handle_patient_email_response(
+    clinic_id: str,
+    phone: str,
+    message: str,
+    phone_number_id: str,
+    access_token: str,
+) -> None:
+    await orchestrated_handle_patient_email_response(
+        _get_flow_orchestration_deps(),
+        clinic_id, phone, message, phone_number_id, access_token,
+    )
+
+
+async def handle_patient_confirmation_response(
+    clinic_id: str,
+    phone: str,
+    confirmed: bool,
+    phone_number_id: str,
+    access_token: str,
+) -> None:
+    await orchestrated_handle_patient_confirmation_response(
+        _get_flow_orchestration_deps(),
+        clinic_id, phone, confirmed, phone_number_id, access_token,
     )
 
 
@@ -3112,13 +3169,20 @@ async def handle_voice_message(
 async def receive_webhook(request: Request, background_tasks: BackgroundTasks):
     """Receive WhatsApp webhook events."""
     try:
-        body = await request.json()
+        raw_body = await request.body()
+        require_meta_webhook_signature(request, raw_body)
+        body = json.loads(raw_body.decode("utf-8"))
         return await orchestrated_process_webhook_body(
             _get_webhook_processor_deps(),
             body,
             background_tasks,
         )
 
+    except HTTPException:
+        raise
+    except json.JSONDecodeError as e:
+        logger.error(f"❌ Invalid webhook JSON: {e}")
+        return {"status": "error", "message": "invalid_json"}
     except Exception as e:
         logger.error(f"❌ Error processing webhook: {e}")
         return {"status": "error", "message": str(e)}
@@ -3132,6 +3196,7 @@ async def receive_webhook(request: Request, background_tasks: BackgroundTasks):
 async def send_reminder(request: Request):
     """Send appointment reminder (called by Cloud Scheduler via Functions)."""
     try:
+        require_service_secret(request)
         body = await request.json()
 
         clinic_id = body.get("clinicId")
@@ -3174,6 +3239,7 @@ async def send_reminder(request: Request):
 async def send_confirmation(request: Request):
     """Send appointment confirmation message."""
     try:
+        require_service_secret(request)
         body = await request.json()
 
         phone_number_id = body.get("phoneNumberId")
@@ -3204,6 +3270,7 @@ async def process_reminders(request: Request):
     Called by Cloud Scheduler every 15 minutes.
     """
     try:
+        require_service_secret(request)
         body = await request.json() if request.headers.get("content-type") == "application/json" else {}
         clinic_id = body.get("clinicId")  # Optional - process all clinics if not specified
 
@@ -3289,6 +3356,7 @@ async def process_reminders(request: Request):
 async def set_human_takeover_endpoint(request: Request):
     """Set human takeover status for a conversation."""
     try:
+        require_service_secret(request)
         body = await request.json()
         clinic_id = body.get("clinicId")
         phone = body.get("phone")
@@ -3327,7 +3395,15 @@ async def pagseguro_webhook(request: Request, background_tasks: BackgroundTasks)
         data = json.loads(body.decode())
 
         # Parse webhook
-        from src.utils.payment import parse_pagseguro_webhook, process_payment_confirmation
+        from src.utils.payment import (
+            parse_pagseguro_webhook,
+            process_payment_confirmation,
+            verify_pagseguro_webhook_signature,
+        )
+
+        if not verify_pagseguro_webhook_signature(body.decode(), signature):
+            logger.warning("Invalid PagSeguro webhook signature")
+            raise HTTPException(status_code=401, detail="Invalid webhook signature")
 
         reference_id, payment_status, transaction_id = parse_pagseguro_webhook(data)
 
@@ -3363,10 +3439,7 @@ async def stripe_payment_callback(request: Request):
     Callback from Firebase Functions Stripe webhook.
     Sends WhatsApp confirmation message to patient after successful Stripe payment.
     """
-    service_secret = request.headers.get("X-Gendei-Service-Secret", "")
-    expected_secret = os.getenv("GENDEI_SERVICE_SECRET", "")
-    if not expected_secret or service_secret != expected_secret:
-        raise HTTPException(status_code=401, detail="Unauthorized")
+    require_service_secret(request)
 
     data = await request.json()
     clinic_id = data.get("clinicId")
@@ -3451,7 +3524,7 @@ async def pix_payment_page(phone: str, order_id: str):
             # Try to find by searching recent orders
             from google.cloud import firestore as gcloud_firestore
             firestore_client = gcloud_firestore.Client()
-            orders_ref = firestore_client.collection("gendei_orders")
+            orders_ref = firestore_client.collection_group("orders")
 
             # Search by order ID prefix
             for order_doc in orders_ref.order_by("createdAt", direction=gcloud_firestore.Query.DESCENDING).limit(100).stream():
@@ -3606,6 +3679,7 @@ async def flows_endpoint(request: Request):
 
         # Handle encrypted or unencrypted request
         body, aes_key, initial_vector, is_encrypted = handle_encrypted_flow_request(raw_body)
+        require_encrypted_flow_request(is_encrypted)
 
         if "error" in body:
             error_response = {"data": {"error_message": "Erro de criptografia"}}
@@ -3632,16 +3706,19 @@ async def flows_endpoint(request: Request):
             response = {"data": {"acknowledged": True}}
             return prepare_flow_response(response, aes_key, initial_vector, is_encrypted)
 
-        # Extract clinic_id from flow_token (format: clinic_id:phone:timestamp)
-        # Or from the initial data
+        # Extract clinic_id/phone from signed flow token (legacy tokens still accepted).
         clinic_id = ""
         patient_phone = ""
 
         if flow_token:
-            parts = flow_token.split(":")
-            if len(parts) >= 2:
-                clinic_id = parts[0]
-                patient_phone = parts[1] if len(parts) > 1 else ""
+            try:
+                token_data = parse_flow_token(flow_token)
+                clinic_id = token_data.get("clinic_id", "")
+                patient_phone = token_data.get("phone", "")
+            except ValueError as e:
+                logger.error(f"Invalid flow token: {e}")
+                response = {"data": {"error_message": "Token de fluxo inválido"}}
+                return prepare_flow_response(response, aes_key, initial_vector, is_encrypted)
 
         if not clinic_id:
             clinic_id = data.get("clinic_id", "")

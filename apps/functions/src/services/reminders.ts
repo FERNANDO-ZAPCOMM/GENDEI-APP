@@ -1,15 +1,16 @@
 // Gendei Reminders Service
 // Handles sending appointment reminders via WhatsApp
 
-import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import { getFirestore, FieldPath, FieldValue } from 'firebase-admin/firestore';
 import axios from 'axios';
 import { getVerticalTerms } from './verticals';
 
 const db = getFirestore();
 
-const APPOINTMENTS = 'gendei_appointments';
 const CLINICS = 'gendei_clinics';
 const TOKENS = 'gendei_tokens';
+const APPOINTMENTS_SUBCOLLECTION = 'appointments';
+const GENDEI_SERVICE_SECRET = process.env.GENDEI_SERVICE_SECRET || '';
 
 // WhatsApp Agent URL (Cloud Run)
 const WHATSAPP_AGENT_URL = process.env.WHATSAPP_AGENT_URL ||
@@ -19,6 +20,21 @@ interface ReminderResult {
   sent24h: number;
   sent2h: number;
   errors: number;
+}
+
+interface ReminderAppointment {
+  id: string;
+  clinicId: string;
+  patientPhone: string;
+  patientName: string;
+  professionalName: string;
+  date: string;
+  time: string;
+  status?: string;
+  reminder24hSent?: boolean;
+  reminder2hSent?: boolean;
+  _ref: FirebaseFirestore.DocumentReference;
+  [key: string]: any;
 }
 
 /**
@@ -100,18 +116,18 @@ async function getAppointmentsInWindow(
   const startDate = windowStart.toISOString().split('T')[0];
   const endDate = windowEnd.toISOString().split('T')[0];
 
-  // Query appointments in date range with confirmed status
-  const snapshot = await db.collection(APPOINTMENTS)
+  // Query nested appointments in date range with confirmed status
+  const snapshot = await db.collectionGroup(APPOINTMENTS_SUBCOLLECTION)
     .where('date', '>=', startDate)
     .where('date', '<=', endDate)
     .where('status', 'in', ['confirmed', 'confirmed_presence'])
     .get();
 
-  const appointments: any[] = [];
+  const appointments: ReminderAppointment[] = [];
 
   for (const doc of snapshot.docs) {
     const data = doc.data();
-    const apt = { id: doc.id, ...data } as any;
+    const apt = { id: doc.id, ...data, _ref: doc.ref } as ReminderAppointment;
 
     // Check if reminder already sent
     if (apt[reminderField]) {
@@ -173,21 +189,29 @@ async function sendReminder(appointment: any, type: '24h' | '2h'): Promise<void>
 
   // Send via WhatsApp Agent
   try {
-    await axios.post(`${WHATSAPP_AGENT_URL}/api/send-reminder`, {
-      clinicId,
-      phoneNumberId: clinic.whatsappPhoneNumberId,
-      accessToken,
-      patientPhone,
-      message,
-      reminderType: type,
-      appointmentId: appointment.id
-    });
+    await axios.post(
+      `${WHATSAPP_AGENT_URL}/api/send-reminder`,
+      {
+        clinicId,
+        phoneNumberId: clinic.whatsappPhoneNumberId,
+        accessToken,
+        patientPhone,
+        message,
+        reminderType: type,
+        appointmentId: appointment.id
+      },
+      {
+        headers: {
+          'X-Gendei-Service-Secret': GENDEI_SERVICE_SECRET,
+        },
+      }
+    );
 
     // Mark reminder as sent
     const updateField = type === '24h' ? 'reminder24hSent' : 'reminder2hSent';
     const updateTimeField = type === '24h' ? 'reminder24hAt' : 'reminder2hAt';
 
-    await db.collection(APPOINTMENTS).doc(appointment.id).update({
+    await appointment._ref.update({
       [updateField]: true,
       [updateTimeField]: FieldValue.serverTimestamp(),
       // Update status for 24h reminder to await confirmation
@@ -257,14 +281,25 @@ export async function sendSingleReminder(
   type: '24h' | '2h'
 ): Promise<boolean> {
   try {
-    const doc = await db.collection(APPOINTMENTS).doc(appointmentId).get();
+    let snapshot = await db.collectionGroup(APPOINTMENTS_SUBCOLLECTION)
+      .where(FieldPath.documentId(), '==', appointmentId)
+      .limit(1)
+      .get();
 
-    if (!doc.exists) {
+    if (snapshot.empty) {
+      snapshot = await db.collectionGroup(APPOINTMENTS_SUBCOLLECTION)
+        .where('id', '==', appointmentId)
+        .limit(1)
+        .get();
+    }
+
+    if (snapshot.empty) {
       console.error(`Appointment ${appointmentId} not found`);
       return false;
     }
 
-    const appointment = { id: doc.id, ...doc.data() };
+    const doc = snapshot.docs[0];
+    const appointment = { id: doc.id, ...doc.data(), _ref: doc.ref };
     await sendReminder(appointment, type);
     return true;
   } catch (error) {

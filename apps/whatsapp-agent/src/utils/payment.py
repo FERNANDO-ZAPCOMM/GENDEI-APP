@@ -5,12 +5,13 @@ handles PIX payment creation (PagSeguro), card payments (Stripe), and webhook pr
 
 import os
 import logging
-import requests  # type: ignore
 import hashlib
 import hmac
 import json
 from typing import Optional, Dict, Any, Tuple, List
 from datetime import datetime, timedelta
+
+from src.utils.http_client import http_post
 
 logger = logging.getLogger(__name__)
 
@@ -197,7 +198,7 @@ async def create_pagseguro_checkout(
         logger.info(f"🔄 Creating PagSeguro Checkout: ref={reference_id}, amount={format_payment_amount(amount)}")
         logger.debug(f"Payload: {json.dumps(payload, indent=2)}")
 
-        response = requests.post(url, json=payload, headers=headers, timeout=30)
+        response = await http_post(url, json=payload, headers=headers, timeout=30)
 
         logger.info(f"📡 PagSeguro Checkout API Response: {response.status_code}")
 
@@ -343,7 +344,7 @@ async def create_pagseguro_pix_order(
         logger.info(f"🔄 Creating PagSeguro PIX Order: ref={reference_id}, amount={format_payment_amount(amount)}")
         logger.debug(f"Payload: {json.dumps(payload, indent=2)}")
 
-        response = requests.post(
+        response = await http_post(
             url,
             json=payload,
             headers=headers,
@@ -546,21 +547,34 @@ async def send_card_payment_to_customer(
 
 def verify_pagseguro_webhook_signature(payload: str, signature: str) -> bool:
     """
-    verify PagSeguro webhook signature
-    NOTE: PagSeguro doesn't provide webhook secrets, so this always returns True
+    Verify PagSeguro webhook signature.
+
+    In production, signature verification fails closed unless explicitly bypassed.
     """
     if not PAGSEGURO_WEBHOOK_SECRET:
-        logger.debug("No webhook secret configured, skipping signature verification")
+        from src.security import is_production_environment
+
+        allow_insecure = os.getenv("ALLOW_INSECURE_PAGSEGURO_WEBHOOK", "").strip().lower() in {
+            "1", "true", "yes", "on"
+        }
+        if is_production_environment() and not allow_insecure:
+            logger.error("PAGSEGURO_WEBHOOK_SECRET is required in production")
+            return False
+        logger.warning("No PagSeguro webhook secret configured; accepting webhook (non-production)")
         return True
 
     try:
+        normalized_signature = (signature or "").strip()
+        if normalized_signature.startswith("sha256="):
+            normalized_signature = normalized_signature[len("sha256="):]
+
         expected_signature = hmac.new(
             PAGSEGURO_WEBHOOK_SECRET.encode(),
             payload.encode(),
             hashlib.sha256
         ).hexdigest()
 
-        return hmac.compare_digest(expected_signature, signature)
+        return hmac.compare_digest(expected_signature, normalized_signature)
 
     except Exception as e:
         logger.error(f"Error verifying webhook signature: {e}")
@@ -686,7 +700,7 @@ async def process_payment_confirmation(
         if not order:
             from google.cloud import firestore as gcloud_firestore
             firestore_client = gcloud_firestore.Client()
-            orders_ref = firestore_client.collection("gendei_orders")
+            orders_ref = firestore_client.collection_group("orders")
 
             # Search by paymentId field
             docs = orders_ref.where("paymentId", "==", transaction_id).limit(1).get()
@@ -704,7 +718,7 @@ async def process_payment_confirmation(
 
                 from google.cloud import firestore as gcloud_firestore
                 firestore_client = gcloud_firestore.Client()
-                orders_ref = firestore_client.collection("gendei_orders")
+                orders_ref = firestore_client.collection_group("orders")
 
                 # Get recent orders and find one matching the prefix
                 for order_doc in orders_ref.order_by("createdAt", direction=gcloud_firestore.Query.DESCENDING).limit(50).stream():
@@ -771,24 +785,22 @@ async def process_payment_confirmation(
                 if clinic and clinic.whatsapp_phone_number_id:
                     access_token = db.get_access_token(clinic_id)
                     if access_token:
-                        import httpx
                         META_API_VERSION = os.getenv("META_API_VERSION", "v24.0")
                         url = f"https://graph.facebook.com/{META_API_VERSION}/{clinic.whatsapp_phone_number_id}/messages"
-
-                        async with httpx.AsyncClient() as client:
-                            await client.post(
-                                url,
-                                headers={
-                                    "Authorization": f"Bearer {access_token}",
-                                    "Content-Type": "application/json",
-                                },
-                                json={
-                                    "messaging_product": "whatsapp",
-                                    "to": patient_phone.replace("+", ""),
-                                    "type": "text",
-                                    "text": {"body": confirmation_message}
-                                }
-                            )
+                        await http_post(
+                            url,
+                            headers={
+                                "Authorization": f"Bearer {access_token}",
+                                "Content-Type": "application/json",
+                            },
+                            json={
+                                "messaging_product": "whatsapp",
+                                "to": patient_phone.replace("+", ""),
+                                "type": "text",
+                                "text": {"body": confirmation_message}
+                            },
+                            timeout=30,
+                        )
 
             logger.info(f"✅ Payment confirmed for order {order_doc_id}, appointment {appointment_id}")
             return True
@@ -814,24 +826,22 @@ async def process_payment_confirmation(
                 if clinic and clinic.whatsapp_phone_number_id:
                     access_token = db.get_access_token(clinic_id)
                     if access_token:
-                        import httpx
                         META_API_VERSION = os.getenv("META_API_VERSION", "v24.0")
                         url = f"https://graph.facebook.com/{META_API_VERSION}/{clinic.whatsapp_phone_number_id}/messages"
-
-                        async with httpx.AsyncClient() as client:
-                            await client.post(
-                                url,
-                                headers={
-                                    "Authorization": f"Bearer {access_token}",
-                                    "Content-Type": "application/json",
-                                },
-                                json={
-                                    "messaging_product": "whatsapp",
-                                    "to": patient_phone.replace("+", ""),
-                                    "type": "text",
-                                    "text": {"body": cancel_message}
-                                }
-                            )
+                        await http_post(
+                            url,
+                            headers={
+                                "Authorization": f"Bearer {access_token}",
+                                "Content-Type": "application/json",
+                            },
+                            json={
+                                "messaging_product": "whatsapp",
+                                "to": patient_phone.replace("+", ""),
+                                "type": "text",
+                                "text": {"body": cancel_message}
+                            },
+                            timeout=30,
+                        )
 
             logger.info(f"❌ Payment canceled for order {order_doc_id}")
             return True
@@ -929,47 +939,44 @@ async def create_stripe_checkout_session(
         return None
 
     try:
-        import httpx
-
         url = f"{GENDEI_FUNCTIONS_URL}/payments/stripe-checkout/{clinic_id}/create-session"
+        response = await http_post(
+            url,
+            json={
+                "orderId": order_id,
+                "appointmentId": appointment_id,
+                "amountCents": amount_cents,
+                "totalCents": total_cents if total_cents > 0 else amount_cents,
+                "patientName": patient_name,
+                "patientPhone": patient_phone,
+                "description": description,
+            },
+            headers={
+                "Content-Type": "application/json",
+                "X-Gendei-Service-Secret": GENDEI_SERVICE_SECRET,
+            },
+            timeout=30,
+        )
 
-        async with httpx.AsyncClient(timeout=30) as client:
-            response = await client.post(
-                url,
-                json={
-                    "orderId": order_id,
-                    "appointmentId": appointment_id,
-                    "amountCents": amount_cents,
-                    "totalCents": total_cents if total_cents > 0 else amount_cents,
-                    "patientName": patient_name,
-                    "patientPhone": patient_phone,
-                    "description": description,
-                },
-                headers={
-                    "Content-Type": "application/json",
-                    "X-Gendei-Service-Secret": GENDEI_SERVICE_SECRET,
-                },
+        if response.status_code != 200:
+            logger.error(
+                f"Stripe checkout session creation failed: {response.status_code} - {response.text}"
             )
+            return None
 
-            if response.status_code != 200:
-                logger.error(
-                    f"Stripe checkout session creation failed: {response.status_code} - {response.text}"
-                )
-                return None
-
-            data = response.json()
-            logger.info(
-                f"Stripe checkout session created: session={data.get('sessionId')} "
-                f"type={data.get('chargeType')} for clinic={clinic_id}"
-            )
-            return {
-                "payment_link": data["checkoutUrl"],
-                "payment_id": data["sessionId"],
-                "session_id": data["sessionId"],
-                "payment_intent_id": data.get("paymentIntentId"),
-                "charge_type": data.get("chargeType", "destination"),
-                "provider": "stripe",
-            }
+        data = response.json()
+        logger.info(
+            f"Stripe checkout session created: session={data.get('sessionId')} "
+            f"type={data.get('chargeType')} for clinic={clinic_id}"
+        )
+        return {
+            "payment_link": data["checkoutUrl"],
+            "payment_id": data["sessionId"],
+            "session_id": data["sessionId"],
+            "payment_intent_id": data.get("paymentIntentId"),
+            "charge_type": data.get("chargeType", "destination"),
+            "provider": "stripe",
+        }
     except Exception as e:
         logger.error(f"Error creating Stripe checkout session: {e}", exc_info=True)
         return None

@@ -9,7 +9,7 @@ const router = Router();
 const db = getFirestore();
 
 const PATIENTS = 'gendei_patients';
-const APPOINTMENTS = 'gendei_appointments';
+const APPOINTMENTS_SUBCOLLECTION = 'appointments';
 
 // GET /patients?clinicId=xxx - Get patients for a clinic
 router.get('/', verifyAuth, async (req: Request, res: Response) => {
@@ -113,7 +113,7 @@ router.get('/:patientId/appointments', verifyAuth, async (req: Request, res: Res
       return res.status(403).json({ message: 'Access denied' });
     }
 
-    let query = db.collection(APPOINTMENTS)
+    let query = db.collectionGroup(APPOINTMENTS_SUBCOLLECTION)
       .where('patientId', '==', patientId)
       .where('clinicId', '==', clinicId);
 

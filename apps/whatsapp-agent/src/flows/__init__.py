@@ -1,27 +1,9 @@
-"""
-WhatsApp Flows module for Gendei
+"""WhatsApp Flows package exports."""
 
-Two flows for appointment scheduling:
-1. Patient Info Flow (ESPECIALIDADE → TIPO_ATENDIMENTO → INFO_CONVENIO → DADOS_PACIENTE)
-2. Booking Flow (BOOKING - date picker + time dropdown)
+from __future__ import annotations
 
-Supports encrypted data exchange via AES-128-GCM + RSA key exchange.
-"""
-
-from .handler import FlowsHandler
-from .manager import (
-    FlowsManager,
-    send_whatsapp_flow,
-    send_booking_flow,
-    generate_flow_token,
-)
-from .crypto import (
-    handle_encrypted_flow_request,
-    prepare_flow_response,
-    is_encryption_configured,
-    decrypt_request,
-    encrypt_response,
-)
+from importlib import import_module
+from typing import Any
 
 __all__ = [
     "FlowsHandler",
@@ -35,3 +17,21 @@ __all__ = [
     "decrypt_request",
     "encrypt_response",
 ]
+
+
+def __getattr__(name: str) -> Any:
+    if name == "FlowsHandler":
+        return import_module("src.flows.handler").FlowsHandler
+    if name in {"FlowsManager", "send_whatsapp_flow", "send_booking_flow", "generate_flow_token"}:
+        module = import_module("src.flows.manager")
+        return getattr(module, name)
+    if name in {
+        "handle_encrypted_flow_request",
+        "prepare_flow_response",
+        "is_encryption_configured",
+        "decrypt_request",
+        "encrypt_response",
+    }:
+        module = import_module("src.flows.crypto")
+        return getattr(module, name)
+    raise AttributeError(f"module 'src.flows' has no attribute '{name}'")

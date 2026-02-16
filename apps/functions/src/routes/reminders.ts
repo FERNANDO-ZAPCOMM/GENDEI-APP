@@ -7,6 +7,29 @@ import { cleanupExpiredPaymentHolds } from '../services/payment-holds';
 
 const router = Router();
 
+function verifyServiceSecret(req: Request, res: Response): boolean {
+  const expected = process.env.GENDEI_SERVICE_SECRET;
+  const provided = req.header('X-Gendei-Service-Secret') || req.header('x-gendei-service-secret');
+
+  if (!expected) {
+    res.status(500).json({
+      success: false,
+      error: 'Service secret not configured',
+    });
+    return false;
+  }
+
+  if (!provided || provided !== expected) {
+    res.status(401).json({
+      success: false,
+      error: 'Unauthorized',
+    });
+    return false;
+  }
+
+  return true;
+}
+
 /**
  * POST /reminders/trigger
  * Triggers the scheduled reminders check
@@ -14,6 +37,7 @@ const router = Router();
  */
 router.post('/trigger', async (req: Request, res: Response): Promise<void> => {
   try {
+    if (!verifyServiceSecret(req, res)) return;
     console.log('Reminder trigger received from:', req.body?.source || 'unknown');
 
     const result = await sendScheduledReminders();
@@ -38,6 +62,7 @@ router.post('/trigger', async (req: Request, res: Response): Promise<void> => {
  */
 router.post('/send/:appointmentId', async (req: Request, res: Response): Promise<void> => {
   try {
+    if (!verifyServiceSecret(req, res)) return;
     const { appointmentId } = req.params;
     const { type = '24h' } = req.body;
 
@@ -76,6 +101,7 @@ router.post('/send/:appointmentId', async (req: Request, res: Response): Promise
  */
 router.post('/cleanup-payment-holds', async (req: Request, res: Response): Promise<void> => {
   try {
+    if (!verifyServiceSecret(req, res)) return;
     console.log('Manual payment-hold cleanup trigger received from:', req.body?.source || 'unknown');
     const result = await cleanupExpiredPaymentHolds();
     res.json({

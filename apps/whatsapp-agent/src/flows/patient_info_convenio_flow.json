@@ -3,8 +3,7 @@
   "data_api_version": "3.0",
   "routing_model": {
     "ESPECIALIDADE": ["INFO_CONVENIO"],
-    "INFO_CONVENIO": ["DADOS_PACIENTE"],
-    "DADOS_PACIENTE": []
+    "INFO_CONVENIO": []
   },
   "screens": [
     {
@@ -61,6 +60,7 @@
     {
       "id": "INFO_CONVENIO",
       "title": "Dados do Convenio",
+      "terminal": true,
       "data": {
         "especialidade": { "type": "string", "__example__": "prof_1" },
         "professional_id": { "type": "string", "__example__": "prof_1" },
@@ -100,7 +100,7 @@
                 "type": "Footer",
                 "label": "Continuar",
                 "on-click-action": {
-                  "name": "data_exchange",
+                  "name": "complete",
                   "payload": {
                     "especialidade": "${data.especialidade}",
                     "professional_id": "${data.professional_id}",
@@ -108,64 +108,6 @@
                     "specialty_name": "${data.specialty_name}",
                     "tipo_pagamento": "convenio",
                     "convenio_nome": "${form.convenio_nome}"
-                  }
-                }
-              }
-            ]
-          }
-        ]
-      }
-    },
-    {
-      "id": "DADOS_PACIENTE",
-      "title": "Dados do Paciente",
-      "terminal": true,
-      "data": {
-        "especialidade": { "type": "string", "__example__": "prof_1" },
-        "professional_id": { "type": "string", "__example__": "prof_1" },
-        "professional_name": { "type": "string", "__example__": "Dr. Joao Silva" },
-        "specialty_name": { "type": "string", "__example__": "Cardiologia" },
-        "tipo_pagamento": { "type": "string", "__example__": "convenio" },
-        "convenio_nome": { "type": "string", "__example__": "unimed" },
-        "error_message": { "type": "string", "__example__": "" }
-      },
-      "layout": {
-        "type": "SingleColumnLayout",
-        "children": [
-          {
-            "type": "Form",
-            "name": "form_paciente",
-            "children": [
-              {
-                "type": "TextInput",
-                "name": "nome",
-                "label": "Nome completo",
-                "input-type": "text",
-                "required": true,
-                "helper-text": "Como consta no documento"
-              },
-              {
-                "type": "TextInput",
-                "name": "email",
-                "label": "E-mail",
-                "input-type": "email",
-                "required": true,
-                "helper-text": "Para confirmacao do agendamento"
-              },
-              {
-                "type": "Footer",
-                "label": "Ver Horarios",
-                "on-click-action": {
-                  "name": "complete",
-                  "payload": {
-                    "especialidade": "${data.especialidade}",
-                    "professional_id": "${data.professional_id}",
-                    "professional_name": "${data.professional_name}",
-                    "specialty_name": "${data.specialty_name}",
-                    "tipo_pagamento": "${data.tipo_pagamento}",
-                    "convenio_nome": "${data.convenio_nome}",
-                    "nome": "${form.nome}",
-                    "email": "${form.email}"
                   }
                 }
               }
