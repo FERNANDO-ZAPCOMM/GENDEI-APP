@@ -824,6 +824,7 @@
     "teamSection": "Equipe",
     "configuration": "Configuração",
     "clinic": "Clínica",
+    "faq": "FAQ",
     "professionals": "Profissionais",
     "services": "Serviços",
     "payments": "Pagamentos",
@@ -1295,6 +1296,7 @@
     "loading": "Carregando...",
     "saving": "Salvando...",
     "save": "Salvar",
+    "remove": "Remover",
     "error": "Erro",
     "success": "Sucesso",
     "cancel": "Cancelar",
@@ -1692,6 +1694,7 @@
     "description": "Configure as informações do seu negócio",
     "tabs": {
       "basic": "Informações",
+      "faq": "FAQ",
       "contact": "Contato",
       "location": "Localização",
       "hours": "Horários",
@@ -1759,6 +1762,42 @@
       "acceptedInsurance": "Convênios Aceitos",
       "insurancePlaceholder": "Nome do convênio",
       "suggestions": "Sugestões"
+    },
+    "faq": {
+      "title": "Perguntas Frequentes Operacionais",
+      "description": "Use respostas automáticas para dúvidas comuns e adicione perguntas personalizadas da sua operação.",
+      "automaticTitle": "Perguntas automáticas",
+      "automaticDescription": "Geradas com base nas configurações da clínica e atualizadas automaticamente.",
+      "customTitle": "Perguntas personalizadas",
+      "customDescription": "Adicione perguntas e respostas específicas da sua clínica.",
+      "questionLabel": "Pergunta",
+      "answerLabel": "Resposta",
+      "questionPlaceholder": "Ex: Vocês atendem sem horário marcado?",
+      "answerPlaceholder": "Ex: Atendemos com agendamento prévio pelo WhatsApp.",
+      "addButton": "Adicionar pergunta",
+      "empty": "Nenhuma pergunta personalizada adicionada ainda.",
+      "autoBadge": "Automático",
+      "systemQuestions": {
+        "locationQuestion": "Onde fica a clínica?",
+        "hoursQuestion": "Qual é o horário de atendimento?",
+        "paymentQuestion": "Quais formas de pagamento vocês aceitam?",
+        "insuranceQuestion": "Vocês aceitam convênio? Quais?",
+        "depositQuestion": "É necessário pagar sinal para agendar?"
+      },
+      "autoAnswers": {
+        "missingAddress": "Ainda não informamos o endereço completo. Fale com nossa equipe para confirmar a localização.",
+        "hoursValue": "Nosso horário de atendimento é: {hours}.",
+        "missingHours": "Ainda não configuramos os horários de atendimento. Fale com nossa equipe para confirmar.",
+        "paymentBoth": "Aceitamos atendimento particular e convênios.",
+        "paymentParticularOnly": "Aceitamos atendimento particular.",
+        "paymentConvenioOnly": "Atendemos por convênios.",
+        "paymentNone": "As formas de pagamento ainda não foram configuradas. Fale com nossa equipe para confirmar.",
+        "insuranceList": "Aceitamos os seguintes convênios: {list}.",
+        "insurancePendingList": "Aceitamos convênio, mas a lista ainda não foi informada. Fale com nossa equipe para confirmar.",
+        "insuranceNone": "No momento não atendemos por convênio.",
+        "depositRequired": "Sim. Para confirmar o agendamento, é necessário um sinal de {percentage}%.",
+        "depositNotRequired": "Não. No momento não exigimos sinal para agendar."
+      }
     },
     "preview": {
       "title": "Prévia do WhatsApp",

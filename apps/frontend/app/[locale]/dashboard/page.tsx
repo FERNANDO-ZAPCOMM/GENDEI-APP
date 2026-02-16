@@ -99,7 +99,7 @@ export default function DashboardPage() {
       {!onboardingStatus.isLoading && (
         <SetupChecklist
           clinicInfoComplete={onboardingStatus.clinicInfoComplete}
-          professionalsComplete={onboardingStatus.professionalsComplete}
+          faqComplete={onboardingStatus.faqComplete}
           paymentComplete={onboardingStatus.paymentComplete}
           whatsappComplete={onboardingStatus.whatsappComplete}
           nextStep={onboardingStatus.nextStep}

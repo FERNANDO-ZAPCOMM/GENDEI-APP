@@ -824,6 +824,7 @@
     "teamSection": "Team",
     "configuration": "Configuration",
     "clinic": "Clinic",
+    "faq": "FAQ",
     "professionals": "Professionals",
     "services": "Services",
     "payments": "Payments",
@@ -1296,6 +1297,7 @@
     "loading": "Loading...",
     "saving": "Saving...",
     "save": "Save",
+    "remove": "Remove",
     "error": "Error",
     "success": "Success",
     "cancel": "Cancel",
@@ -1693,6 +1695,7 @@
     "description": "Configure your business information",
     "tabs": {
       "basic": "Information",
+      "faq": "FAQ",
       "contact": "Contact",
       "location": "Location",
       "hours": "Hours",
@@ -1760,6 +1763,42 @@
       "acceptedInsurance": "Accepted Insurance Plans",
       "insurancePlaceholder": "Insurance plan name",
       "suggestions": "Suggestions"
+    },
+    "faq": {
+      "title": "Operational Frequently Asked Questions",
+      "description": "Use automatic answers for common questions and add custom questions for your clinic operations.",
+      "automaticTitle": "Automatic questions",
+      "automaticDescription": "Generated from clinic settings and updated automatically.",
+      "customTitle": "Custom questions",
+      "customDescription": "Add specific questions and answers for your clinic.",
+      "questionLabel": "Question",
+      "answerLabel": "Answer",
+      "questionPlaceholder": "Ex: Do you accept walk-ins?",
+      "answerPlaceholder": "Ex: We currently work by appointment only via WhatsApp.",
+      "addButton": "Add question",
+      "empty": "No custom questions added yet.",
+      "autoBadge": "Automatic",
+      "systemQuestions": {
+        "locationQuestion": "Where is the clinic located?",
+        "hoursQuestion": "What are your operating hours?",
+        "paymentQuestion": "Which payment methods do you accept?",
+        "insuranceQuestion": "Do you accept insurance? Which plans?",
+        "depositQuestion": "Is a deposit required to book?"
+      },
+      "autoAnswers": {
+        "missingAddress": "We haven't provided the full address yet. Please contact our team to confirm the location.",
+        "hoursValue": "Our operating hours are: {hours}.",
+        "missingHours": "Our operating hours are not configured yet. Please contact our team to confirm.",
+        "paymentBoth": "We accept private appointments and insurance plans.",
+        "paymentParticularOnly": "We accept private appointments.",
+        "paymentConvenioOnly": "We currently serve insurance plans.",
+        "paymentNone": "Payment methods are not configured yet. Please contact our team to confirm.",
+        "insuranceList": "We accept the following insurance plans: {list}.",
+        "insurancePendingList": "We accept insurance, but the plan list has not been provided yet. Please contact our team to confirm.",
+        "insuranceNone": "At the moment, we do not accept insurance plans.",
+        "depositRequired": "Yes. A {percentage}% deposit is required to confirm the booking.",
+        "depositNotRequired": "No. We currently do not require a deposit to book."
+      }
     },
     "preview": {
       "title": "WhatsApp Preview",

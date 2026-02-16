@@ -3,8 +3,8 @@
 export type OnboardingStep = 1 | 2 | 3 | 4;
 
 export interface ClinicSetupStatus {
-  clinicInfoComplete: boolean;      // Step 1: Clinic name is set
-  professionalsComplete: boolean;   // Step 2: At least 1 active professional
+  clinicInfoComplete: boolean;      // Step 1: Clinic profile is complete
+  faqComplete: boolean;             // Step 2: FAQ is configured
   paymentComplete: boolean;         // Step 3: Payment method configured
   whatsappComplete: boolean;        // Step 4: WhatsApp status = READY
   completionPercentage: number;     // 0-100
@@ -22,7 +22,7 @@ export interface OnboardingStepInfo {
   isActive: boolean;  // Currently working on this step
 }
 
-// New order: Clinic -> Payment -> WhatsApp -> Professionals
+// Onboarding order: Clinic -> FAQ -> Payment -> WhatsApp
 export const ONBOARDING_STEPS: Omit<OnboardingStepInfo, 'isComplete' | 'isActive'>[] = [
   {
     step: 1,
@@ -33,23 +33,23 @@ export const ONBOARDING_STEPS: Omit<OnboardingStepInfo, 'isComplete' | 'isActive
   },
   {
     step: 2,
+    title: 'FAQ Operacional',
+    description: 'Perguntas comuns da operação',
+    icon: 'CircleHelp',
+    href: '/dashboard/faq',
+  },
+  {
+    step: 3,
     title: 'Pagamentos',
     description: 'Convênios, particular e depósito',
     icon: 'CreditCard',
     href: '/dashboard/payments',
   },
   {
-    step: 3,
+    step: 4,
     title: 'WhatsApp',
     description: 'Conecte sua conta comercial',
     icon: 'MessageCircle',
     href: '/dashboard/whatsapp',
-  },
-  {
-    step: 4,
-    title: 'Profissionais',
-    description: 'Adicione médicos e especialidades',
-    icon: 'UserPlus',
-    href: '/dashboard/professionals',
   },
 ];

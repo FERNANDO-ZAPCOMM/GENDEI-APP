@@ -197,6 +197,7 @@ export const NAV_PERMISSIONS: NavPermissions[] = [
   { path: '/dashboard/account', permission: undefined }, // All roles
   { path: '/dashboard/team', permission: undefined }, // All can view, manage needs permission
   { path: '/dashboard/whatsapp', permission: 'canManageSettings' },
+  { path: '/dashboard/faq', permission: 'canManageSettings' },
 ];
 
 /**

@@ -16,6 +16,7 @@ export interface SidebarNotification {
 export interface SidebarNotifications {
   // Onboarding indicators
   clinic: SidebarNotification | null;
+  faq: SidebarNotification | null;
   payments: SidebarNotification | null;
   whatsapp: SidebarNotification | null;
   professionals: SidebarNotification | null;
@@ -27,13 +28,13 @@ export interface SidebarNotifications {
 
   // Overall onboarding progress
   onboardingComplete: boolean;
-  onboardingStep: number; // Current step (1-4)
+  onboardingStep: number; // Current step (1-5, where 5 = all onboarding steps complete)
   totalSteps: number;
 }
 
 /**
  * Hook to determine sidebar notification indicators
- * - Tracks onboarding progress (clinic, payments, whatsapp, professionals)
+ * - Tracks onboarding progress (clinic, faq, payments, whatsapp)
  * - Tracks action items (pending appointments, escalated conversations)
  */
 export function useSidebarNotifications(): SidebarNotifications {
@@ -70,7 +71,7 @@ export function useSidebarNotifications(): SidebarNotifications {
     // Type assertion for clinic with extended properties
     const clinicData = clinic as any;
 
-    // Check onboarding steps — matches the clinic page's 5-tab completion logic
+    // Check onboarding steps — clinic -> faq -> payments -> whatsapp
     const hasClinicProfile = !!(
       clinicData?.name &&
       clinicData?.name !== 'Nova Clínica' &&
@@ -85,6 +86,15 @@ export function useSidebarNotifications(): SidebarNotifications {
       clinicData?.paymentSettings?.depositPercentage > 0
     );
 
+    const workflowFaqs = Array.isArray(clinicData?.workflowFaqs) ? clinicData.workflowFaqs : [];
+    const hasFaqConfigured = workflowFaqs.some((item: any) =>
+      item &&
+      typeof item.question === 'string' &&
+      item.question.trim().length > 0 &&
+      typeof item.answer === 'string' &&
+      item.answer.trim().length > 0
+    );
+
     const hasWhatsAppConnected = !!(
       clinicData?.whatsappConnected &&
       clinicData?.whatsappPhoneNumberId
@@ -95,9 +105,9 @@ export function useSidebarNotifications(): SidebarNotifications {
     // Calculate onboarding progress
     const completedSteps = [
       hasClinicProfile,
+      hasFaqConfigured,
       hasPaymentSettings,
       hasWhatsAppConnected,
-      hasProfessionals,
     ].filter(Boolean).length;
 
     const onboardingComplete = completedSteps === 4;
@@ -105,8 +115,9 @@ export function useSidebarNotifications(): SidebarNotifications {
     // Determine current onboarding step (in order)
     let onboardingStep = 1;
     if (hasClinicProfile) onboardingStep = 2;
-    if (hasClinicProfile && hasPaymentSettings) onboardingStep = 3;
-    if (hasClinicProfile && hasPaymentSettings && hasWhatsAppConnected) onboardingStep = 4;
+    if (hasClinicProfile && hasFaqConfigured) onboardingStep = 3;
+    if (hasClinicProfile && hasFaqConfigured && hasPaymentSettings) onboardingStep = 4;
+    if (hasClinicProfile && hasFaqConfigured && hasPaymentSettings && hasWhatsAppConnected) onboardingStep = 5;
     if (onboardingComplete) onboardingStep = 5; // All done
 
     // Build notification objects
@@ -114,16 +125,21 @@ export function useSidebarNotifications(): SidebarNotifications {
       // Onboarding notifications (only show if not complete)
       clinic: !hasClinicProfile ? { type: 'onboarding', priority: 1 } : null,
 
-      payments: hasClinicProfile && !hasPaymentSettings
+      faq: hasClinicProfile && !hasFaqConfigured
         ? { type: 'onboarding', priority: 2 }
         : null,
 
-      whatsapp: hasClinicProfile && hasPaymentSettings && !hasWhatsAppConnected
+      payments: hasClinicProfile && hasFaqConfigured && !hasPaymentSettings
         ? { type: 'onboarding', priority: 3 }
         : null,
 
-      professionals: hasClinicProfile && hasPaymentSettings && hasWhatsAppConnected && !hasProfessionals
+      whatsapp: hasClinicProfile && hasFaqConfigured && hasPaymentSettings && !hasWhatsAppConnected
         ? { type: 'onboarding', priority: 4 }
+        : null,
+
+      // Professionals are tracked as a separate actionable recommendation
+      professionals: hasClinicProfile && !hasProfessionals
+        ? { type: 'action', priority: 2 }
         : null,
 
       // Action notifications (pending items that need attention)

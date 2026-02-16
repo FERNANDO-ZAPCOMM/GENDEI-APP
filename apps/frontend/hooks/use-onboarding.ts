@@ -2,12 +2,13 @@ import { useMemo } from 'react';
 import { useClinic } from './use-clinic';
 import type { Clinic, PaymentSettings } from '@/lib/clinic-types';
 
-export type OnboardingStep = 'clinic' | 'payments' | 'whatsapp' | 'complete';
+export type OnboardingStep = 'clinic' | 'faq' | 'payments' | 'whatsapp' | 'complete';
 
 interface OnboardingState {
   currentStep: OnboardingStep;
   isComplete: boolean;
   isClinicComplete: boolean;
+  isFaqComplete: boolean;
   isPaymentsComplete: boolean;
   isWhatsAppComplete: boolean;
   nextStepUrl: string | null;
@@ -44,6 +45,16 @@ function isClinicInfoComplete(clinic: Clinic | null): boolean {
   if (!clinic.openingHours) return false;
 
   return true;
+}
+
+/**
+ * Check if FAQ information is complete
+ */
+function isFaqInfoComplete(clinic: Clinic | null): boolean {
+  if (!clinic) return false;
+  const clinicData = clinic as Clinic & { workflowFaqs?: Array<{ question: string; answer: string }> };
+  const faqs = Array.isArray(clinicData.workflowFaqs) ? clinicData.workflowFaqs : [];
+  return faqs.some((item) => item?.question?.trim() && item?.answer?.trim());
 }
 
 /**
@@ -84,7 +95,7 @@ function isWhatsAppConnected(clinic: Clinic | null): boolean {
 
 /**
  * Hook to manage onboarding flow
- * Flow: Clinic Settings -> Payment Settings -> WhatsApp Connection -> Dashboard
+ * Flow: Clinic Settings -> FAQ -> Payment Settings -> WhatsApp Connection -> Dashboard
  */
 export function useOnboarding(): OnboardingState {
   const { currentClinic, isLoading } = useClinic();
@@ -96,15 +107,17 @@ export function useOnboarding(): OnboardingState {
         currentStep: 'clinic' as OnboardingStep,
         isComplete: false,
         isClinicComplete: false,
+        isFaqComplete: false,
         isPaymentsComplete: false,
         isWhatsAppComplete: false,
         nextStepUrl: null,
         completedSteps: 0,
-        totalSteps: 3,
+        totalSteps: 4,
       };
     }
 
     const clinicComplete = isClinicInfoComplete(currentClinic);
+    const faqComplete = isFaqInfoComplete(currentClinic);
     const paymentsComplete = isPaymentsInfoComplete(currentClinic);
     const whatsappComplete = isWhatsAppConnected(currentClinic);
 
@@ -115,6 +128,9 @@ export function useOnboarding(): OnboardingState {
     if (!clinicComplete) {
       currentStep = 'clinic';
       nextStepUrl = null; // Already on first step
+    } else if (!faqComplete) {
+      currentStep = 'faq';
+      nextStepUrl = '/dashboard/faq';
     } else if (!paymentsComplete) {
       currentStep = 'payments';
       nextStepUrl = '/dashboard/payments';
@@ -126,17 +142,18 @@ export function useOnboarding(): OnboardingState {
       nextStepUrl = '/dashboard';
     }
 
-    const completedSteps = [clinicComplete, paymentsComplete, whatsappComplete].filter(Boolean).length;
+    const completedSteps = [clinicComplete, faqComplete, paymentsComplete, whatsappComplete].filter(Boolean).length;
 
     return {
       currentStep,
       isComplete: currentStep === 'complete',
       isClinicComplete: clinicComplete,
+      isFaqComplete: faqComplete,
       isPaymentsComplete: paymentsComplete,
       isWhatsAppComplete: whatsappComplete,
       nextStepUrl,
       completedSteps,
-      totalSteps: 3,
+      totalSteps: 4,
     };
   }, [currentClinic, isLoading]);
 }
@@ -147,6 +164,8 @@ export function useOnboarding(): OnboardingState {
 export function getNextStepUrl(afterStep: OnboardingStep, locale: string = 'pt-BR'): string {
   switch (afterStep) {
     case 'clinic':
+      return `/${locale}/dashboard/faq`;
+    case 'faq':
       return `/${locale}/dashboard/payments`;
     case 'payments':
       return `/${locale}/dashboard/whatsapp`;

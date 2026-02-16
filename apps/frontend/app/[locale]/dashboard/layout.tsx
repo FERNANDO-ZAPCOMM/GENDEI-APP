@@ -21,6 +21,7 @@ import {
   Bot,
   CheckCircle2,
   BarChart3,
+  CircleHelp,
 } from 'lucide-react';
 import { FaWhatsapp } from 'react-icons/fa';
 
@@ -136,9 +137,10 @@ const navigation: NavItem[] = [
     icon: Settings,
     children: [
       { name: 'clinic', href: '/dashboard/clinic', icon: Stethoscope, notificationKey: 'clinic', step: 1 },
-      { name: 'payments', href: '/dashboard/payments', icon: CreditCard, notificationKey: 'payments', step: 2 },
-      { name: 'whatsapp', href: '/dashboard/whatsapp', icon: FaWhatsapp, notificationKey: 'whatsapp', step: 3 },
-      // { name: 'workflow', href: '/dashboard/workflow', icon: Bot, step: 4 },
+      { name: 'faq', href: '/dashboard/faq', icon: CircleHelp, notificationKey: 'faq', step: 2 },
+      { name: 'payments', href: '/dashboard/payments', icon: CreditCard, notificationKey: 'payments', step: 3 },
+      { name: 'whatsapp', href: '/dashboard/whatsapp', icon: FaWhatsapp, notificationKey: 'whatsapp', step: 4 },
+      // { name: 'workflow', href: '/dashboard/workflow', icon: Bot, step: 5 },
       { name: 'account', href: '/dashboard/account', icon: User },
     ],
   },
@@ -334,8 +336,7 @@ function NavigationItems({
               <div className="relative">
                 {/* Check if this step is complete */}
                 {(() => {
-                  const isComplete = item.step < notifications.onboardingStep ||
-                    (item.step === 4 && notifications.onboardingComplete);
+                  const isComplete = item.step < notifications.onboardingStep;
                   const isCurrentStep = item.step === notifications.onboardingStep && !notifications.onboardingComplete;
 
                   return (
@@ -412,8 +413,8 @@ function MobileBottomNav({
     return pathname.startsWith(fullPath);
   };
 
-  // Check if config section has any notifications (clinic, payments, whatsapp)
-  const configHasNotification = notifications.clinic || notifications.payments || notifications.whatsapp;
+  // Check if config section has any notifications (clinic, faq, payments, whatsapp)
+  const configHasNotification = notifications.clinic || notifications.faq || notifications.payments || notifications.whatsapp;
 
   return (
     <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-200 safe-area-bottom">

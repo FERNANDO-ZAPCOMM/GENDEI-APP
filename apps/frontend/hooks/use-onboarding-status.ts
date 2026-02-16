@@ -1,9 +1,7 @@
 import { useMemo } from 'react';
 import { useClinic } from './use-clinic';
-import { useProfessionals } from './use-professionals';
 import { useMetaStatus } from './use-meta-status';
 import type { ClinicSetupStatus, OnboardingStep } from '@/lib/onboarding-types';
-import type { Professional } from '@/lib/clinic-types';
 
 /**
  * Hook to aggregate onboarding completion status from all sources
@@ -13,7 +11,6 @@ export function useOnboardingStatus() {
   const { currentClinic, isLoading: clinicLoading } = useClinic();
   const clinicId = currentClinic?.id || '';
 
-  const { data: professionals, isLoading: professionalsLoading } = useProfessionals(clinicId);
   const { status: metaStatus, isLoading: metaLoading } = useMetaStatus(clinicId);
 
   const setupStatus = useMemo((): ClinicSetupStatus => {
@@ -28,9 +25,15 @@ export function useOnboardingStatus() {
       clinicData?.addressData?.formatted
     );
 
-    // Step 2: Professionals complete if at least 1 active professional exists
-    const activeProfessionals = (professionals || []).filter((p: Professional) => p.active);
-    const professionalsComplete = activeProfessionals.length > 0;
+    // Step 2: FAQ complete if at least one FAQ item has question + answer
+    const workflowFaqs = Array.isArray(clinicData?.workflowFaqs) ? clinicData.workflowFaqs : [];
+    const faqComplete = workflowFaqs.some((item: any) =>
+      item &&
+      typeof item.question === 'string' &&
+      item.question.trim().length > 0 &&
+      typeof item.answer === 'string' &&
+      item.answer.trim().length > 0
+    );
 
     // Step 3: Payment complete if payment method is configured (particular or convênio)
     const paymentSettings = clinicData?.paymentSettings;
@@ -46,12 +49,12 @@ export function useOnboardingStatus() {
     );
 
     // Calculate completion (4 steps total)
-    // New order: Clinic -> Payment -> WhatsApp -> Professionals
+    // New order: Clinic -> FAQ -> Payment -> WhatsApp
     const steps = [
       clinicInfoComplete,
+      faqComplete,
       paymentComplete,
       whatsappComplete,
-      professionalsComplete,
     ];
 
     const completedSteps = steps.filter(Boolean).length;
@@ -60,22 +63,22 @@ export function useOnboardingStatus() {
     // Find next incomplete step (following new order)
     let nextStep: OnboardingStep | null = null;
     if (!clinicInfoComplete) nextStep = 1;
-    else if (!paymentComplete) nextStep = 2;
-    else if (!whatsappComplete) nextStep = 3;
-    else if (!professionalsComplete) nextStep = 4;
+    else if (!faqComplete) nextStep = 2;
+    else if (!paymentComplete) nextStep = 3;
+    else if (!whatsappComplete) nextStep = 4;
 
     return {
       clinicInfoComplete,
-      professionalsComplete,
+      faqComplete,
       paymentComplete,
       whatsappComplete,
       completionPercentage,
       nextStep,
       completedSteps,
     };
-  }, [currentClinic, professionals, metaStatus]);
+  }, [currentClinic, metaStatus]);
 
-  const isLoading = clinicLoading || professionalsLoading || metaLoading;
+  const isLoading = clinicLoading || metaLoading;
   const isSetupComplete = setupStatus.completionPercentage === 100;
 
   return {

@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   Building2,
-  UserPlus,
+  CircleHelp,
   CreditCard,
   MessageCircle,
   CheckCircle2,
@@ -19,7 +19,7 @@ import { ONBOARDING_STEPS, type OnboardingStep } from '@/lib/onboarding-types';
 
 interface OnboardingProgressCardProps {
   clinicInfoComplete: boolean;
-  professionalsComplete: boolean;
+  faqComplete: boolean;
   paymentComplete: boolean;
   whatsappComplete: boolean;
   completionPercentage: number;
@@ -28,14 +28,14 @@ interface OnboardingProgressCardProps {
 
 const STEP_ICONS = {
   Building2,
-  UserPlus,
+  CircleHelp,
   CreditCard,
   MessageCircle,
 };
 
 export function OnboardingProgressCard({
   clinicInfoComplete,
-  professionalsComplete,
+  faqComplete,
   paymentComplete,
   whatsappComplete,
   completionPercentage,
@@ -45,7 +45,7 @@ export function OnboardingProgressCard({
 
   const completionStatus = [
     clinicInfoComplete,
-    professionalsComplete,
+    faqComplete,
     paymentComplete,
     whatsappComplete,
   ];
@@ -131,7 +131,7 @@ export function OnboardingProgressCard({
       {isExpanded && (
         <CardContent className="space-y-0 pt-0">
           {stepsWithStatus.map((step, index) => {
-            const Icon = STEP_ICONS[step.icon as keyof typeof STEP_ICONS];
+            const Icon = STEP_ICONS[step.icon as keyof typeof STEP_ICONS] || Building2;
 
             return (
               <Link

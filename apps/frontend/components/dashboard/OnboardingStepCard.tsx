@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import {
   Building2,
-  UserPlus,
+  CircleHelp,
   ClipboardList,
   Calendar,
   CreditCard,
@@ -18,7 +18,7 @@ import type { OnboardingStep } from '@/lib/onboarding-types';
 
 const STEP_ICONS = {
   Building2,
-  UserPlus,
+  CircleHelp,
   ClipboardList,
   Calendar,
   CreditCard,
